@@ -1,0 +1,776 @@
+// Student Digital Competency Profile & Personal Development Roadmap
+// PostgreSQL database schema for NestJS + Prisma.
+//
+// Module layout:
+// - Auth/User: User, Student, Lecturer, AdvisorAssignment
+// - Skill: SkillCategory, Skill
+// - Career Goal: CareerGoal, CareerRequiredSkill
+// - Student Profile: StudentProfile, StudentSkill, StudentProject, StudentCertificate,
+//   StudentActivity, StudentExperience, Evidence, AdvisorReview
+// - Recommendation: RecommendationTemplate, StudentRecommendation
+// - Roadmap: DevelopmentRoadmap, RoadmapItem, StudentRoadmapProgress
+// - Notification: Notification, NotificationLog
+// - Audit/Export: ActivityLog, ExportLog
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  LECTURER
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  INACTIVE
+}
+
+enum CatalogStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum VerificationStatus {
+  NO_EVIDENCE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum EvidenceEntityType {
+  SKILL
+  PROJECT
+  CERTIFICATE
+  ACTIVITY
+  EXPERIENCE
+  ROADMAP_ITEM
+}
+
+enum EvidenceStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchLevel {
+  NOT_MATCHED
+  DEVELOPING
+  GOOD_MATCH
+  STRONG_MATCH
+}
+
+enum AnalysisDetailStatus {
+  ACHIEVED
+  MISSING
+  NEED_IMPROVEMENT
+}
+
+enum RecommendationType {
+  COURSE
+  PROJECT
+  CERTIFICATE
+  PRACTICE
+  DOCUMENT
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum StudentRecommendationStatus {
+  NEW
+  SAVED
+  IN_PROGRESS
+  DONE
+  DISMISSED
+}
+
+enum RoadmapStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum RoadmapItemType {
+  LEARN
+  PRACTICE
+  PROJECT
+  CERTIFICATE
+  PORTFOLIO
+}
+
+enum RoadmapItemStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum NotificationType {
+  PROFILE_REMINDER
+  EVIDENCE_VERIFIED
+  EVIDENCE_REJECTED
+  ROADMAP_REMINDER
+  ADVISOR_REVIEW
+  WEAK_PROFILE_ALERT
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+enum NotificationLogStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum ExportType {
+  STUDENT_PORTFOLIO_PDF
+  STUDENTS_EXCEL
+  COMPETENCY_EXCEL
+  LECTURER_STUDENTS_EXCEL
+}
+
+// ---------------------------------------------------------------------------
+// Auth & User Module
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(cuid())
+  fullName     String     @map("full_name") @db.VarChar(150)
+  email        String     @unique(map: "users_email_unique") @db.VarChar(191)
+  passwordHash String     @map("password_hash") @db.VarChar(255)
+  refreshTokenHash String? @map("refresh_token_hash") @db.VarChar(255)
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  student                     Student?
+  lecturer                    Lecturer?
+  assignedAdvisorAssignments  AdvisorAssignment[] @relation("AdvisorAssignmentAssignedBy")
+  verifiedStudentSkills       StudentSkill[]       @relation("StudentSkillVerifiedBy")
+  reviewedEvidences           Evidence[]           @relation("EvidenceReviewedBy")
+  notifications               Notification[]
+  notificationLogs            NotificationLog[]
+  activityLogs                ActivityLog[]
+  exportLogs                  ExportLog[]
+
+  @@index([role, status], map: "users_role_status_idx")
+  @@index([status, createdAt], map: "users_status_created_at_idx")
+  @@map("users")
+}
+
+model Student {
+  id           String    @id @default(cuid())
+  userId       String    @unique(map: "students_user_id_unique") @map("user_id")
+  studentCode  String    @unique(map: "students_student_code_unique") @map("student_code") @db.VarChar(50)
+  className    String?   @map("class_name") @db.VarChar(100)
+  major        String?   @db.VarChar(150)
+  academicYear String?   @map("academic_year") @db.VarChar(20)
+  phone        String?   @db.VarChar(30)
+  dateOfBirth  DateTime? @map("date_of_birth") @db.Date
+  avatarUrl    String?   @map("avatar_url") @db.VarChar(500)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  advisorAssignments    AdvisorAssignment[]
+  profile               StudentProfile?
+  skills                StudentSkill[]
+  projects              StudentProject[]
+  certificates          StudentCertificate[]
+  activities            StudentActivity[]
+  experiences           StudentExperience[]
+  evidences             Evidence[]
+  analysisResults       CompetencyAnalysisResult[]
+  recommendations       StudentRecommendation[]
+  roadmaps              DevelopmentRoadmap[]
+  roadmapProgress       StudentRoadmapProgress[]
+  advisorReviews        AdvisorReview[]
+
+  @@index([className, major], map: "students_class_major_idx")
+  @@index([major, academicYear], map: "students_major_academic_year_idx")
+  @@index([createdAt], map: "students_created_at_idx")
+  @@map("students")
+}
+
+model Lecturer {
+  id            String   @id @default(cuid())
+  userId        String   @unique(map: "lecturers_user_id_unique") @map("user_id")
+  lecturerCode  String   @unique(map: "lecturers_lecturer_code_unique") @map("lecturer_code") @db.VarChar(50)
+  department    String?  @db.VarChar(150)
+  phone         String?  @db.VarChar(30)
+  academicTitle String?  @map("academic_title") @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  advisorAssignments AdvisorAssignment[]
+  advisorReviews     AdvisorReview[]
+
+  @@index([department], map: "lecturers_department_idx")
+  @@index([createdAt], map: "lecturers_created_at_idx")
+  @@map("lecturers")
+}
+
+model AdvisorAssignment {
+  id           String           @id @default(cuid())
+  lecturerId   String           @map("lecturer_id")
+  studentId    String           @map("student_id")
+  assignedById String?          @map("assigned_by")
+  assignedAt   DateTime         @default(now()) @map("assigned_at")
+  status       AssignmentStatus @default(ACTIVE)
+
+  lecturer   Lecturer @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignedBy User?    @relation("AdvisorAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([lecturerId, studentId], map: "advisor_assignments_lecturer_student_unique")
+  @@index([studentId, status], map: "advisor_assignments_student_status_idx")
+  @@index([lecturerId, status], map: "advisor_assignments_lecturer_status_idx")
+  @@index([assignedAt], map: "advisor_assignments_assigned_at_idx")
+  @@map("advisor_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Skill Module
+// ---------------------------------------------------------------------------
+
+model SkillCategory {
+  id          String        @id @default(cuid())
+  name        String        @unique(map: "skill_categories_name_unique") @db.VarChar(150)
+  description String?       @db.Text
+  status      CatalogStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  skills Skill[]
+
+  @@index([status, name], map: "skill_categories_status_name_idx")
+  @@map("skill_categories")
+}
+
+model Skill {
+  id          String        @id @default(cuid())
+  categoryId  String?       @map("category_id")
+  name        String        @db.VarChar(150)
+  description String?       @db.Text
+  status      CatalogStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  category               SkillCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  careerRequiredSkills   CareerRequiredSkill[]
+  studentSkills          StudentSkill[]
+  analysisDetails        CompetencyAnalysisDetail[]
+  recommendationTemplates RecommendationTemplate[]
+  studentRecommendations StudentRecommendation[]
+  roadmapItems           RoadmapItem[]
+
+  @@unique([categoryId, name], map: "skills_category_name_unique")
+  @@index([name], map: "skills_name_idx")
+  @@index([categoryId, status], map: "skills_category_status_idx")
+  @@map("skills")
+}
+
+// ---------------------------------------------------------------------------
+// Career Goal Module
+// ---------------------------------------------------------------------------
+
+model CareerGoal {
+  id          String        @id @default(cuid())
+  name        String        @unique(map: "career_goals_name_unique") @db.VarChar(150)
+  description String?       @db.Text
+  status      CatalogStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  requiredSkills  CareerRequiredSkill[]
+  studentProfiles StudentProfile[]
+  analysisResults CompetencyAnalysisResult[]
+  roadmaps        DevelopmentRoadmap[]
+
+  @@index([status, name], map: "career_goals_status_name_idx")
+  @@map("career_goals")
+}
+
+model CareerRequiredSkill {
+  id            String   @id @default(cuid())
+  careerGoalId  String   @map("career_goal_id")
+  skillId       String   @map("skill_id")
+  requiredLevel Int      @map("required_level")
+  weight        Decimal  @db.Decimal(6, 2)
+  learningOrder Int      @default(0) @map("learning_order")
+  isRequired    Boolean  @default(true) @map("is_required")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  careerGoal CareerGoal @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([careerGoalId, skillId], map: "career_required_skills_goal_skill_unique")
+  @@index([careerGoalId, learningOrder], map: "career_required_skills_goal_order_idx")
+  @@index([skillId], map: "career_required_skills_skill_idx")
+  @@map("career_required_skills")
+}
+
+// ---------------------------------------------------------------------------
+// Student Profile Module
+// ---------------------------------------------------------------------------
+
+model StudentProfile {
+  id                String    @id @default(cuid())
+  studentId         String    @unique(map: "student_profiles_student_id_unique") @map("student_id")
+  careerGoalId      String?   @map("career_goal_id")
+  summary           String?   @db.Text
+  githubUrl         String?   @map("github_url") @db.VarChar(500)
+  linkedinUrl       String?   @map("linkedin_url") @db.VarChar(500)
+  portfolioUrl      String?   @map("portfolio_url") @db.VarChar(500)
+  completionPercent Decimal   @default(0) @map("completion_percent") @db.Decimal(5, 2)
+  matchPercent      Decimal   @default(0) @map("match_percent") @db.Decimal(5, 2)
+  riskScore         Int       @default(0) @map("risk_score")
+  lastAnalyzedAt    DateTime? @map("last_analyzed_at")
+  lastUpdatedAt     DateTime? @map("last_updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  student    Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal CareerGoal? @relation(fields: [careerGoalId], references: [id], onDelete: SetNull)
+
+  @@index([careerGoalId], map: "student_profiles_career_goal_idx")
+  @@index([completionPercent], map: "student_profiles_completion_percent_idx")
+  @@index([matchPercent], map: "student_profiles_match_percent_idx")
+  @@index([riskScore], map: "student_profiles_risk_score_idx")
+  @@index([lastUpdatedAt], map: "student_profiles_last_updated_at_idx")
+  @@map("student_profiles")
+}
+
+model StudentSkill {
+  id             String             @id @default(cuid())
+  studentId      String             @map("student_id")
+  skillId        String             @map("skill_id")
+  currentLevel   Int                @map("current_level")
+  description    String?            @db.Text
+  evidenceStatus VerificationStatus @default(NO_EVIDENCE) @map("evidence_status")
+  verifiedById   String?            @map("verified_by")
+  verifiedAt     DateTime?          @map("verified_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill      Skill   @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  verifiedBy User?   @relation("StudentSkillVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, skillId], map: "student_skills_student_skill_unique")
+  @@index([studentId, evidenceStatus], map: "student_skills_student_evidence_status_idx")
+  @@index([skillId, currentLevel], map: "student_skills_skill_level_idx")
+  @@index([updatedAt], map: "student_skills_updated_at_idx")
+  @@map("student_skills")
+}
+
+model StudentProject {
+  id                 String             @id @default(cuid())
+  studentId          String             @map("student_id")
+  title              String             @db.VarChar(200)
+  description        String?            @db.Text
+  roleInProject      String?            @map("role_in_project") @db.VarChar(150)
+  technologies       String[]           @default([])
+  githubUrl          String?            @map("github_url") @db.VarChar(500)
+  demoUrl            String?            @map("demo_url") @db.VarChar(500)
+  startDate          DateTime?          @map("start_date") @db.Date
+  endDate            DateTime?          @map("end_date") @db.Date
+  status             ProjectStatus      @default(IN_PROGRESS)
+  verificationStatus VerificationStatus @default(NO_EVIDENCE) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, verificationStatus], map: "student_projects_student_verification_idx")
+  @@index([studentId, status], map: "student_projects_student_status_idx")
+  @@index([title], map: "student_projects_title_idx")
+  @@index([createdAt], map: "student_projects_created_at_idx")
+  @@map("student_projects")
+}
+
+model StudentCertificate {
+  id                 String             @id @default(cuid())
+  studentId          String             @map("student_id")
+  certificateName    String             @map("certificate_name") @db.VarChar(200)
+  issuer             String?            @db.VarChar(200)
+  issueDate          DateTime?          @map("issue_date") @db.Date
+  expirationDate     DateTime?          @map("expiration_date") @db.Date
+  credentialId       String?            @map("credential_id") @db.VarChar(150)
+  credentialUrl      String?            @map("credential_url") @db.VarChar(500)
+  verificationStatus VerificationStatus @default(NO_EVIDENCE) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, verificationStatus], map: "student_certificates_student_verification_idx")
+  @@index([certificateName], map: "student_certificates_name_idx")
+  @@index([issuer], map: "student_certificates_issuer_idx")
+  @@index([issueDate], map: "student_certificates_issue_date_idx")
+  @@map("student_certificates")
+}
+
+model StudentActivity {
+  id                 String             @id @default(cuid())
+  studentId          String             @map("student_id")
+  title              String             @db.VarChar(200)
+  organization       String?            @db.VarChar(200)
+  role               String?            @db.VarChar(150)
+  description        String?            @db.Text
+  startDate          DateTime?          @map("start_date") @db.Date
+  endDate            DateTime?          @map("end_date") @db.Date
+  verificationStatus VerificationStatus @default(NO_EVIDENCE) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, verificationStatus], map: "student_activities_student_verification_idx")
+  @@index([title], map: "student_activities_title_idx")
+  @@index([organization], map: "student_activities_organization_idx")
+  @@index([createdAt], map: "student_activities_created_at_idx")
+  @@map("student_activities")
+}
+
+model StudentExperience {
+  id                 String             @id @default(cuid())
+  studentId          String             @map("student_id")
+  companyName        String             @map("company_name") @db.VarChar(200)
+  position           String             @db.VarChar(150)
+  description        String?            @db.Text
+  startDate          DateTime?          @map("start_date") @db.Date
+  endDate            DateTime?          @map("end_date") @db.Date
+  verificationStatus VerificationStatus @default(NO_EVIDENCE) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, verificationStatus], map: "student_experiences_student_verification_idx")
+  @@index([companyName], map: "student_experiences_company_idx")
+  @@index([position], map: "student_experiences_position_idx")
+  @@index([createdAt], map: "student_experiences_created_at_idx")
+  @@map("student_experiences")
+}
+
+model Evidence {
+  id                String             @id @default(cuid())
+  studentId         String             @map("student_id")
+  relatedEntityType EvidenceEntityType @map("related_entity_type")
+  relatedEntityId   String             @map("related_entity_id")
+  fileUrl           String?            @map("file_url") @db.VarChar(500)
+  evidenceUrl       String?            @map("evidence_url") @db.VarChar(500)
+  note              String?            @db.Text
+  status            EvidenceStatus     @default(PENDING)
+  reviewedById      String?            @map("reviewed_by")
+  reviewedAt        DateTime?          @map("reviewed_at")
+  reviewerNote      String?            @map("reviewer_note") @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("EvidenceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId, status], map: "evidences_student_status_idx")
+  @@index([relatedEntityType, relatedEntityId], map: "evidences_related_entity_idx")
+  @@index([status, createdAt], map: "evidences_status_created_at_idx")
+  @@index([reviewedById, reviewedAt], map: "evidences_reviewer_reviewed_at_idx")
+  @@map("evidences")
+}
+
+model AdvisorReview {
+  id            String   @id @default(cuid())
+  studentId     String   @map("student_id")
+  lecturerId    String   @map("lecturer_id")
+  reviewContent String   @map("review_content") @db.Text
+  suggestion    String?  @db.Text
+  rating        Int?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lecturer Lecturer @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt], map: "advisor_reviews_student_created_at_idx")
+  @@index([lecturerId, createdAt], map: "advisor_reviews_lecturer_created_at_idx")
+  @@map("advisor_reviews")
+}
+
+// ---------------------------------------------------------------------------
+// Competency Analysis Module
+// ---------------------------------------------------------------------------
+
+model CompetencyAnalysisResult {
+  id                String     @id @default(cuid())
+  studentId         String     @map("student_id")
+  careerGoalId      String     @map("career_goal_id")
+  completionPercent Decimal    @map("completion_percent") @db.Decimal(5, 2)
+  matchPercent      Decimal    @map("match_percent") @db.Decimal(5, 2)
+  riskScore         Int        @map("risk_score")
+  matchLevel        MatchLevel @map("match_level")
+  analyzedAt        DateTime   @default(now()) @map("analyzed_at")
+
+  student         Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal      CareerGoal                 @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
+  details         CompetencyAnalysisDetail[]
+  recommendations StudentRecommendation[]
+
+  @@index([studentId, analyzedAt], map: "analysis_results_student_analyzed_at_idx")
+  @@index([careerGoalId, matchLevel], map: "analysis_results_goal_match_level_idx")
+  @@index([matchPercent], map: "analysis_results_match_percent_idx")
+  @@index([riskScore], map: "analysis_results_risk_score_idx")
+  @@map("competency_analysis_results")
+}
+
+model CompetencyAnalysisDetail {
+  id               String               @id @default(cuid())
+  analysisResultId String               @map("analysis_result_id")
+  skillId          String               @map("skill_id")
+  currentLevel     Int                  @map("current_level")
+  requiredLevel    Int                  @map("required_level")
+  gap              Int
+  weight           Decimal              @db.Decimal(6, 2)
+  achievedScore    Decimal              @map("achieved_score") @db.Decimal(6, 2)
+  priorityScore    Decimal              @map("priority_score") @db.Decimal(6, 2)
+  status           AnalysisDetailStatus
+
+  analysisResult CompetencyAnalysisResult @relation(fields: [analysisResultId], references: [id], onDelete: Cascade)
+  skill          Skill                    @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([analysisResultId, skillId], map: "analysis_details_result_skill_unique")
+  @@index([skillId, status], map: "analysis_details_skill_status_idx")
+  @@index([analysisResultId, priorityScore], map: "analysis_details_result_priority_idx")
+  @@map("competency_analysis_details")
+}
+
+// ---------------------------------------------------------------------------
+// Recommendation Module
+// ---------------------------------------------------------------------------
+
+model RecommendationTemplate {
+  id                 String             @id @default(cuid())
+  skillId            String             @map("skill_id")
+  recommendationType RecommendationType @map("recommendation_type")
+  title              String             @db.VarChar(200)
+  description        String?            @db.Text
+  difficultyLevel    DifficultyLevel?   @map("difficulty_level")
+  estimatedDuration  String?            @map("estimated_duration") @db.VarChar(100)
+  resourceUrl        String?            @map("resource_url") @db.VarChar(500)
+  status             CatalogStatus      @default(ACTIVE)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  skill                  Skill                   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  studentRecommendations StudentRecommendation[]
+
+  @@index([skillId, recommendationType, status], map: "recommendation_templates_skill_type_status_idx")
+  @@index([title], map: "recommendation_templates_title_idx")
+  @@map("recommendation_templates")
+}
+
+model StudentRecommendation {
+  id                         String                      @id @default(cuid())
+  studentId                  String                      @map("student_id")
+  analysisResultId           String?                     @map("analysis_result_id")
+  skillId                    String                      @map("skill_id")
+  recommendationTemplateId   String?                     @map("recommendation_template_id")
+  title                      String                      @db.VarChar(200)
+  description                String?                     @db.Text
+  reason                     String?                     @db.Text
+  priorityScore              Decimal                     @default(0) @map("priority_score") @db.Decimal(6, 2)
+  status                     StudentRecommendationStatus @default(NEW)
+  createdAt                  DateTime                    @default(now()) @map("created_at")
+  updatedAt                  DateTime                    @updatedAt @map("updated_at")
+
+  student                Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  analysisResult         CompetencyAnalysisResult? @relation(fields: [analysisResultId], references: [id], onDelete: SetNull)
+  skill                  Skill                     @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  recommendationTemplate RecommendationTemplate?   @relation(fields: [recommendationTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, status, createdAt], map: "student_recommendations_student_status_created_idx")
+  @@index([analysisResultId], map: "student_recommendations_analysis_result_idx")
+  @@index([skillId, priorityScore], map: "student_recommendations_skill_priority_idx")
+  @@map("student_recommendations")
+}
+
+// ---------------------------------------------------------------------------
+// Roadmap Module
+// ---------------------------------------------------------------------------
+
+model DevelopmentRoadmap {
+  id              String        @id @default(cuid())
+  studentId       String        @map("student_id")
+  careerGoalId    String        @map("career_goal_id")
+  title           String        @db.VarChar(200)
+  description     String?       @db.Text
+  progressPercent Decimal       @default(0) @map("progress_percent") @db.Decimal(5, 2)
+  status          RoadmapStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  student    Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal CareerGoal            @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
+  items      RoadmapItem[]
+  progress   StudentRoadmapProgress[]
+
+  @@index([studentId, status], map: "development_roadmaps_student_status_idx")
+  @@index([careerGoalId, status], map: "development_roadmaps_goal_status_idx")
+  @@index([createdAt], map: "development_roadmaps_created_at_idx")
+  @@map("development_roadmaps")
+}
+
+model RoadmapItem {
+  id          String            @id @default(cuid())
+  roadmapId   String            @map("roadmap_id")
+  skillId     String?           @map("skill_id")
+  title       String            @db.VarChar(200)
+  description String?           @db.Text
+  itemType    RoadmapItemType   @map("item_type")
+  orderIndex  Int               @default(0) @map("order_index")
+  weight      Decimal           @default(1) @db.Decimal(6, 2)
+  deadline    DateTime?         @db.Date
+  status      RoadmapItemStatus @default(TODO)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  roadmap DevelopmentRoadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  skill   Skill?                  @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  progress StudentRoadmapProgress[]
+
+  @@index([roadmapId, orderIndex], map: "roadmap_items_roadmap_order_idx")
+  @@index([roadmapId, status], map: "roadmap_items_roadmap_status_idx")
+  @@index([skillId], map: "roadmap_items_skill_idx")
+  @@index([deadline], map: "roadmap_items_deadline_idx")
+  @@map("roadmap_items")
+}
+
+model StudentRoadmapProgress {
+  id            String            @id @default(cuid())
+  studentId     String            @map("student_id")
+  roadmapId     String            @map("roadmap_id")
+  roadmapItemId String            @map("roadmap_item_id")
+  status        RoadmapItemStatus
+  note          String?           @db.Text
+  updatedAt     DateTime          @default(now()) @map("updated_at")
+
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  roadmap     DevelopmentRoadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  roadmapItem RoadmapItem        @relation(fields: [roadmapItemId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, updatedAt], map: "student_roadmap_progress_student_updated_idx")
+  @@index([roadmapId, status], map: "student_roadmap_progress_roadmap_status_idx")
+  @@index([roadmapItemId, updatedAt], map: "student_roadmap_progress_item_updated_idx")
+  @@map("student_roadmap_progress")
+}
+
+// ---------------------------------------------------------------------------
+// Notification Module
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id                String                 @id @default(cuid())
+  userId            String                 @map("user_id")
+  title             String                 @db.VarChar(200)
+  content           String                 @db.Text
+  notificationType  NotificationType       @map("notification_type")
+  relatedEntityType String?                @map("related_entity_type") @db.VarChar(100)
+  relatedEntityId   String?                @map("related_entity_id")
+  isRead            Boolean                @default(false) @map("is_read")
+  createdAt         DateTime               @default(now()) @map("created_at")
+
+  user User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs NotificationLog[]
+
+  @@index([userId, isRead, createdAt], map: "notifications_user_read_created_idx")
+  @@index([notificationType, createdAt], map: "notifications_type_created_at_idx")
+  @@index([relatedEntityType, relatedEntityId], map: "notifications_related_entity_idx")
+  @@map("notifications")
+}
+
+model NotificationLog {
+  id             String                @id @default(cuid())
+  notificationId String                @map("notification_id")
+  userId         String                @map("user_id")
+  channel        NotificationChannel
+  status         NotificationLogStatus @default(PENDING)
+  sentAt         DateTime?             @map("sent_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId], map: "notification_logs_notification_idx")
+  @@index([userId, status], map: "notification_logs_user_status_idx")
+  @@index([sentAt], map: "notification_logs_sent_at_idx")
+  @@map("notification_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Audit & Export Module
+// ---------------------------------------------------------------------------
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String?  @map("user_id")
+  action      String   @db.VarChar(150)
+  entityType  String?  @map("entity_type") @db.VarChar(100)
+  entityId    String?  @map("entity_id")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt], map: "activity_logs_user_created_at_idx")
+  @@index([entityType, entityId], map: "activity_logs_entity_idx")
+  @@index([action, createdAt], map: "activity_logs_action_created_at_idx")
+  @@map("activity_logs")
+}
+
+model ExportLog {
+  id         String     @id @default(cuid())
+  userId     String?    @map("user_id")
+  exportType ExportType @map("export_type")
+  fileUrl    String?    @map("file_url") @db.VarChar(500)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt], map: "export_logs_user_created_at_idx")
+  @@index([exportType, createdAt], map: "export_logs_type_created_at_idx")
+  @@map("export_logs")
+}
