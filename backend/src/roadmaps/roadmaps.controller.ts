@@ -1,54 +1,84 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { RoadmapQueryDto } from './dto/roadmap-query.dto';
+import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
+import { RoadmapHistoryItemDto, RoadmapResponseDto } from './dto/roadmap-response.dto';
 import { UpdateRoadmapItemStatusDto } from './dto/update-roadmap-item-status.dto';
 import { RoadmapsService } from './roadmaps.service';
 
 @ApiTags('roadmaps')
 @ApiBearerAuth()
-@Controller('roadmaps')
+@Controller()
 export class RoadmapsController {
   constructor(private readonly roadmapsService: RoadmapsService) {}
 
   @Roles(UserRole.STUDENT)
-  @ApiCreatedResponse({ description: 'Roadmap generated for current student' })
-  @Post('generate/me')
-  generateMine(@CurrentUser() user: AuthenticatedUser) {
-    return this.roadmapsService.generateForCurrentStudent(user.id);
+  @ApiBody({ type: GenerateRoadmapDto, required: false })
+  @ApiCreatedResponse({
+    description: 'Roadmap generated for current student',
+    type: RoadmapResponseDto,
+  })
+  @Post('roadmaps/generate/me')
+  generateMine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: GenerateRoadmapDto,
+  ) {
+    return this.roadmapsService.generateMyRoadmap(user.id, dto);
   }
 
   @Roles(UserRole.STUDENT)
-  @ApiOkResponse({ description: 'Current student roadmaps' })
-  @Get('me')
-  findMine(@CurrentUser() user: AuthenticatedUser, @Query() query: RoadmapQueryDto) {
-    return this.roadmapsService.findMine(user.id, query);
+  @ApiOkResponse({
+    description: 'Current active roadmap for current student. Returns null when absent.',
+    type: RoadmapResponseDto,
+  })
+  @Get('roadmaps/me')
+  getMyActiveRoadmap(@CurrentUser() user: AuthenticatedUser) {
+    return this.roadmapsService.getMyActiveRoadmap(user.id);
+  }
+
+  @Roles(UserRole.STUDENT)
+  @ApiOkResponse({
+    description: 'Roadmap version history for current student',
+    type: [RoadmapHistoryItemDto],
+  })
+  @Get('roadmaps/history/me')
+  getMyRoadmapHistory(@CurrentUser() user: AuthenticatedUser) {
+    return this.roadmapsService.getMyRoadmapHistory(user.id);
   }
 
   @Roles(UserRole.STUDENT, UserRole.LECTURER, UserRole.ADMIN)
-  @ApiOkResponse({ description: 'Roadmap detail' })
-  @Get(':id')
+  @ApiOkResponse({ description: 'Roadmap detail', type: RoadmapResponseDto })
+  @Get('roadmaps/:id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.roadmapsService.findOne(user, id);
+    return this.roadmapsService.getRoadmapDetailWithAuthorization(user, id);
   }
 
   @Roles(UserRole.STUDENT)
-  @ApiOkResponse({ description: 'Roadmap item status updated' })
-  @Patch('items/:id/status')
+  @ApiOkResponse({ description: 'Roadmap item status updated', type: RoadmapResponseDto })
+  @Patch(['roadmap-items/:id/status', 'roadmaps/items/:id/status'])
   updateItemStatus(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateRoadmapItemStatusDto,
   ) {
-    return this.roadmapsService.updateItemStatus(user.id, id, dto);
+    return this.roadmapsService.updateRoadmapItemStatus(user.id, id, dto);
   }
 
   @Roles(UserRole.LECTURER, UserRole.ADMIN)
-  @ApiCreatedResponse({ description: 'Roadmap generated for a student' })
-  @Post('students/:studentId/generate')
+  @ApiCreatedResponse({
+    description: 'Roadmap generated for a student',
+    type: RoadmapResponseDto,
+  })
+  @Post('roadmaps/students/:studentId/generate')
   generateForStudent(
     @CurrentUser() user: AuthenticatedUser,
     @Param('studentId') studentId: string,

@@ -133,6 +133,7 @@ enum StudentRecommendationStatus {
 
 enum RoadmapStatus {
   ACTIVE
+  ARCHIVED
   COMPLETED
   CANCELLED
 }
@@ -720,6 +721,7 @@ model DevelopmentRoadmap {
   studentId       String        @map("student_id")
   careerGoalId    String        @map("career_goal_id")
   specializationId String?      @map("specialization_id")
+  version         Int           @default(1)
   title           String        @db.VarChar(200)
   description     String?       @db.Text
   progressPercent Decimal       @default(0) @map("progress_percent") @db.Decimal(5, 2)
@@ -733,7 +735,9 @@ model DevelopmentRoadmap {
   items          RoadmapItem[]
   progress       StudentRoadmapProgress[]
 
+  @@unique([studentId, version], map: "development_roadmaps_student_version_unique")
   @@index([studentId, status], map: "development_roadmaps_student_status_idx")
+  @@index([studentId, version], map: "development_roadmaps_student_version_idx")
   @@index([careerGoalId, status], map: "development_roadmaps_goal_status_idx")
   @@index([specializationId, status], map: "development_roadmaps_specialization_status_idx")
   @@index([createdAt], map: "development_roadmaps_created_at_idx")
