@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  AnalysisDetailStatus,
+  AnalysisSkillStatus,
   AssignmentStatus,
   Prisma,
   RoadmapItemStatus,
@@ -150,7 +150,7 @@ export class RoadmapsService {
   private async generate(studentId: string) {
     const latestAnalysis = await this.getLatestAnalysisOrAnalyze(studentId);
     const missingSkills = latestAnalysis.details
-      .filter((detail) => detail.status !== AnalysisDetailStatus.ACHIEVED && detail.gap > 0)
+      .filter((detail) => detail.status !== AnalysisSkillStatus.ACHIEVED && detail.gap > 0)
       .map<MissingSkillForRoadmap>((detail) => ({
         skillId: detail.skillId,
         skillName: detail.skill.name,

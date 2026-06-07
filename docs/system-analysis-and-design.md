@@ -13,7 +13,7 @@
 | Đối tượng đọc | Giảng viên hướng dẫn, hội đồng, nhóm phát triển, người vận hành |
 | Nền tảng hiện tại | Next.js, NestJS, Prisma, PostgreSQL |
 | Tài liệu tham chiếu | `docs/requirements.md`, `docs/architecture.md`, `docs/database-design.md`, `backend/prisma/schema.prisma` |
-| Ngày cập nhật | 05/06/2026 |
+| Ngày cập nhật | 06/06/2026 |
 
 ---
 
@@ -54,13 +54,13 @@ Các nhóm chức năng chính:
 
 - Xác thực, quản lý phiên đăng nhập và phân quyền theo vai trò.
 - Quản lý tài khoản, sinh viên, giảng viên/cố vấn.
-- Quản lý nhóm kỹ năng, kỹ năng, mục tiêu nghề nghiệp và bộ kỹ năng yêu cầu.
+- Quản lý nhóm kỹ năng, kỹ năng, chuyên ngành/domain, mục tiêu nghề nghiệp và bộ kỹ năng yêu cầu.
 - Quản lý hồ sơ năng lực sinh viên.
 - Quản lý kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm và minh chứng.
 - Duyệt, xác nhận, từ chối minh chứng.
 - Phân tích năng lực theo mục tiêu nghề nghiệp.
 - Xác định kỹ năng còn thiếu và điểm ưu tiên cải thiện.
-- Sinh gợi ý học tập, thực hành, dự án, chứng chỉ, tài liệu.
+- Sinh gợi ý học tập, thực hành, dự án, chứng chỉ, tài liệu theo chuyên ngành và mục tiêu nghề nghiệp.
 - Sinh và theo dõi lộ trình phát triển cá nhân.
 - Gửi thông báo nhắc nhở và cảnh báo hồ sơ yếu.
 - Dashboard thống kê theo vai trò.
@@ -81,6 +81,7 @@ Ngoài phạm vi:
 | --- | --- |
 | Hồ sơ năng lực số | Bộ dữ liệu tập trung mô tả kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm và minh chứng của sinh viên |
 | Mục tiêu nghề nghiệp | Vai trò nghề nghiệp sinh viên muốn hướng tới, ví dụ Front-end Developer, Back-end Developer, Data Analyst |
+| Chuyên ngành/domain | Nhánh định hướng trong ngành CNTT, ví dụ Software Engineering, Data Science, Cybersecurity, AI, Cloud/DevOps |
 | Kỹ năng yêu cầu | Kỹ năng và mức độ tối thiểu cần có để đạt một mục tiêu nghề nghiệp |
 | Minh chứng | File hoặc đường dẫn dùng để chứng minh kỹ năng, dự án, chứng chỉ, hoạt động hoặc kinh nghiệm |
 | Completion percent | Tỷ lệ hoàn thiện hồ sơ năng lực |
@@ -146,6 +147,7 @@ Hệ thống cần cung cấp một nền tảng tập trung để:
 - Hệ thống phù hợp với quy mô đồ án và vận hành nội bộ khoa/trường.
 - Chưa cần microservices, ưu tiên kiến trúc dễ triển khai và dễ bảo trì.
 - Gợi ý phát triển dùng rule-based recommendation để dễ giải thích kết quả.
+- Không bắt buộc nhập đầy đủ toàn bộ domain CNTT ngay từ đầu; hệ thống hỗ trợ template theo nhiều mức cụ thể và cơ chế fallback.
 - Dữ liệu cá nhân của sinh viên phải được bảo vệ.
 - Người dùng chỉ được thao tác trong phạm vi vai trò và quyền truy cập của mình.
 
@@ -303,6 +305,8 @@ flowchart TB
 
 | Mã | Yêu cầu | Mô tả |
 | --- | --- | --- |
+| FR-SPEC-01 | Quản lý chuyên ngành/domain | Admin thêm, sửa, xóa, kích hoạt/vô hiệu hóa chuyên ngành trong CNTT |
+| FR-SPEC-02 | Gắn career goal với chuyên ngành | Một career goal có thể thuộc một hoặc nhiều chuyên ngành để lọc dữ liệu phù hợp |
 | FR-CAREER-01 | Quản lý career goal | Admin thêm, sửa, xóa, kích hoạt/vô hiệu hóa mục tiêu nghề nghiệp |
 | FR-CAREER-02 | Cấu hình kỹ năng yêu cầu | Admin gán kỹ năng vào career goal |
 | FR-CAREER-03 | Cấu hình mức độ yêu cầu | Mỗi kỹ năng có `requiredLevel` |
@@ -314,7 +318,7 @@ flowchart TB
 | Mã | Yêu cầu | Mô tả |
 | --- | --- | --- |
 | FR-PROFILE-01 | Xem hồ sơ cá nhân | Sinh viên xem hồ sơ của mình |
-| FR-PROFILE-02 | Cập nhật hồ sơ | Sinh viên cập nhật tóm tắt, mục tiêu nghề nghiệp, GitHub, LinkedIn, portfolio |
+| FR-PROFILE-02 | Cập nhật hồ sơ | Sinh viên cập nhật tóm tắt, chuyên ngành/domain, mục tiêu nghề nghiệp, GitHub, LinkedIn, portfolio |
 | FR-PROFILE-03 | Upload avatar | Sinh viên upload ảnh đại diện |
 | FR-PROFILE-04 | Tính completion percent | Hệ thống tính tỷ lệ hoàn thiện hồ sơ |
 | FR-PROFILE-05 | Tính risk score | Hệ thống tính điểm rủi ro để cảnh báo |
@@ -359,6 +363,8 @@ flowchart TB
 | FR-REC-01 | Sinh gợi ý | Hệ thống tạo recommendation theo kỹ năng thiếu |
 | FR-REC-02 | Xem gợi ý | Sinh viên xem danh sách recommendation của mình |
 | FR-REC-03 | Cập nhật trạng thái gợi ý | Sinh viên đánh dấu `SAVED`, `IN_PROGRESS`, `DONE`, `DISMISSED` |
+| FR-REC-04 | Template theo chuyên ngành | Hệ thống ưu tiên mẫu gợi ý khớp chuyên ngành, career goal, skill hoặc skill category |
+| FR-REC-05 | Fallback recommendation | Nếu chưa có template cụ thể, hệ thống dùng template tổng quát hơn hoặc sinh gợi ý mặc định |
 | FR-ROAD-01 | Sinh roadmap | Hệ thống tạo lộ trình từ danh sách kỹ năng thiếu |
 | FR-ROAD-02 | Xem roadmap | Sinh viên xem roadmap và các item |
 | FR-ROAD-03 | Cập nhật tiến độ | Sinh viên cập nhật trạng thái item |
@@ -672,11 +678,13 @@ Database: PostgreSQL
 | `advisor-assignments` | CRUD phân công cố vấn |
 | `skill-categories` | CRUD nhóm kỹ năng |
 | `skills` | CRUD kỹ năng |
-| `career-goals` | CRUD career goal và required skills |
+| `specializations` | CRUD chuyên ngành/domain và quan hệ với career goal |
+| `career-goals` | CRUD career goal, required skills và mapping chuyên ngành |
 | `profiles` | Profile sinh viên, skills, projects, certificates, activities, experiences, avatar, evidence upload |
 | `evidences` | Upload, xem, duyệt, từ chối minh chứng |
 | `competency-analysis` | Engine và API phân tích năng lực |
-| `recommendations` | Xem và cập nhật trạng thái recommendation |
+| `recommendation-templates` | Admin cấu hình bộ mẫu gợi ý theo chuyên ngành, career goal, skill category và skill |
+| `recommendations` | Sinh, xem và cập nhật trạng thái recommendation |
 | `roadmaps` | Sinh roadmap, xem roadmap, cập nhật item status |
 | `notifications` | Notification API và scheduler |
 | `dashboard` | Tổng hợp thống kê theo vai trò |
@@ -745,7 +753,7 @@ Database sử dụng PostgreSQL và được mô tả bằng Prisma schema tại
 
 - Identity & Access.
 - Skill Catalog.
-- Career Configuration.
+- Specialization & Career Configuration.
 - Student Profile.
 - Evidence & Advisor Review.
 - Competency Analysis.
@@ -763,10 +771,13 @@ erDiagram
     STUDENTS ||--o{ ADVISOR_ASSIGNMENTS : assigned
 
     SKILL_CATEGORIES ||--o{ SKILLS : contains
+    SPECIALIZATIONS ||--o{ CAREER_GOAL_SPECIALIZATIONS : groups
+    CAREER_GOALS ||--o{ CAREER_GOAL_SPECIALIZATIONS : belongs_to
     CAREER_GOALS ||--o{ CAREER_REQUIRED_SKILLS : requires
     SKILLS ||--o{ CAREER_REQUIRED_SKILLS : configured
 
     STUDENTS ||--|| STUDENT_PROFILES : owns
+    SPECIALIZATIONS ||--o{ STUDENT_PROFILES : selected_by
     CAREER_GOALS ||--o{ STUDENT_PROFILES : selected_by
     STUDENTS ||--o{ STUDENT_SKILLS : has
     SKILLS ||--o{ STUDENT_SKILLS : declared
@@ -783,6 +794,10 @@ erDiagram
     SKILLS ||--o{ COMPETENCY_ANALYSIS_DETAILS : analyzed
 
     STUDENTS ||--o{ STUDENT_RECOMMENDATIONS : receives
+    SPECIALIZATIONS ||--o{ RECOMMENDATION_TEMPLATES : scopes
+    CAREER_GOALS ||--o{ RECOMMENDATION_TEMPLATES : scopes
+    SKILL_CATEGORIES ||--o{ RECOMMENDATION_TEMPLATES : scopes
+    SKILLS ||--o{ RECOMMENDATION_TEMPLATES : scopes
     SKILLS ||--o{ STUDENT_RECOMMENDATIONS : relates
     STUDENTS ||--o{ DEVELOPMENT_ROADMAPS : has
     DEVELOPMENT_ROADMAPS ||--o{ ROADMAP_ITEMS : contains
@@ -802,6 +817,8 @@ erDiagram
 | `advisor_assignments` | Phân công cố vấn cho sinh viên |
 | `skill_categories` | Nhóm kỹ năng |
 | `skills` | Danh mục kỹ năng |
+| `specializations` | Chuyên ngành/domain trong ngành CNTT |
+| `career_goal_specializations` | Quan hệ nhiều-nhiều giữa career goal và chuyên ngành |
 | `career_goals` | Mục tiêu nghề nghiệp |
 | `career_required_skills` | Kỹ năng yêu cầu theo career goal |
 | `student_profiles` | Hồ sơ năng lực chính |
@@ -814,7 +831,7 @@ erDiagram
 | `advisor_reviews` | Nhận xét của cố vấn |
 | `competency_analysis_results` | Kết quả phân tích tổng quan |
 | `competency_analysis_details` | Chi tiết phân tích từng kỹ năng |
-| `recommendation_templates` | Mẫu gợi ý theo kỹ năng |
+| `recommendation_templates` | Mẫu gợi ý theo chuyên ngành, career goal, nhóm kỹ năng hoặc kỹ năng |
 | `student_recommendations` | Gợi ý đã sinh cho sinh viên |
 | `development_roadmaps` | Lộ trình phát triển |
 | `roadmap_items` | Nhiệm vụ trong lộ trình |
@@ -834,6 +851,8 @@ erDiagram
 | `lecturers.user_id` unique | Mỗi user giảng viên có một lecturer |
 | `lecturers.lecturer_code` unique | Mã giảng viên không trùng |
 | `skill_categories.name` unique | Tên nhóm kỹ năng không trùng |
+| `specializations.name` unique | Tên chuyên ngành/domain không trùng |
+| `career_goal_specializations(career_goal_id, specialization_id)` unique | Một career goal không gắn trùng một chuyên ngành |
 | `career_goals.name` unique | Tên career goal không trùng |
 | `skills(category_id, name)` unique | Tên kỹ năng không trùng trong cùng nhóm |
 | `advisor_assignments(lecturer_id, student_id)` unique | Không tạo trùng phân công |
@@ -848,10 +867,12 @@ erDiagram
 | --- | --- |
 | Người dùng | `users(role, status)`, `users(status, created_at)` |
 | Sinh viên | `students(class_name, major)`, `students(major, academic_year)` |
+| Chuyên ngành | `specializations(is_active, name)`, `career_goal_specializations(specialization_id, career_goal_id)` |
 | Hàng đợi minh chứng | `evidences(status, created_at)` |
 | Hồ sơ cần cảnh báo | `student_profiles(completion_percent)`, `student_profiles(match_percent)`, `student_profiles(risk_score)` |
 | Lịch sử phân tích | `competency_analysis_results(student_id, analyzed_at)` |
 | Roadmap | `development_roadmaps(student_id, status)`, `roadmap_items(roadmap_id, order_index)` |
+| Recommendation template | `recommendation_templates(specialization_id, career_goal_id, skill_id, priority)`, `recommendation_templates(skill_category_id, skill_id, priority)` |
 | Thông báo chưa đọc | `notifications(user_id, is_read, created_at)` |
 
 ---
@@ -924,10 +945,24 @@ Quy trình:
 
 1. Lấy missing skills từ kết quả phân tích.
 2. Sắp xếp theo `priorityScore` giảm dần.
-3. Tìm `recommendation_templates` phù hợp với `skillId`.
-4. Tạo `StudentRecommendation` với title, description, reason, priority score.
-5. Gán trạng thái mặc định là `NEW`.
-6. Cho phép sinh viên cập nhật sang `SAVED`, `IN_PROGRESS`, `DONE`, `DISMISSED`.
+3. Lấy `specializationId`, `careerGoalId`, `skillCategoryId` và `skillId` làm ngữ cảnh gợi ý.
+4. Tìm `recommendation_templates` theo cơ chế ưu tiên từ cụ thể đến tổng quát.
+5. Tạo `StudentRecommendation` với title, description, reason, priority score.
+6. Gán trạng thái mặc định là `NEW`.
+7. Cho phép sinh viên cập nhật sang `SAVED`, `IN_PROGRESS`, `DONE`, `DISMISSED`.
+
+Thứ tự chọn template:
+
+| Mức ưu tiên | Điều kiện match | Ý nghĩa |
+| --- | --- | --- |
+| 1 | `specializationId + careerGoalId + skillId` | Gợi ý cụ thể nhất cho đúng chuyên ngành, mục tiêu và kỹ năng |
+| 2 | `specializationId + skillId` | Gợi ý theo chuyên ngành khi career goal chưa có template riêng |
+| 3 | `careerGoalId + skillId` | Gợi ý theo vai trò nghề nghiệp |
+| 4 | `skillCategoryId + skillId` | Gợi ý theo nhóm kỹ năng |
+| 5 | `skillId` | Gợi ý chung cho kỹ năng |
+| 6 | Không có template | Sinh gợi ý mặc định từ tên kỹ năng, gap và priority score |
+
+Cơ chế này giúp hệ thống có thể bắt đầu bằng bộ mẫu nhỏ, ví dụ theo kỹ năng nền tảng hoặc nhóm kỹ năng, sau đó mở rộng dần cho từng chuyên ngành có nhu cầu. Admin không cần nhập trước toàn bộ domain trong ngành CNTT.
 
 ## 12.6. Sinh Roadmap
 
@@ -988,6 +1023,11 @@ API có global prefix là `/api`. Swagger được cấu hình tại `/api/docs`
 | GET | `/api/skills/:id` | Authenticated | Chi tiết kỹ năng |
 | PATCH | `/api/skills/:id` | Admin | Cập nhật kỹ năng |
 | DELETE | `/api/skills/:id` | Admin | Xóa kỹ năng |
+| GET | `/api/specializations` | Authenticated | Danh sách chuyên ngành/domain |
+| POST | `/api/specializations` | Admin | Tạo chuyên ngành/domain |
+| GET | `/api/specializations/:id` | Authenticated | Chi tiết chuyên ngành/domain |
+| PATCH | `/api/specializations/:id` | Admin | Cập nhật chuyên ngành/domain |
+| DELETE | `/api/specializations/:id` | Admin | Xóa chuyên ngành/domain |
 
 ## 13.3. Career Goal API
 
@@ -1002,6 +1042,9 @@ API có global prefix là `/api`. Swagger được cấu hình tại `/api/docs`
 | POST | `/api/career-goals/:careerGoalId/required-skills` | Admin | Thêm required skill |
 | PATCH | `/api/career-goals/:careerGoalId/required-skills/:requiredSkillId` | Admin | Cập nhật required skill |
 | DELETE | `/api/career-goals/:careerGoalId/required-skills/:requiredSkillId` | Admin | Xóa required skill |
+| GET | `/api/career-goals/:careerGoalId/specializations` | Authenticated | Danh sách chuyên ngành của career goal |
+| POST | `/api/career-goals/:careerGoalId/specializations` | Admin | Gắn career goal với chuyên ngành |
+| DELETE | `/api/career-goals/:careerGoalId/specializations/:specializationId` | Admin | Gỡ career goal khỏi chuyên ngành |
 
 ## 13.4. Profile Và Student Resource API
 
@@ -1054,6 +1097,11 @@ Admin và lecturer xem tài nguyên của sinh viên qua:
 | GET | `/api/competency/analysis-history/me` | Student | Lịch sử phân tích cá nhân |
 | GET | `/api/competency/analysis-results/:id` | Student, Lecturer, Admin | Chi tiết kết quả phân tích |
 | POST | `/api/competency/students/:studentId/analyze` | Lecturer, Admin | Phân tích sinh viên |
+| GET | `/api/recommendation-templates` | Admin | Danh sách mẫu gợi ý, có filter theo chuyên ngành/career goal/skill |
+| POST | `/api/recommendation-templates` | Admin | Tạo mẫu gợi ý |
+| GET | `/api/recommendation-templates/:id` | Admin | Chi tiết mẫu gợi ý |
+| PATCH | `/api/recommendation-templates/:id` | Admin | Cập nhật mẫu gợi ý |
+| DELETE | `/api/recommendation-templates/:id` | Admin | Xóa mẫu gợi ý |
 | GET | `/api/recommendations/me` | Student | Danh sách gợi ý cá nhân |
 | PATCH | `/api/recommendations/:id/status` | Student | Cập nhật trạng thái gợi ý |
 | POST | `/api/roadmaps/generate/me` | Student | Sinh roadmap cá nhân |
@@ -1102,9 +1150,11 @@ flowchart TD
     Admin --> A3["Lecturers"]
     Admin --> A4["Skill Categories"]
     Admin --> A5["Skills"]
-    Admin --> A6["Career Goals"]
-    Admin --> A7["Advisor Assignments"]
-    Admin --> A8["Reports"]
+    Admin --> A6["Specializations"]
+    Admin --> A7["Career Goals"]
+    Admin --> A8["Recommendation Templates"]
+    Admin --> A9["Advisor Assignments"]
+    Admin --> A10["Reports"]
 
     Lecturer --> L1["Students"]
     Lecturer --> L2["Evidences"]
@@ -1131,13 +1181,15 @@ flowchart TD
 | --- | --- | --- |
 | Admin | Dashboard | Tổng số người dùng, sinh viên, giảng viên, career goals, hồ sơ rủi ro |
 | Admin | Skill Categories/Skills | Bảng danh mục, form thêm/sửa, trạng thái active/inactive |
-| Admin | Career Goals | CRUD career goal và required skills |
+| Admin | Specializations | CRUD chuyên ngành/domain và trạng thái active/inactive |
+| Admin | Career Goals | CRUD career goal, required skills và mapping chuyên ngành |
+| Admin | Recommendation Templates | Cấu hình mẫu gợi ý theo chuyên ngành, career goal, nhóm kỹ năng và kỹ năng |
 | Admin | Advisor Assignments | Phân công cố vấn cho sinh viên |
 | Lecturer | Dashboard | Sinh viên phụ trách, pending evidences, cảnh báo hồ sơ yếu |
 | Lecturer | Students | Danh sách sinh viên được phụ trách, liên kết xem profile |
 | Lecturer | Evidences | Hàng đợi duyệt, thao tác verify/reject |
 | Student | Dashboard | Completion, match, risk, roadmap progress, thông báo mới |
-| Student | Profile | Thông tin cá nhân, career goal, link GitHub/LinkedIn/portfolio |
+| Student | Profile | Thông tin cá nhân, chuyên ngành, career goal, link GitHub/LinkedIn/portfolio |
 | Student | Skills/Projects/Certificates/Activities/Experiences | CRUD dữ liệu năng lực |
 | Student | Analysis | Kết quả phân tích, missing skills, match level |
 | Student | Recommendations | Gợi ý và trạng thái thực hiện |
@@ -1300,6 +1352,7 @@ npm run dev
 | --- | --- | --- |
 | Sinh viên khai báo kỹ năng không trung thực | Kết quả phân tích sai | Dùng minh chứng và trạng thái xác thực |
 | Career goal cấu hình trọng số không hợp lý | Match percent thiếu ý nghĩa | Admin cần chuẩn hóa bộ required skills và weight |
+| Recommendation quá chung chung | Sinh viên nhận gợi ý chưa sát chuyên ngành | Dùng specialization-aware template và fallback theo career goal, skill category, skill |
 | Dữ liệu upload quá lớn | Tốn dung lượng và chậm hệ thống | Giới hạn file size, MIME type, dùng object storage khi production |
 | Phân quyền giảng viên chưa chặt | Lộ dữ liệu sinh viên | Kiểm tra advisor assignment trong service |
 | Thiếu dữ liệu mẫu | Dashboard và phân tích khó đánh giá | Seed dữ liệu mẫu cho skills, career goals, templates |
@@ -1321,6 +1374,7 @@ npm run dev
 - Đã có evidence API upload, pending queue, verify, reject.
 - Đã có competency analysis engine dùng rule-based.
 - Đã có recommendation và roadmap API.
+- Tài liệu thiết kế đã bổ sung hướng specialization-aware recommendation template và fallback nhiều tầng.
 - Đã có notification scheduler cho profile reminder, missing career goal, rejected evidence, overdue roadmap item, weak profile.
 - Đã có frontend route và menu theo vai trò với Ant Design.
 
@@ -1331,7 +1385,8 @@ npm run dev
 - Module `exports` cho portfolio PDF và báo cáo Excel.
 - Ghi `activity_logs` cho các thao tác quan trọng.
 - UI chi tiết cho nhận xét cố vấn nếu cần tách thành module riêng.
-- Bộ seed dữ liệu mẫu cho career goals, required skills và recommendation templates.
+- Bộ seed dữ liệu mẫu cho specializations, career goals, required skills và recommendation templates.
+- Triển khai code cho module `specializations`, `recommendation-templates` và logic chọn template theo fallback nhiều tầng.
 - Test tự động cho engine, service và API.
 - Kiểm tra chặt hơn quyền lecturer chỉ xem sinh viên được phân công.
 
@@ -1341,7 +1396,7 @@ npm run dev
 
 - Bổ sung module export PDF/Excel hoàn chỉnh.
 - Bổ sung import dữ liệu từ Excel.
-- Nâng cấp recommendation template thành bộ mẫu theo chuyên ngành.
+- Hoàn thiện recommendation template thành bộ mẫu theo chuyên ngành, bắt đầu từ nhóm chuyên ngành trọng tâm rồi mở rộng dần theo dữ liệu thực tế.
 - Bổ sung lịch sử thay đổi profile và lịch sử duyệt minh chứng.
 - Thêm dashboard so sánh theo lớp, khoa, ngành, năm học.
 - Thêm rubric đánh giá minh chứng.
@@ -1356,4 +1411,3 @@ npm run dev
 Hệ thống **Student Digital Competency Profile & Personal Development Roadmap** giải quyết bài toán quản lý năng lực sinh viên theo hướng tập trung, có minh chứng, có tiêu chí đánh giá và có lộ trình phát triển cá nhân. Kiến trúc modular monolith với Next.js, NestJS, Prisma và PostgreSQL phù hợp với quy mô đồ án, dễ triển khai, dễ bảo trì và có khả năng mở rộng.
 
 Điểm mạnh của hệ thống là kết hợp giữa hồ sơ năng lực số, xác thực minh chứng, phân tích rule-based và roadmap cá nhân hóa. Thiết kế này giúp sinh viên hiểu rõ khoảng cách năng lực của mình, giảng viên/cố vấn có công cụ theo dõi, còn khoa/trường có cơ sở dữ liệu để đánh giá năng lực đầu ra.
-

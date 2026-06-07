@@ -1,4 +1,4 @@
-import { AnalysisDetailStatus, MatchLevel } from '@prisma/client';
+import { AnalysisSkillStatus, MatchLevel } from '@prisma/client';
 
 export interface RequiredSkillInput {
   skillId: string;
@@ -23,7 +23,7 @@ export interface AnalysisDetailOutput {
   weight: number;
   achievedScore: number;
   priorityScore: number;
-  status: AnalysisDetailStatus;
+  status: AnalysisSkillStatus;
   learningOrder: number;
 }
 

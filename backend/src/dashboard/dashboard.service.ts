@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
-  AnalysisDetailStatus,
+  AnalysisSkillStatus,
   AssignmentStatus,
   EvidenceStatus,
   RoadmapStatus,
@@ -31,7 +31,7 @@ export class DashboardService {
         orderBy: { analyzedAt: 'desc' },
         include: {
           details: {
-            where: { status: { in: [AnalysisDetailStatus.MISSING, AnalysisDetailStatus.NEED_IMPROVEMENT] } },
+            where: { status: { in: [AnalysisSkillStatus.MISSING, AnalysisSkillStatus.NEED_IMPROVEMENT] } },
             orderBy: { priorityScore: 'desc' },
             take: 10,
             include: { skill: { include: { category: true } } },
@@ -186,7 +186,7 @@ export class DashboardService {
       by: ['skillId'],
       where: {
         analysisResultId: { in: latestAnalysisIds.map((item) => item.id) },
-        status: { in: [AnalysisDetailStatus.MISSING, AnalysisDetailStatus.NEED_IMPROVEMENT] },
+        status: { in: [AnalysisSkillStatus.MISSING, AnalysisSkillStatus.NEED_IMPROVEMENT] },
       },
       _count: { skillId: true },
       orderBy: { _count: { skillId: 'desc' } },

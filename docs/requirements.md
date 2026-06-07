@@ -96,13 +96,15 @@ Admin là người quản lý dữ liệu nền tảng và cấu hình các tiê
 - Quản lý tài khoản sinh viên.
 - Quản lý tài khoản giảng viên/cố vấn.
 - Quản lý danh mục ngành/lớp nếu cần.
+- Quản lý danh mục chuyên ngành/hướng chuyên sâu.
 - Quản lý danh mục nhóm kỹ năng.
 - Quản lý danh mục kỹ năng.
 - Quản lý mục tiêu nghề nghiệp.
+- Liên kết mục tiêu nghề nghiệp với chuyên ngành phù hợp.
 - Cấu hình kỹ năng yêu cầu cho từng mục tiêu nghề nghiệp.
 - Cấu hình trọng số của từng kỹ năng.
 - Cấu hình mức độ yêu cầu của từng kỹ năng.
-- Cấu hình mẫu gợi ý học tập/dự án/chứng chỉ.
+- Cấu hình mẫu gợi ý học tập/dự án/chứng chỉ theo kỹ năng, nhóm kỹ năng, mục tiêu nghề nghiệp hoặc chuyên ngành.
 - Quản lý danh sách sinh viên theo lớp/ngành.
 - Phân công cố vấn học tập cho sinh viên.
 - Theo dõi thống kê hồ sơ năng lực toàn khoa.
@@ -510,6 +512,17 @@ Hệ thống dựa trên danh sách kỹ năng còn thiếu để gợi ý:
 - Chứng chỉ nên bổ sung.
 - Kỹ năng nên luyện tập.
 
+### Ngữ cảnh gợi ý
+
+Để tránh việc gợi ý quá chung chung cho toàn bộ ngành Công nghệ thông tin, hệ thống cần hỗ trợ gợi ý theo nhiều tầng ngữ cảnh:
+
+- Kỹ năng nền tảng dùng chung cho nhiều hướng nghề nghiệp.
+- Mục tiêu nghề nghiệp sinh viên đã chọn.
+- Chuyên ngành hoặc hướng chuyên sâu của sinh viên nếu có.
+- Nhóm kỹ năng nếu chưa có mẫu gợi ý cụ thể cho từng kỹ năng.
+
+Admin không bắt buộc phải nhập đầy đủ mẫu gợi ý cho tất cả domain trong ngành Công nghệ thông tin. Hệ thống phải có cơ chế fallback để vẫn sinh được gợi ý khi dữ liệu template chưa đầy đủ.
+
 ### Quy tắc gợi ý
 
 Ví dụ:
@@ -519,6 +532,23 @@ Ví dụ:
 - Nếu thiếu Next.js → gợi ý học Next.js App Router.
 - Nếu thiếu Testing → gợi ý viết unit test cho component.
 - Nếu thiếu Git → gợi ý học Git/GitHub workflow.
+
+### Thứ tự tìm mẫu gợi ý
+
+Khi sinh gợi ý cho một kỹ năng còn thiếu, hệ thống tìm mẫu theo thứ tự ưu tiên:
+
+1. Mẫu khớp chuyên ngành + mục tiêu nghề nghiệp + kỹ năng.
+2. Mẫu khớp chuyên ngành + kỹ năng.
+3. Mẫu khớp mục tiêu nghề nghiệp + kỹ năng.
+4. Mẫu khớp nhóm kỹ năng + kỹ năng.
+5. Mẫu khớp kỹ năng chung.
+6. Nếu không có mẫu phù hợp, hệ thống tự sinh gợi ý mặc định từ tên kỹ năng và khoảng cách thiếu hụt.
+
+Ví dụ cùng là kỹ năng Python:
+
+- Data Analyst → gợi ý học Python với Pandas, trực quan hóa dữ liệu và notebook phân tích.
+- Backend Developer → gợi ý xây REST API với FastAPI hoặc Django.
+- QA Automation → gợi ý viết automation script với Selenium hoặc Playwright.
 
 ---
 
@@ -904,6 +934,8 @@ Các bảng chính của hệ thống gồm:
 - skill_categories
 - skills
 - career_goals
+- specializations
+- career_goal_specializations
 - career_required_skills
 - student_profiles
 - student_skills
@@ -962,6 +994,7 @@ Lưu thông tin sinh viên.
 - student_code.
 - class_name.
 - major.
+- specialization_id.
 - academic_year.
 - phone.
 - date_of_birth.
@@ -1093,6 +1126,57 @@ Lưu các kỹ năng yêu cầu cho từng mục tiêu nghề nghiệp.
 | Front-end Developer | TypeScript | 2           | 15       | 2      |
 | Front-end Developer | React      | 3           | 20       | 3      |
 | Front-end Developer | Next.js    | 2           | 10       | 4      |
+
+---
+
+## 9.9A. Bảng specializations
+
+Lưu danh mục chuyên ngành hoặc hướng chuyên sâu trong lĩnh vực Công nghệ thông tin.
+
+### Thuộc tính
+
+- id.
+- name.
+- description.
+- status.
+- created_at.
+- updated_at.
+
+### Ví dụ dữ liệu
+
+- Software Engineering.
+- Data Science.
+- Information Systems.
+- Artificial Intelligence.
+- Cybersecurity.
+- UI/UX.
+- DevOps.
+
+---
+
+## 9.9B. Bảng career_goal_specializations
+
+Lưu quan hệ giữa mục tiêu nghề nghiệp và chuyên ngành phù hợp.
+
+### Thuộc tính
+
+- id.
+- career_goal_id.
+- specialization_id.
+- created_at.
+
+### Ý nghĩa
+
+Một mục tiêu nghề nghiệp có thể phù hợp với nhiều chuyên ngành, và một chuyên ngành có thể có nhiều mục tiêu nghề nghiệp.
+
+Ví dụ:
+
+| Chuyên ngành          | Mục tiêu nghề nghiệp |
+| --------------------- | -------------------- |
+| Software Engineering  | Backend Developer    |
+| Software Engineering  | Frontend Developer   |
+| Data Science          | Data Analyst         |
+| Artificial Intelligence | AI/ML Engineer     |
 
 ---
 
@@ -1315,11 +1399,14 @@ Lưu chi tiết phân tích từng kỹ năng.
 
 ## 9.19. Bảng recommendation_templates
 
-Lưu mẫu gợi ý theo kỹ năng.
+Lưu mẫu gợi ý học tập/dự án/chứng chỉ theo kỹ năng, mục tiêu nghề nghiệp, chuyên ngành hoặc nhóm kỹ năng.
 
 ### Thuộc tính
 
 - id.
+- specialization_id.
+- career_goal_id.
+- skill_category_id.
 - skill_id.
 - recommendation_type.
 - title.
@@ -1327,6 +1414,7 @@ Lưu mẫu gợi ý theo kỹ năng.
 - difficulty_level.
 - estimated_duration.
 - resource_url.
+- priority.
 - status.
 
 ### recommendation_type
@@ -1336,6 +1424,14 @@ Lưu mẫu gợi ý theo kỹ năng.
 - CERTIFICATE.
 - PRACTICE.
 - DOCUMENT.
+
+### Quy tắc sử dụng
+
+- Nếu `specialization_id` có giá trị, template chỉ áp dụng cho chuyên ngành đó.
+- Nếu `career_goal_id` có giá trị, template ưu tiên áp dụng cho mục tiêu nghề nghiệp đó.
+- Nếu `skill_category_id` có giá trị, template có thể áp dụng ở cấp nhóm kỹ năng.
+- Nếu chỉ có `skill_id`, template là mẫu chung cho kỹ năng đó.
+- `priority` dùng để chọn template phù hợp hơn khi có nhiều template cùng khớp điều kiện.
 
 ---
 
@@ -1525,6 +1621,10 @@ Các quan hệ chính:
 - Một lecturer có thể phụ trách nhiều student thông qua advisor_assignments.
 - Một student có một student_profile.
 - Một career_goal có nhiều career_required_skills.
+- Một specialization có nhiều student.
+- Một specialization có nhiều recommendation_templates.
+- Một career_goal có thể liên kết nhiều specialization thông qua career_goal_specializations.
+- Một specialization có thể liên kết nhiều career_goal thông qua career_goal_specializations.
 - Một skill có thể thuộc một skill_category.
 - Một student có nhiều student_skills.
 - Một student có nhiều student_projects.
@@ -1536,6 +1636,8 @@ Các quan hệ chính:
 - Một student có nhiều competency_analysis_results.
 - Một competency_analysis_result có nhiều competency_analysis_details.
 - Một skill có nhiều recommendation_templates.
+- Một skill_category có thể có nhiều recommendation_templates.
+- Một career_goal có thể có nhiều recommendation_templates.
 - Một student có nhiều student_recommendations.
 - Một student có nhiều development_roadmaps.
 - Một development_roadmap có nhiều roadmap_items.
@@ -1553,12 +1655,13 @@ Các quan hệ chính:
 Hệ thống cần các dữ liệu sau:
 
 - Mục tiêu nghề nghiệp của sinh viên.
+- Chuyên ngành hoặc hướng chuyên sâu của sinh viên nếu có.
 - Danh sách kỹ năng yêu cầu của mục tiêu nghề nghiệp.
 - Mức độ yêu cầu của từng kỹ năng.
 - Trọng số của từng kỹ năng.
 - Thứ tự học tập của từng kỹ năng.
 - Danh sách kỹ năng hiện tại của sinh viên.
-- Mẫu gợi ý học tập/dự án/chứng chỉ theo kỹ năng.
+- Mẫu gợi ý học tập/dự án/chứng chỉ theo chuyên ngành, mục tiêu nghề nghiệp, nhóm kỹ năng hoặc kỹ năng.
 
 ---
 
@@ -1573,10 +1676,23 @@ Hệ thống cần các dữ liệu sau:
 7. Xác định kỹ năng còn thiếu.
 8. Tính điểm ưu tiên của từng kỹ năng thiếu.
 9. Sắp xếp kỹ năng thiếu theo mức độ ưu tiên.
-10. Lấy gợi ý tương ứng với kỹ năng còn thiếu.
+10. Lấy gợi ý tương ứng với kỹ năng còn thiếu theo cơ chế fallback template.
 11. Sắp xếp gợi ý theo thứ tự học tập.
 12. Tạo lộ trình phát triển cá nhân.
 13. Lưu kết quả phân tích vào cơ sở dữ liệu.
+
+## 11.2A. Cơ chế fallback template
+
+Recommendation Engine không yêu cầu admin nhập đầy đủ template cho tất cả domain trong ngành Công nghệ thông tin. Khi thiếu kỹ năng, hệ thống tìm template từ cụ thể đến tổng quát:
+
+1. `specialization_id + career_goal_id + skill_id`.
+2. `specialization_id + skill_id`.
+3. `career_goal_id + skill_id`.
+4. `skill_category_id + skill_id`.
+5. `skill_id`.
+6. Template mặc định do hệ thống tự sinh.
+
+Cơ chế này giúp hệ thống có thể bắt đầu với bộ dữ liệu nhỏ nhưng vẫn mở rộng dần theo chuyên ngành, career track hoặc domain cụ thể.
 
 ---
 
@@ -2079,6 +2195,8 @@ Chức năng:
 - Có thể thêm kỹ năng mới.
 - Có thể thay đổi trọng số kỹ năng.
 - Có thể thêm loại gợi ý mới.
+- Có thể thêm chuyên ngành hoặc career track mới mà không cần nhập lại toàn bộ dữ liệu gợi ý.
+- Có thể bắt đầu với template gợi ý chung và mở rộng dần sang template cụ thể theo chuyên ngành.
 - Có thể nâng cấp từ rule-based sang AI recommendation trong tương lai.
 
 ---

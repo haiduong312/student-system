@@ -59,6 +59,8 @@ frontend/
 │   │   │   ├── lecturers/
 │   │   │   ├── skills/
 │   │   │   ├── career-goals/
+│   │   │   ├── specializations/
+│   │   │   ├── recommendation-templates/
 │   │   │   ├── advisor-assignments/
 │   │   │   └── reports/
 │   │   ├── lecturer/
@@ -149,6 +151,8 @@ backend/
 ### Career Configuration
 
 - `CareerGoal`
+- `Specialization`
+- `CareerGoalSpecialization`
 - `CareerRequiredSkill`
 - `RecommendationTemplate`
 
@@ -196,6 +200,8 @@ backend/
 | `skill-categories` | Quản lý nhóm kỹ năng |
 | `skills` | Quản lý kỹ năng |
 | `career-goals` | Quản lý mục tiêu nghề nghiệp |
+| `specializations` | Quản lý chuyên ngành/hướng chuyên sâu |
+| `recommendation-templates` | Quản lý bộ mẫu gợi ý theo chuyên ngành, mục tiêu nghề nghiệp và kỹ năng |
 | `student-profiles` | Quản lý hồ sơ năng lực |
 | `student-skills` | Quản lý kỹ năng sinh viên |
 | `student-projects` | Quản lý dự án |
@@ -254,6 +260,8 @@ backend/
 - `/admin/skills`
 - `/admin/career-goals`
 - `/admin/career-goals/[id]/required-skills`
+- `/admin/specializations`
+- `/admin/recommendation-templates`
 - `/admin/advisor-assignments`
 - `/admin/reports`
 - `/admin/activity-logs`
@@ -329,6 +337,29 @@ GET    /api/career-goals/:id/required-skills
 POST   /api/career-goals/:id/required-skills
 PATCH  /api/career-goals/:id/required-skills/:requiredSkillId
 DELETE /api/career-goals/:id/required-skills/:requiredSkillId
+```
+
+### Specializations
+
+```text
+GET    /api/specializations
+POST   /api/specializations
+GET    /api/specializations/:id
+PATCH  /api/specializations/:id
+DELETE /api/specializations/:id
+GET    /api/specializations/:id/career-goals
+POST   /api/specializations/:id/career-goals
+DELETE /api/specializations/:id/career-goals/:careerGoalId
+```
+
+### Recommendation templates
+
+```text
+GET    /api/recommendation-templates
+POST   /api/recommendation-templates
+GET    /api/recommendation-templates/:id
+PATCH  /api/recommendation-templates/:id
+DELETE /api/recommendation-templates/:id
 ```
 
 ### Student profile
@@ -444,7 +475,7 @@ GET    /api/exports/competency
 GET    /api/exports/lecturer/students
 ```
 
-## 9. Rule-based recommendation engine
+## 9. Specialization-Aware Rule-Based Recommendation Engine
 
 Các công thức chính:
 
@@ -473,6 +504,32 @@ competency-analysis/
 │   └── competency-analysis.engine.ts
 └── services/
 ```
+
+Recommendation Engine cần dùng cơ chế tìm template theo thứ tự cụ thể đến tổng quát:
+
+```text
+1. specialization + career goal + skill
+2. specialization + skill
+3. career goal + skill
+4. skill category + skill
+5. skill
+6. default generated recommendation
+```
+
+Luồng dữ liệu mới:
+
+```text
+Student Specialization
++ Career Goal
++ Missing Skills
++ Priority Score
++ Learning Order
+=> Template Matching
+=> Student Recommendations
+=> Development Roadmap
+```
+
+Thiết kế này giúp hệ thống không cần nhập trước toàn bộ domain của ngành Công nghệ thông tin. Admin có thể bắt đầu với template chung theo skill hoặc skill category, sau đó mở rộng dần template cụ thể cho chuyên ngành/career goal phổ biến.
 
 ## 10. Phân quyền
 

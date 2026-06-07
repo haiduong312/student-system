@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AnalysisDetailStatus, MatchLevel } from '@prisma/client';
+import { AnalysisSkillStatus, MatchLevel } from '@prisma/client';
 import {
   AnalysisDetailOutput,
   CompetencyAnalysisOutput,
@@ -65,15 +65,15 @@ export class CompetencyAnalysisEngine {
   }
 
   private resolveDetailStatus(currentLevel: number, requiredLevel: number) {
-    if (currentLevel <= 0) {
-      return AnalysisDetailStatus.MISSING;
+    if (currentLevel >= requiredLevel) {
+      return AnalysisSkillStatus.ACHIEVED;
     }
 
-    if (currentLevel < requiredLevel) {
-      return AnalysisDetailStatus.NEED_IMPROVEMENT;
+    if (currentLevel > 0) {
+      return AnalysisSkillStatus.NEED_IMPROVEMENT;
     }
 
-    return AnalysisDetailStatus.ACHIEVED;
+    return AnalysisSkillStatus.MISSING;
   }
 
   private resolveMatchLevel(matchPercent: number) {

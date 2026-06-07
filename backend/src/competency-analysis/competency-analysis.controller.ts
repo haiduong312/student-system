@@ -1,23 +1,38 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AnalysisHistoryQueryDto } from './dto/analysis-query.dto';
+import { AnalyzeCompetencyDto } from './dto/analyze-competency.dto';
+import { CompetencyAnalysisResponseDto } from './dto/competency-analysis-response.dto';
 import { CompetencyAnalysisService } from './competency-analysis.service';
 
 @ApiTags('competency-analysis')
 @ApiBearerAuth()
-@Controller('competency')
+@Controller(['competency-analysis', 'competency'])
 export class CompetencyAnalysisController {
   constructor(private readonly competencyAnalysisService: CompetencyAnalysisService) {}
 
   @Roles(UserRole.STUDENT)
-  @ApiCreatedResponse({ description: 'Analyze current student competency profile' })
+  @ApiBody({ type: AnalyzeCompetencyDto, required: false })
+  @ApiCreatedResponse({
+    description: 'Analyze current student competency profile and generate recommendations',
+    type: CompetencyAnalysisResponseDto,
+  })
   @Post('analyze/me')
-  analyzeMine(@CurrentUser() user: AuthenticatedUser) {
-    return this.competencyAnalysisService.analyzeForCurrentStudent(user.id);
+  analyzeMine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AnalyzeCompetencyDto,
+  ) {
+    return this.competencyAnalysisService.analyzeMyCompetency(user.id, dto);
   }
 
   @Roles(UserRole.STUDENT)
