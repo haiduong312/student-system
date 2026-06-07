@@ -21,9 +21,13 @@ export class CompetencyAnalysisEngine {
 
     const details = requiredSkills.map<AnalysisDetailOutput>((requiredSkill) => {
       const currentLevel = studentSkillMap.get(requiredSkill.skillId) ?? 0;
-      const requiredLevel = Math.max(requiredSkill.requiredLevel, 1);
-      const ratio = Math.min(currentLevel / requiredLevel, 1);
-      const achievedScore = this.round(ratio * requiredSkill.weight);
+      const achievedScore =
+        requiredSkill.requiredLevel <= 0
+          ? this.round(requiredSkill.weight)
+          : this.round(
+              Math.min(currentLevel / requiredSkill.requiredLevel, 1) *
+                requiredSkill.weight,
+            );
       const rawGap = requiredSkill.requiredLevel - currentLevel;
       const gap = Math.max(rawGap, 0);
       const priorityScore = this.round(gap * requiredSkill.weight);

@@ -326,11 +326,15 @@ export class CompetencyAnalysisService {
         return requiredSkills.map((requiredSkill) => {
             const currentLevel =
                 studentSkillMap.get(requiredSkill.skillId) ?? 0;
-            const safeRequiredLevel = Math.max(requiredSkill.requiredLevel, 1);
-            const skillScore = this.round(
-                Math.min(currentLevel / safeRequiredLevel, 1) *
-                    requiredSkill.weight,
-            );
+            const skillScore =
+                requiredSkill.requiredLevel <= 0
+                    ? this.round(requiredSkill.weight)
+                    : this.round(
+                          Math.min(
+                              currentLevel / requiredSkill.requiredLevel,
+                              1,
+                          ) * requiredSkill.weight,
+                      );
             const gap = Math.max(requiredSkill.requiredLevel - currentLevel, 0);
             const priorityScore = this.round(gap * requiredSkill.weight);
 
@@ -611,7 +615,6 @@ export class CompetencyAnalysisService {
             where: {
                 ...scope,
                 status: TemplateStatus.ACTIVE,
-                OR: [{ level }, { level: null }],
             },
             orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
         });
@@ -619,6 +622,7 @@ export class CompetencyAnalysisService {
         return (
             templates.find((template) => template.level === level) ??
             templates.find((template) => template.level === null) ??
+            templates[0] ??
             null
         );
     }

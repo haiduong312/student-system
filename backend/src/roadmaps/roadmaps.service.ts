@@ -200,8 +200,11 @@ export class RoadmapsService {
     if (!item) {
       throw new NotFoundException('Roadmap item not found');
     }
-    if (item.roadmap.status !== RoadmapStatus.ACTIVE) {
-      throw new BadRequestException('Only active roadmap items can be updated');
+    if (
+      item.roadmap.status === RoadmapStatus.ARCHIVED ||
+      item.roadmap.status === RoadmapStatus.CANCELLED
+    ) {
+      throw new BadRequestException('Archived or cancelled roadmap items cannot be updated');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -220,12 +223,12 @@ export class RoadmapsService {
         },
       });
 
-      const progressPercent = await this.calculateRoadmapProgress(tx, item.roadmapId);
+      const progress = await this.calculateRoadmapProgress(tx, item.roadmapId);
       await tx.developmentRoadmap.update({
         where: { id: item.roadmapId },
         data: {
-          progressPercent,
-          status: progressPercent >= 100 ? RoadmapStatus.COMPLETED : RoadmapStatus.ACTIVE,
+          progressPercent: progress.progressPercent,
+          status: progress.status,
         },
       });
 
@@ -588,17 +591,17 @@ export class RoadmapsService {
     if (recommendation.recommendationTemplate?.roadmapPhase) {
       return recommendation.recommendationTemplate.roadmapPhase;
     }
-    if (recommendation.roadmapPhase) {
-      return recommendation.roadmapPhase;
-    }
     if (requiredSkill?.roadmapPhase) {
       return requiredSkill.roadmapPhase;
     }
+    if (detail.skill.category?.roadmapPhase) {
+      return detail.skill.category.roadmapPhase;
+    }
+    if (recommendation.roadmapPhase) {
+      return recommendation.roadmapPhase;
+    }
     if (requiredSkill?.specializationId) {
       return RoadmapPhase.SPECIALIZATION;
-    }
-    if (this.isCoreSkillCategory(detail.skill.category?.name)) {
-      return RoadmapPhase.CORE_FOUNDATION;
     }
     if (recommendation.recommendationTemplate?.recommendationType === RecommendationType.PROJECT) {
       return RoadmapPhase.PRACTICE_PROJECT;
@@ -656,12 +659,6 @@ export class RoadmapsService {
     return null;
   }
 
-  private isCoreSkillCategory(categoryName?: string | null) {
-    return Boolean(
-      categoryName?.match(/core|foundation|fundamental|basic|soft|english|communication/i),
-    );
-  }
-
   private async getNextRoadmapVersion(tx: Prisma.TransactionClient, studentId: string) {
     const latest = await tx.developmentRoadmap.findFirst({
       where: { studentId },
@@ -687,16 +684,25 @@ export class RoadmapsService {
       where: { roadmapId },
       select: { status: true, weight: true },
     });
-    const totalWeight = items.reduce((sum, item) => sum + Number(item.weight), 0);
+    const validItems = items.filter((item) => item.status !== RoadmapItemStatus.CANCELLED);
+    const totalWeight = validItems.reduce((sum, item) => sum + Number(item.weight), 0);
     if (totalWeight <= 0) {
-      return 0;
+      return {
+        progressPercent: 0,
+        status: RoadmapStatus.ACTIVE,
+      };
     }
 
-    const completedWeight = items
+    const completedWeight = validItems
       .filter((item) => item.status === RoadmapItemStatus.DONE)
       .reduce((sum, item) => sum + Number(item.weight), 0);
 
-    return this.round((completedWeight / totalWeight) * 100);
+    const progressPercent = this.round((completedWeight / totalWeight) * 100);
+
+    return {
+      progressPercent,
+      status: progressPercent >= 100 ? RoadmapStatus.COMPLETED : RoadmapStatus.ACTIVE,
+    };
   }
 
   private toRoadmapResponse(roadmap: RoadmapDetail): RoadmapResponseDto {
@@ -711,9 +717,12 @@ export class RoadmapsService {
             id: item.id,
             skillId: item.skillId,
             skillName: item.skill?.name ?? null,
+            recommendationId: item.recommendationId,
             title: item.title,
             description: item.description,
             itemType: item.itemType,
+            roadmapPhase: item.roadmapPhase,
+            orderIndex: item.orderIndex,
             weight: Number(item.weight),
             status: item.status,
             deadline: item.deadline,

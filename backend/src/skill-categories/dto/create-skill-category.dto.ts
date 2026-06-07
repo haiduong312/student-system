@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CatalogStatus } from '@prisma/client';
+import { CatalogStatus, RoadmapPhase } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateSkillCategoryDto {
@@ -13,6 +13,11 @@ export class CreateSkillCategoryDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  @ApiPropertyOptional({ enum: RoadmapPhase })
+  @IsOptional()
+  @IsEnum(RoadmapPhase)
+  roadmapPhase?: RoadmapPhase;
 
   @ApiPropertyOptional({ enum: CatalogStatus, default: CatalogStatus.ACTIVE })
   @IsOptional()

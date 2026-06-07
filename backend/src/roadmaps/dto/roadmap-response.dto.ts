@@ -16,6 +16,9 @@ export class RoadmapItemResponseDto {
   @ApiPropertyOptional({ nullable: true })
   skillName: string | null;
 
+  @ApiPropertyOptional({ nullable: true })
+  recommendationId: string | null;
+
   @ApiProperty()
   title: string;
 
@@ -24,6 +27,12 @@ export class RoadmapItemResponseDto {
 
   @ApiProperty({ enum: RoadmapItemType })
   itemType: RoadmapItemType;
+
+  @ApiProperty({ enum: RoadmapPhase })
+  roadmapPhase: RoadmapPhase;
+
+  @ApiProperty()
+  orderIndex: number;
 
   @ApiProperty()
   weight: number;
