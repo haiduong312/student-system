@@ -2,7 +2,7 @@
 
 import { Spin } from 'antd';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useCurrentUser } from '@/hooks/useAuth';
 import type { UserRole } from '@/types/auth';
 
@@ -15,10 +15,15 @@ export function ProtectedRoute({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
   const { data: user, isLoading } = useCurrentUser();
 
   useEffect(() => {
-    if (isLoading) return;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || isLoading) return;
     if (!user) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       return;
@@ -26,9 +31,9 @@ export function ProtectedRoute({
     if (!allowedRoles.includes(user.role)) {
       router.replace('/login');
     }
-  }, [allowedRoles, isLoading, pathname, router, user]);
+  }, [allowedRoles, isLoading, mounted, pathname, router, user]);
 
-  if (isLoading || !user || !allowedRoles.includes(user.role)) {
+  if (!mounted || isLoading || !user || !allowedRoles.includes(user.role)) {
     return (
       <div style={{ display: 'grid', minHeight: '100vh', placeItems: 'center' }}>
         <Spin size="large" />
