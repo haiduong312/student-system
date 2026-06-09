@@ -7,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { UserStatus } from '@prisma/client';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -27,10 +26,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
-      throw new ForbiddenException('User account is not active');
-    }
-
     const passwordMatched = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatched) {
       throw new UnauthorizedException('Invalid email or password');
@@ -41,7 +36,6 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
-      status: user.status,
       lastLoginAt: user.lastLoginAt,
     };
 
@@ -75,26 +69,30 @@ export class AuthService {
       throw new ForbiddenException('Invalid refresh token');
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
-      throw new ForbiddenException('User account is not active');
-    }
-
     const tokens = await this.signTokens({
       id: user.id,
       email: user.email,
       fullName: user.fullName,
       role: user.role,
-      status: user.status,
       lastLoginAt: user.lastLoginAt,
     });
 
     await this.usersService.updateRefreshTokenHash(user.id, tokens.refreshToken);
-    return tokens;
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        lastLoginAt: user.lastLoginAt,
+      },
+    };
   }
 
   async getProfile(userId: string) {
     const user = await this.usersService.findProfileById(userId);
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user) {
       throw new UnauthorizedException('Invalid authentication token');
     }
 
@@ -107,7 +105,7 @@ export class AuthService {
     }
 
     const user = await this.usersService.findById(userId);
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user) {
       throw new UnauthorizedException('Invalid authentication token');
     }
 
@@ -125,7 +123,7 @@ export class AuthService {
 
   async validateJwtPayload(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.usersService.findById(payload.sub);
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user) {
       throw new UnauthorizedException('Invalid authentication token');
     }
 
@@ -134,7 +132,6 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
-      status: user.status,
       lastLoginAt: user.lastLoginAt,
     };
   }

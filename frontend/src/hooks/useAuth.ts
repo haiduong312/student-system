@@ -16,7 +16,16 @@ export function useCurrentUser() {
   return useQuery<AuthUser | null>({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
-      if (!authStorage.getAccessToken()) return null;
+      if (!authStorage.getAccessToken()) {
+        try {
+          const session = await authService.refreshSession();
+          authStorage.setSession(session.accessToken, session.user);
+          return session.user;
+        } catch {
+          authStorage.clearSession();
+          return null;
+        }
+      }
       return authService.me();
     },
     initialData: () => authStorage.getUser(),
@@ -30,7 +39,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (payload: LoginRequest) => authService.login(payload),
     onSuccess: (session) => {
-      authStorage.setSession(session.accessToken, session.refreshToken, session.user);
+      authStorage.setSession(session.accessToken, session.user);
       queryClient.setQueryData(['auth', 'me'], session.user);
       router.replace(roleHome[session.user.role]);
     },

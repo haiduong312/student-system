@@ -30,12 +30,6 @@ enum UserRole {
   STUDENT
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  LOCKED
-}
-
 enum CatalogStatus {
   ACTIVE
   INACTIVE
@@ -192,7 +186,6 @@ model User {
   passwordHash String     @map("password_hash") @db.VarChar(255)
   refreshTokenHash String? @map("refresh_token_hash") @db.VarChar(255)
   role         UserRole
-  status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?  @map("last_login_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
@@ -207,8 +200,7 @@ model User {
   activityLogs                ActivityLog[]
   exportLogs                  ExportLog[]
 
-  @@index([role, status], map: "users_role_status_idx")
-  @@index([status, createdAt], map: "users_status_created_at_idx")
+  @@index([role], map: "users_role_idx")
   @@map("users")
 }
 

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 
 export class AuthUserDto {
   @ApiProperty()
@@ -14,9 +14,6 @@ export class AuthUserDto {
   @ApiProperty({ enum: UserRole })
   role: UserRole;
 
-  @ApiProperty({ enum: UserStatus })
-  status: UserStatus;
-
   @ApiProperty({ required: false, nullable: true })
   lastLoginAt?: Date | null;
 }
@@ -24,9 +21,6 @@ export class AuthUserDto {
 export class TokenPairDto {
   @ApiProperty()
   accessToken: string;
-
-  @ApiProperty()
-  refreshToken: string;
 
   @ApiProperty({ example: 'Bearer' })
   tokenType: 'Bearer';

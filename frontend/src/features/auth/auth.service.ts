@@ -10,6 +10,10 @@ export const authService = {
     const response = await api.get<ApiResponse<AuthUser>>('/auth/me');
     return response.data.data;
   },
+  async refreshSession() {
+    const response = await api.post<ApiResponse<LoginResponse>>('/auth/refresh');
+    return response.data.data;
+  },
   async logout() {
     await api.post('/auth/logout');
   },
