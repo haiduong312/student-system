@@ -24,17 +24,17 @@ export class CreateSkillDto {
   @IsEnum(SkillType)
   type?: SkillType;
 
-  @ApiPropertyOptional({ minimum: 0, maximum: 3, default: 1 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 3, default: 1 })
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(3)
   defaultRequiredLevel?: number;
 
-  @ApiPropertyOptional({ minimum: 0, default: 1 })
+  @ApiPropertyOptional({ minimum: 0.01, default: 1 })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   defaultWeight?: number;
 
   @ApiPropertyOptional({ enum: CatalogStatus, default: CatalogStatus.ACTIVE })

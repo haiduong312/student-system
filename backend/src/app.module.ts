@@ -22,6 +22,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { RoadmapsModule } from './roadmaps/roadmaps.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AssessmentQuestionsModule } from './assessment-questions/assessment-questions.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     RoadmapsModule,
     NotificationsModule,
     DashboardModule,
+    AssessmentQuestionsModule,
   ],
   controllers: [AppController],
   providers: [

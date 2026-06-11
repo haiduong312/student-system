@@ -119,6 +119,7 @@ export class CareerGoalsService {
   ) {
     await this.ensureCareerGoalExists(careerGoalId);
     await this.ensureSkillExists(dto.skillId);
+    await this.ensureRequiredSkillNotConfigured(careerGoalId, dto.skillId);
 
     try {
       return await this.prisma.careerRequiredSkill.create({
@@ -176,6 +177,11 @@ export class CareerGoalsService {
     await this.ensureRequiredSkillExists(careerGoalId, requiredSkillId);
     if (dto.skillId) {
       await this.ensureSkillExists(dto.skillId);
+      await this.ensureRequiredSkillNotConfigured(
+        careerGoalId,
+        dto.skillId,
+        requiredSkillId,
+      );
     }
 
     try {
@@ -223,6 +229,25 @@ export class CareerGoalsService {
     });
     if (!exists) {
       throw new NotFoundException('Career required skill not found');
+    }
+  }
+
+  private async ensureRequiredSkillNotConfigured(
+    careerGoalId: string,
+    skillId: string,
+    ignoreId?: string,
+  ) {
+    const exists = await this.prisma.careerRequiredSkill.findFirst({
+      where: {
+        careerGoalId,
+        skillId,
+        specializationId: null,
+        ...(ignoreId ? { id: { not: ignoreId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (exists) {
+      throw new ConflictException('Skill is already configured for this career goal');
     }
   }
 

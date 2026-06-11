@@ -88,6 +88,17 @@ enum SkillType {
   CAREER_SPECIFIC
 }
 
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+enum QuestionStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum AnalysisSkillStatus {
   ACHIEVED
   MISSING
@@ -321,12 +332,53 @@ model Skill {
   recommendationTemplates RecommendationTemplate[]
   studentRecommendations StudentRecommendation[]
   roadmapItems           RoadmapItem[]
+  assessmentQuestions    AssessmentQuestion[]
 
   @@unique([categoryId, name], map: "skills_category_name_unique")
   @@index([name], map: "skills_name_idx")
   @@index([categoryId, status], map: "skills_category_status_idx")
   @@index([type, status], map: "skills_type_status_idx")
   @@map("skills")
+}
+
+// ---------------------------------------------------------------------------
+// Assessment Question Bank Module
+// ---------------------------------------------------------------------------
+
+model AssessmentQuestion {
+  id           String         @id @default(cuid())
+  skillId      String         @map("skill_id")
+  questionText String         @map("question_text") @db.Text
+  questionType QuestionType   @map("question_type")
+  level        Int
+  explanation  String?        @db.Text
+  status       QuestionStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  skill   Skill              @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  options AssessmentOption[]
+
+  @@index([skillId, status], map: "assessment_questions_skill_status_idx")
+  @@index([questionType, status], map: "assessment_questions_type_status_idx")
+  @@index([level, status], map: "assessment_questions_level_status_idx")
+  @@index([createdAt], map: "assessment_questions_created_at_idx")
+  @@map("assessment_questions")
+}
+
+model AssessmentOption {
+  id         String   @id @default(cuid())
+  questionId String   @map("question_id")
+  optionText String   @map("option_text") @db.Text
+  isCorrect  Boolean  @default(false) @map("is_correct")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId, orderIndex], map: "assessment_options_question_order_idx")
+  @@map("assessment_options")
 }
 
 // ---------------------------------------------------------------------------

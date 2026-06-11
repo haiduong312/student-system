@@ -1,4 +1,5 @@
 export type CatalogStatus = 'ACTIVE' | 'INACTIVE';
+export type SkillType = 'COMMON' | 'CAREER_SPECIFIC';
 export type EvidenceStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type VerificationStatus = 'NO_EVIDENCE' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type ProjectStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -31,6 +32,9 @@ export interface Skill {
   id: string;
   name: string;
   description?: string | null;
+  type: SkillType;
+  defaultRequiredLevel?: number | null;
+  defaultWeight?: string | number | null;
   status: CatalogStatus;
   categoryId?: string | null;
   category?: SkillCategory | null;
@@ -41,6 +45,18 @@ export interface CareerGoal {
   name: string;
   description?: string | null;
   status: CatalogStatus;
+  _count?: { requiredSkills: number; studentProfiles: number };
+}
+
+export interface CareerRequiredSkill {
+  id: string;
+  careerGoalId: string;
+  skillId: string;
+  requiredLevel: number;
+  weight: string | number;
+  learningOrder: number;
+  isRequired: boolean;
+  skill?: Skill;
 }
 
 export interface StudentProfile {

@@ -6,15 +6,15 @@ export class CreateCareerRequiredSkillDto {
   @IsString()
   skillId: string;
 
-  @ApiProperty({ minimum: 0, maximum: 3, example: 2 })
+  @ApiProperty({ minimum: 1, maximum: 3, example: 2 })
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(3)
   requiredLevel: number;
 
-  @ApiProperty({ minimum: 0, example: 20 })
+  @ApiProperty({ minimum: 0.01, example: 20 })
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   weight: number;
 
   @ApiPropertyOptional({ minimum: 0, example: 1 })
