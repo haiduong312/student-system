@@ -23,6 +23,7 @@ import { RoadmapsModule } from './roadmaps/roadmaps.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AssessmentQuestionsModule } from './assessment-questions/assessment-questions.module';
+import { AssessmentsModule } from './assessments/assessments.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AssessmentQuestionsModule } from './assessment-questions/assessment-que
     NotificationsModule,
     DashboardModule,
     AssessmentQuestionsModule,
+    AssessmentsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,0 +1,534 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AssessmentQuestion,
+  AssessmentOption,
+  AssessmentStatus,
+  Prisma,
+  QuestionStatus,
+  SkillType,
+} from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { StartAssessmentDto } from './dto/start-assessment.dto';
+import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+
+const MAX_QUESTIONS_PER_SKILL = 6;
+const LEVEL_PASS_THRESHOLD = 60;
+
+type QuestionWithOptions = AssessmentQuestion & {
+  options: AssessmentOption[];
+};
+
+interface RequiredSkillForAssessment {
+  skillId: string;
+  skillName: string;
+  skillType: SkillType;
+  requiredLevel: number;
+  learningOrder: number;
+}
+
+interface SelectedQuestion {
+  question: QuestionWithOptions;
+  skill: RequiredSkillForAssessment;
+}
+
+interface AnswerGrade {
+  questionId: string;
+  selectedOptionId: string;
+  isCorrect: boolean;
+}
+
+interface LevelStat {
+  total: number;
+  correct: number;
+}
+
+interface SkillGrade {
+  skillId: string;
+  skillName: string;
+  skillType: SkillType;
+  calculatedLevel: number;
+  totalQuestions: number;
+  correctQuestions: number;
+  levelBreakdown: Record<string, LevelStat & { percentage: number }>;
+}
+
+@Injectable()
+export class AssessmentsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async startAssessment(userId: string, dto: StartAssessmentDto) {
+    const studentId = await this.getStudentIdByUserId(userId);
+    await this.ensureCareerGoalExists(dto.careerGoalId);
+
+    return this.generateAssessmentForCareerGoal(studentId, dto.careerGoalId);
+  }
+
+  async submitAssessment(
+    userId: string,
+    assessmentId: string,
+    dto: SubmitAssessmentDto,
+  ): Promise<any> {
+    const studentId = await this.getStudentIdByUserId(userId);
+    this.assertNoDuplicateAnswers(dto);
+
+    return this.prisma.$transaction(async (tx) => {
+      const assessment = await tx.assessment.findUnique({
+        where: { id: assessmentId },
+        include: {
+          items: {
+            orderBy: { orderIndex: 'asc' },
+            include: {
+              question: {
+                include: {
+                  skill: true,
+                  options: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!assessment) {
+        throw new NotFoundException('Assessment not found');
+      }
+      if (assessment.studentId !== studentId) {
+        throw new ForbiddenException('Assessment does not belong to current student');
+      }
+      if (assessment.status !== AssessmentStatus.IN_PROGRESS) {
+        throw new BadRequestException('Assessment has already been submitted');
+      }
+      if (!assessment.items.length) {
+        throw new BadRequestException('Assessment has no questions');
+      }
+
+      const gradedAnswers = this.gradeAnswers(assessment.items, dto);
+      const skillGrades = this.calculateSkillGrades(assessment.items, gradedAnswers);
+
+      await tx.assessmentAnswer.deleteMany({ where: { assessmentId } });
+      await tx.assessmentAnswer.createMany({
+        data: gradedAnswers.map((answer) => ({
+          assessmentId,
+          questionId: answer.questionId,
+          selectedOptionId: answer.selectedOptionId,
+          isCorrect: answer.isCorrect,
+        })),
+      });
+
+      await tx.assessmentSkillResult.deleteMany({ where: { assessmentId } });
+      await tx.assessmentSkillResult.createMany({
+        data: skillGrades.map((result) => ({
+          assessmentId,
+          skillId: result.skillId,
+          calculatedLevel: result.calculatedLevel,
+          totalQuestions: result.totalQuestions,
+          correctQuestions: result.correctQuestions,
+          levelBreakdown: result.levelBreakdown as unknown as Prisma.InputJsonValue,
+        })),
+      });
+
+      for (const result of skillGrades) {
+        await tx.studentSkill.upsert({
+          where: {
+            studentId_skillId: {
+              studentId,
+              skillId: result.skillId,
+            },
+          },
+          update: { currentLevel: result.calculatedLevel },
+          create: {
+            studentId,
+            skillId: result.skillId,
+            currentLevel: result.calculatedLevel,
+          },
+        });
+      }
+
+      await tx.assessment.update({
+        where: { id: assessmentId },
+        data: {
+          status: AssessmentStatus.GRADED,
+          submittedAt: new Date(),
+        },
+      });
+
+      return {
+        assessmentId,
+        status: AssessmentStatus.GRADED,
+        skillResults: skillGrades,
+      };
+    });
+  }
+
+  async generateAssessmentForCareerGoal(studentId: string, careerGoalId: string) {
+    const requiredSkills = await this.getRequiredSkills(careerGoalId);
+    if (!requiredSkills.length) {
+      throw new BadRequestException('Career goal has no required skills configured');
+    }
+
+    const selectedQuestions: SelectedQuestion[] = [];
+    const warnings: Array<{ skillId: string; skillName: string; message: string }> = [];
+
+    for (const requiredSkill of requiredSkills) {
+      const candidates = await this.getCandidateQuestions(requiredSkill);
+      const desiredCount = Math.min(
+        MAX_QUESTIONS_PER_SKILL,
+        Math.max(requiredSkill.requiredLevel * 2, requiredSkill.requiredLevel),
+      );
+      const selectedForSkill = this.selectQuestionsForSkill(
+        candidates,
+        requiredSkill.requiredLevel,
+        desiredCount,
+      );
+
+      if (!selectedForSkill.length) {
+        warnings.push({
+          skillId: requiredSkill.skillId,
+          skillName: requiredSkill.skillName,
+          message: 'No active questions found for this skill.',
+        });
+        continue;
+      }
+      if (selectedForSkill.length < desiredCount) {
+        warnings.push({
+          skillId: requiredSkill.skillId,
+          skillName: requiredSkill.skillName,
+          message: 'Not enough active questions for this skill.',
+        });
+      }
+
+      selectedQuestions.push(
+        ...selectedForSkill.map((question) => ({
+          question,
+          skill: requiredSkill,
+        })),
+      );
+    }
+
+    if (!selectedQuestions.length) {
+      throw new BadRequestException(
+        'No active assessment questions found for this career goal',
+      );
+    }
+
+    const assessment = await this.prisma.$transaction((tx) =>
+      tx.assessment.create({
+        data: {
+          studentId,
+          careerGoalId,
+          status: AssessmentStatus.IN_PROGRESS,
+          items: {
+            create: selectedQuestions.map((selected, index) => ({
+              questionId: selected.question.id,
+              skillId: selected.skill.skillId,
+              orderIndex: index + 1,
+            })),
+          },
+        },
+        select: { id: true, careerGoalId: true },
+      }),
+    );
+
+    return {
+      assessmentId: assessment.id,
+      careerGoalId: assessment.careerGoalId,
+      questions: selectedQuestions.map((selected) =>
+        this.toStartQuestionResponse(selected),
+      ),
+      warnings,
+    };
+  }
+
+  private async getStudentIdByUserId(userId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new ForbiddenException('Current user is not a student');
+    }
+
+    return student.id;
+  }
+
+  private async ensureCareerGoalExists(careerGoalId: string) {
+    const careerGoal = await this.prisma.careerGoal.findUnique({
+      where: { id: careerGoalId },
+      select: { id: true },
+    });
+    if (!careerGoal) {
+      throw new NotFoundException('Career goal not found');
+    }
+  }
+
+  private async getRequiredSkills(
+    careerGoalId: string,
+  ): Promise<RequiredSkillForAssessment[]> {
+    const requiredSkills = await this.prisma.careerRequiredSkill.findMany({
+      where: { careerGoalId, isRequired: true },
+      orderBy: [{ learningOrder: 'asc' }, { updatedAt: 'asc' }],
+      include: { skill: true },
+    });
+    const bySkillId = new Map<string, RequiredSkillForAssessment>();
+
+    for (const requiredSkill of requiredSkills) {
+      const existing = bySkillId.get(requiredSkill.skillId);
+      const candidate = {
+        skillId: requiredSkill.skillId,
+        skillName: requiredSkill.skill.name,
+        skillType: requiredSkill.skill.type,
+        requiredLevel: requiredSkill.requiredLevel,
+        learningOrder: requiredSkill.learningOrder,
+      };
+
+      if (!existing || candidate.requiredLevel > existing.requiredLevel) {
+        bySkillId.set(requiredSkill.skillId, candidate);
+      }
+    }
+
+    return Array.from(bySkillId.values()).sort((a, b) => {
+      if (a.learningOrder !== b.learningOrder) {
+        return a.learningOrder - b.learningOrder;
+      }
+
+      return a.skillName.localeCompare(b.skillName);
+    });
+  }
+
+  private getCandidateQuestions(requiredSkill: RequiredSkillForAssessment) {
+    return this.prisma.assessmentQuestion.findMany({
+      where: {
+        skillId: requiredSkill.skillId,
+        status: QuestionStatus.ACTIVE,
+        level: { lte: requiredSkill.requiredLevel },
+      },
+      orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
+      include: { options: { orderBy: { orderIndex: 'asc' } } },
+    });
+  }
+
+  private selectQuestionsForSkill(
+    questions: QuestionWithOptions[],
+    requiredLevel: number,
+    desiredCount: number,
+  ) {
+    const selected = new Map<string, QuestionWithOptions>();
+    const byLevel = new Map<number, QuestionWithOptions[]>();
+
+    for (const question of questions) {
+      const levelQuestions = byLevel.get(question.level) ?? [];
+      levelQuestions.push(question);
+      byLevel.set(question.level, levelQuestions);
+    }
+
+    for (let level = 1; level <= requiredLevel; level += 1) {
+      const question = byLevel.get(level)?.find((item) => !selected.has(item.id));
+      if (question) {
+        selected.set(question.id, question);
+      }
+      if (selected.size >= desiredCount) {
+        return Array.from(selected.values());
+      }
+    }
+
+    for (const question of questions) {
+      if (!selected.has(question.id)) {
+        selected.set(question.id, question);
+      }
+      if (selected.size >= desiredCount) {
+        break;
+      }
+    }
+
+    return Array.from(selected.values());
+  }
+
+  private toStartQuestionResponse(selected: SelectedQuestion) {
+    return {
+      id: selected.question.id,
+      skillId: selected.skill.skillId,
+      skillName: selected.skill.skillName,
+      skillType: selected.skill.skillType,
+      questionText: selected.question.questionText,
+      questionType: selected.question.questionType,
+      level: selected.question.level,
+      options: selected.question.options.map((option) => ({
+        id: option.id,
+        optionText: option.optionText,
+        orderIndex: option.orderIndex,
+      })),
+    };
+  }
+
+  private assertNoDuplicateAnswers(dto: SubmitAssessmentDto) {
+    const seenQuestionIds = new Set<string>();
+
+    for (const answer of dto.answers) {
+      if (seenQuestionIds.has(answer.questionId)) {
+        throw new BadRequestException('Duplicate answers are not allowed');
+      }
+      seenQuestionIds.add(answer.questionId);
+    }
+  }
+
+  private gradeAnswers(
+    items: Array<{
+      questionId: string;
+      question: QuestionWithOptions & {
+        skill: { id: string; name: string; type: SkillType };
+      };
+    }>,
+    dto: SubmitAssessmentDto,
+  ): AnswerGrade[] {
+    const itemByQuestionId = new Map(items.map((item) => [item.questionId, item]));
+    const answerByQuestionId = new Map(
+      dto.answers.map((answer) => [answer.questionId, answer]),
+    );
+
+    if (answerByQuestionId.size !== items.length) {
+      throw new BadRequestException('Every assessment question must be answered');
+    }
+
+    const gradedAnswers: AnswerGrade[] = [];
+
+    for (const item of items) {
+      const answer = answerByQuestionId.get(item.questionId);
+      if (!answer || !itemByQuestionId.has(answer.questionId)) {
+        throw new BadRequestException('Question does not belong to this assessment');
+      }
+
+      const selectedOption = item.question.options.find(
+        (option) => option.id === answer.selectedOptionId,
+      );
+      if (!selectedOption) {
+        throw new BadRequestException('Selected option does not belong to the question');
+      }
+
+      gradedAnswers.push({
+        questionId: answer.questionId,
+        selectedOptionId: answer.selectedOptionId,
+        isCorrect: selectedOption.isCorrect,
+      });
+    }
+
+    return gradedAnswers;
+  }
+
+  private calculateSkillGrades(
+    items: Array<{
+      questionId: string;
+      question: QuestionWithOptions & {
+        skill: { id: string; name: string; type: SkillType };
+      };
+    }>,
+    answers: AnswerGrade[],
+  ): SkillGrade[] {
+    const answerByQuestionId = new Map(
+      answers.map((answer) => [answer.questionId, answer]),
+    );
+    const results = new Map<
+      string,
+      {
+        skillId: string;
+        skillName: string;
+        skillType: SkillType;
+        totalQuestions: number;
+        correctQuestions: number;
+        levelStats: Map<number, LevelStat>;
+      }
+    >();
+
+    for (const item of items) {
+      const skill = item.question.skill;
+      const answer = answerByQuestionId.get(item.questionId);
+      const isCorrect = answer?.isCorrect ?? false;
+      const result =
+        results.get(skill.id) ??
+        {
+          skillId: skill.id,
+          skillName: skill.name,
+          skillType: skill.type,
+          totalQuestions: 0,
+          correctQuestions: 0,
+          levelStats: new Map<number, LevelStat>(),
+        };
+      const levelStat =
+        result.levelStats.get(item.question.level) ?? { total: 0, correct: 0 };
+
+      result.totalQuestions += 1;
+      levelStat.total += 1;
+      if (isCorrect) {
+        result.correctQuestions += 1;
+        levelStat.correct += 1;
+      }
+
+      result.levelStats.set(item.question.level, levelStat);
+      results.set(skill.id, result);
+    }
+
+    return Array.from(results.values()).map((result) => {
+      const levelBreakdown = this.toLevelBreakdown(result.levelStats);
+
+      return {
+        skillId: result.skillId,
+        skillName: result.skillName,
+        skillType: result.skillType,
+        calculatedLevel: this.calculateCurrentLevel(levelBreakdown),
+        totalQuestions: result.totalQuestions,
+        correctQuestions: result.correctQuestions,
+        levelBreakdown,
+      };
+    });
+  }
+
+  private toLevelBreakdown(levelStats: Map<number, LevelStat>) {
+    const breakdown: Record<string, LevelStat & { percentage: number }> = {};
+    const levels = Array.from(levelStats.keys()).sort((a, b) => a - b);
+
+    for (const level of levels) {
+      const stat = levelStats.get(level);
+      if (!stat) {
+        continue;
+      }
+
+      breakdown[String(level)] = {
+        total: stat.total,
+        correct: stat.correct,
+        percentage: stat.total > 0 ? this.round((stat.correct / stat.total) * 100) : 0,
+      };
+    }
+
+    return breakdown;
+  }
+
+  private calculateCurrentLevel(
+    levelBreakdown: Record<string, LevelStat & { percentage: number }>,
+    threshold = LEVEL_PASS_THRESHOLD,
+  ) {
+    let currentLevel = 0;
+    const maxLevel = Math.max(0, ...Object.keys(levelBreakdown).map(Number));
+
+    for (let level = 1; level <= maxLevel; level += 1) {
+      const stat = levelBreakdown[String(level)];
+      if (!stat || stat.total === 0) {
+        break;
+      }
+      if (stat.percentage >= threshold) {
+        currentLevel = level;
+      } else {
+        break;
+      }
+    }
+
+    return currentLevel;
+  }
+
+  private round(value: number) {
+    return Math.round(value * 100) / 100;
+  }
+}
