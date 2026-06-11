@@ -66,6 +66,7 @@ export class AuthService {
       user.refreshTokenHash,
     );
     if (!refreshTokenMatched) {
+      await this.usersService.clearRefreshTokenHash(user.id);
       throw new ForbiddenException('Invalid refresh token');
     }
 
