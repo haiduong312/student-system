@@ -9,7 +9,15 @@ import { CreateSkillDto } from './dto/create-skill.dto';
 import { SkillQueryDto } from './dto/skill-query.dto';
 import { UpdateSkillDto } from './dto/update-skill.dto';
 
-const SORTABLE_FIELDS = new Set(['name', 'status', 'createdAt', 'updatedAt']);
+const SORTABLE_FIELDS = new Set([
+  'name',
+  'type',
+  'defaultRequiredLevel',
+  'defaultWeight',
+  'status',
+  'createdAt',
+  'updatedAt',
+]);
 
 @Injectable()
 export class SkillsService {
@@ -32,6 +40,7 @@ export class SkillsService {
     const where: Prisma.SkillWhereInput = {
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.type ? { type: query.type } : {}),
       ...(query.search
         ? {
             OR: [

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CatalogStatus } from '@prisma/client';
+import { CatalogStatus, SkillType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/pagination.dto';
 
@@ -13,4 +13,9 @@ export class SkillQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(CatalogStatus)
   status?: CatalogStatus;
+
+  @ApiPropertyOptional({ enum: SkillType })
+  @IsOptional()
+  @IsEnum(SkillType)
+  type?: SkillType;
 }

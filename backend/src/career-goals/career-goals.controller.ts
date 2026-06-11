@@ -18,6 +18,7 @@ export class CareerGoalsController {
   constructor(private readonly careerGoalsService: CareerGoalsService) {}
 
   @ApiCreatedResponse({ description: 'Career goal created' })
+  @Roles(UserRole.ADMIN, UserRole.LECTURER)
   @Post()
   create(@Body() dto: CreateCareerGoalDto) {
     return this.careerGoalsService.create(dto);

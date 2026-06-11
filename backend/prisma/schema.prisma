@@ -83,6 +83,11 @@ enum SkillLevel {
   GOOD
 }
 
+enum SkillType {
+  COMMON
+  CAREER_SPECIFIC
+}
+
 enum AnalysisSkillStatus {
   ACHIEVED
   MISSING
@@ -298,13 +303,16 @@ model SkillCategory {
 }
 
 model Skill {
-  id          String        @id @default(cuid())
-  categoryId  String?       @map("category_id")
-  name        String        @db.VarChar(150)
-  description String?       @db.Text
-  status      CatalogStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id                   String        @id @default(cuid())
+  categoryId           String?       @map("category_id")
+  name                 String        @db.VarChar(150)
+  description          String?       @db.Text
+  type                 SkillType     @default(CAREER_SPECIFIC)
+  defaultRequiredLevel Int           @default(1) @map("default_required_level")
+  defaultWeight        Decimal       @default(1) @map("default_weight") @db.Decimal(6, 2)
+  status               CatalogStatus @default(ACTIVE)
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
 
   category               SkillCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   careerRequiredSkills   CareerRequiredSkill[]
@@ -317,6 +325,7 @@ model Skill {
   @@unique([categoryId, name], map: "skills_category_name_unique")
   @@index([name], map: "skills_name_idx")
   @@index([categoryId, status], map: "skills_category_status_idx")
+  @@index([type, status], map: "skills_type_status_idx")
   @@map("skills")
 }
 

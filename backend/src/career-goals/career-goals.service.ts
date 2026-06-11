@@ -1,5 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, SkillType } from '@prisma/client';
 import {
   buildPaginatedResult,
   getPagination,
@@ -27,7 +32,12 @@ export class CareerGoalsService {
 
   async create(dto: CreateCareerGoalDto) {
     try {
-      return await this.prisma.careerGoal.create({ data: dto });
+      return await this.prisma.$transaction(async (tx) => {
+        const careerGoal = await tx.careerGoal.create({ data: dto });
+        await this.attachCommonSkills(tx, careerGoal.id);
+
+        return careerGoal;
+      });
     } catch (error) {
       this.handleKnownError(error, 'Career goal already exists');
     }
@@ -214,6 +224,58 @@ export class CareerGoalsService {
     if (!exists) {
       throw new NotFoundException('Career required skill not found');
     }
+  }
+
+  private async attachCommonSkills(
+    tx: Prisma.TransactionClient,
+    careerGoalId: string,
+  ) {
+    const commonSkills = await tx.skill.findMany({
+      where: { type: SkillType.COMMON },
+      select: {
+        id: true,
+        defaultRequiredLevel: true,
+        defaultWeight: true,
+      },
+      orderBy: [{ createdAt: 'asc' }, { name: 'asc' }],
+    });
+    if (!commonSkills.length) {
+      throw new BadRequestException('No common skills configured');
+    }
+
+    const existingRequiredSkills = await tx.careerRequiredSkill.findMany({
+      where: {
+        careerGoalId,
+        specializationId: null,
+        skillId: { in: commonSkills.map((skill) => skill.id) },
+      },
+      select: { skillId: true },
+    });
+    const existingSkillIds = new Set(
+      existingRequiredSkills.map((requiredSkill) => requiredSkill.skillId),
+    );
+    const maxLearningOrder = await tx.careerRequiredSkill.aggregate({
+      where: { careerGoalId, specializationId: null },
+      _max: { learningOrder: true },
+    });
+    const nextLearningOrder = (maxLearningOrder._max.learningOrder ?? 0) + 1;
+
+    const requiredSkills = commonSkills
+      .filter((skill) => !existingSkillIds.has(skill.id))
+      .map((skill, index) => ({
+        careerGoalId,
+        skillId: skill.id,
+        requiredLevel: skill.defaultRequiredLevel ?? 1,
+        weight: Number(skill.defaultWeight ?? 1),
+        learningOrder: nextLearningOrder + index,
+        isRequired: true,
+      }));
+
+    if (!requiredSkills.length) {
+      return;
+    }
+
+    await tx.careerRequiredSkill.createMany({ data: requiredSkills });
   }
 
   private handleKnownError(error: unknown, message: string): never {
