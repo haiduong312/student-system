@@ -97,7 +97,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
         onRefresh={() => query.refetch()}
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>Add</Button>}
       />
-      <Table
+      <Table<any>
         rowKey="id"
         dataSource={query.data?.data ?? []}
         pagination={{ pageSize: 10, total: query.data?.meta.total }}
@@ -106,13 +106,19 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           ...(kind === 'skills'
             ? [
                 { title: 'Type', render: (_: unknown, row: Skill) => <SkillTypeTag type={row.type} /> },
-                { title: 'Category', render: (_: unknown, row: Skill) => row.category?.name ?? '-' },
                 {
-                  title: 'Defaults',
+                  title: 'Default Level',
                   render: (_: unknown, row: Skill) =>
-                    row.type === 'COMMON'
-                      ? `${row.defaultRequiredLevel ?? '-'} / ${row.defaultWeight ?? '-'}`
-                      : '-',
+                    row.type === 'COMMON' ? row.defaultRequiredLevel ?? '-' : '-',
+                },
+                {
+                  title: 'Default Weight',
+                  render: (_: unknown, row: Skill) =>
+                    row.type === 'COMMON' ? row.defaultWeight ?? '-' : '-',
+                },
+                {
+                  title: 'Questions',
+                  render: (_: unknown, row: Skill) => row._count?.assessmentQuestions ?? 0,
                 },
               ]
             : []),
@@ -283,6 +289,15 @@ function RequiredSkillsDrawer({
     );
     setModalOpen(true);
   };
+  const existingSkillIds = new Set(
+    (requiredSkills.data?.data ?? []).map((requiredSkill) => requiredSkill.skillId),
+  );
+  const skillOptions = (careerSpecificSkills.data?.data ?? [])
+    .filter((skill) => editing?.skillId === skill.id || !existingSkillIds.has(skill.id))
+    .map((skill) => ({
+      label: skill.name,
+      value: skill.id,
+    }));
 
   return (
     <Drawer title={careerGoal?.name} open={open} onClose={onClose} width={860}>
@@ -293,7 +308,7 @@ function RequiredSkillsDrawer({
           </Button>
           <Button onClick={() => requiredSkills.refetch()}>Refresh</Button>
         </Space>
-        <Table
+        <Table<CareerRequiredSkill>
           rowKey="id"
           dataSource={requiredSkills.data?.data ?? []}
           pagination={false}
@@ -329,10 +344,7 @@ function RequiredSkillsDrawer({
               loading={careerSpecificSkills.isLoading}
               showSearch
               optionFilterProp="label"
-              options={(careerSpecificSkills.data?.data ?? []).map((skill) => ({
-                label: skill.name,
-                value: skill.id,
-              }))}
+              options={skillOptions}
             />
           </Form.Item>
           <Space.Compact block>

@@ -29,7 +29,10 @@ export class SkillsService {
     }
 
     try {
-      return await this.prisma.skill.create({ data: dto, include: { category: true } });
+      return await this.prisma.skill.create({
+        data: dto,
+        include: this.detailInclude(),
+      });
     } catch (error) {
       this.handleKnownError(error);
     }
@@ -59,7 +62,7 @@ export class SkillsService {
         skip,
         take,
         orderBy: { [sortBy]: query.sortOrder },
-        include: { category: true },
+        include: this.detailInclude(),
       }),
       this.prisma.skill.count({ where }),
     ]);
@@ -77,6 +80,7 @@ export class SkillsService {
             careerRequiredSkills: true,
             studentSkills: true,
             recommendationTemplates: true,
+            assessmentQuestions: true,
           },
         },
       },
@@ -98,7 +102,7 @@ export class SkillsService {
       return await this.prisma.skill.update({
         where: { id },
         data: dto,
-        include: { category: true },
+        include: this.detailInclude(),
       });
     } catch (error) {
       this.handleKnownError(error);
@@ -134,6 +138,20 @@ export class SkillsService {
     if (!exists) {
       throw new NotFoundException('Skill category not found');
     }
+  }
+
+  private detailInclude() {
+    return {
+      category: true,
+      _count: {
+        select: {
+          careerRequiredSkills: true,
+          studentSkills: true,
+          recommendationTemplates: true,
+          assessmentQuestions: true,
+        },
+      },
+    };
   }
 
   private handleKnownError(error: unknown): never {

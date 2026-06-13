@@ -270,7 +270,9 @@ export class RoadmapsService {
     const missingDetails = await this.getMissingAnalysisDetails(latestAnalysis.id);
 
     if (!missingDetails.length) {
-      throw new BadRequestException('No missing or weak skills found for roadmap generation');
+      throw new BadRequestException(
+        'You have acquired the skills required for your current goal.',
+      );
     }
 
     const recommendations = await this.getRecommendationsForAnalysis(

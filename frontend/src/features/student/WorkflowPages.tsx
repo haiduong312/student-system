@@ -62,7 +62,16 @@ export function RoadmapView() {
   const list = useQuery({ queryKey: ['roadmaps', 'me'], queryFn: () => getPage<Roadmap>('/roadmaps/me', { limit: 10, status: 'ACTIVE' }) });
   const active = list.data?.data?.[0];
   const detail = useQuery({ queryKey: ['roadmap', active?.id], queryFn: () => getData<Roadmap>(`/roadmaps/${active?.id}`), enabled: Boolean(active?.id) });
-  const generate = useMutation({ mutationFn: () => postData('/roadmaps/generate/me', {}), onSuccess: () => { message.success('Roadmap generated'); queryClient.invalidateQueries({ queryKey: ['roadmaps'] }); } });
+  const generate = useMutation({
+    mutationFn: () => postData('/roadmaps/generate/me', {}),
+    onSuccess: () => {
+      message.success('Roadmap generated');
+      queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+    },
+    onError: (error) => {
+      message.error(getErrorMessage(error));
+    },
+  });
   const update = useMutation({ mutationFn: ({ id, status }: { id: string; status: string }) => patchData(`/roadmaps/items/${id}/status`, { status }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roadmaps'] }); queryClient.invalidateQueries({ queryKey: ['roadmap'] }); } });
 
   return (
@@ -113,4 +122,23 @@ function EvidenceTable({ title, query }: { title: string; query: any }) {
       ]} />
     </QueryState>
   );
+}
+
+function getErrorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'response' in error &&
+    error.response &&
+    typeof error.response === 'object' &&
+    'data' in error.response &&
+    error.response.data &&
+    typeof error.response.data === 'object' &&
+    'message' in error.response.data
+  ) {
+    const message = error.response.data.message;
+    return Array.isArray(message) ? message.join(', ') : String(message);
+  }
+
+  return 'Something went wrong.';
 }

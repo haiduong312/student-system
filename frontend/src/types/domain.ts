@@ -1,5 +1,7 @@
 export type CatalogStatus = 'ACTIVE' | 'INACTIVE';
 export type SkillType = 'COMMON' | 'CAREER_SPECIFIC';
+export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+export type QuestionStatus = 'ACTIVE' | 'INACTIVE';
 export type EvidenceStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type VerificationStatus = 'NO_EVIDENCE' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type ProjectStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -38,6 +40,12 @@ export interface Skill {
   status: CatalogStatus;
   categoryId?: string | null;
   category?: SkillCategory | null;
+  _count?: {
+    assessmentQuestions?: number;
+    careerRequiredSkills?: number;
+    studentSkills?: number;
+    recommendationTemplates?: number;
+  };
 }
 
 export interface CareerGoal {
@@ -57,6 +65,28 @@ export interface CareerRequiredSkill {
   learningOrder: number;
   isRequired: boolean;
   skill?: Skill;
+}
+
+export interface AssessmentOption {
+  id: string;
+  questionId?: string;
+  optionText: string;
+  isCorrect: boolean;
+  orderIndex: number;
+}
+
+export interface AssessmentQuestion {
+  id: string;
+  skillId: string;
+  questionText: string;
+  questionType: QuestionType;
+  level: number;
+  explanation?: string | null;
+  status: QuestionStatus;
+  skill?: Skill;
+  options?: AssessmentOption[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StudentProfile {
