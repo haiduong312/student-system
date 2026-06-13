@@ -1,9 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { RoadmapPhase } from '@prisma/client';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CreateCareerRequiredSkillDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   skillId: string;
 
   @ApiProperty({ minimum: 1, maximum: 3, example: 2 })
@@ -27,4 +39,9 @@ export class CreateCareerRequiredSkillDto {
   @IsOptional()
   @IsBoolean()
   isRequired?: boolean;
+
+  @ApiPropertyOptional({ enum: RoadmapPhase, default: RoadmapPhase.CAREER_TRACK })
+  @IsOptional()
+  @IsEnum(RoadmapPhase)
+  roadmapPhase?: RoadmapPhase;
 }
