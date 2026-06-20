@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import {
   AnalysisSkillStatus,
-  AssignmentStatus,
   DifficultyLevel,
   Prisma,
   RecommendationType,
@@ -15,9 +14,9 @@ import {
   RoadmapPhase,
   RoadmapStatus,
   SkillLevel,
-  UserRole,
 } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
+import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
 import {
@@ -113,7 +112,10 @@ interface RoadmapItemDraft {
 
 @Injectable()
 export class RoadmapsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly studentAccessPolicy: StudentAccessPolicyService,
+  ) {}
 
   async generateMyRoadmap(userId: string, _dto: GenerateRoadmapDto = {}) {
     const studentId = await this.getStudentIdByUserId(userId);
@@ -128,7 +130,7 @@ export class RoadmapsService {
   }
 
   async generateForStudent(user: AuthenticatedUser, studentId: string) {
-    await this.assertCanAccessStudent(user, studentId);
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.generateRoadmapForStudent(studentId);
   }
 
@@ -179,7 +181,7 @@ export class RoadmapsService {
       throw new NotFoundException('Roadmap not found');
     }
 
-    await this.assertCanAccessStudent(user, roadmap.studentId);
+    await this.studentAccessPolicy.assertCanAccessStudent(user, roadmap.studentId);
     return this.toRoadmapResponse(roadmap);
   }
 
@@ -766,42 +768,6 @@ export class RoadmapsService {
         },
       },
     };
-  }
-
-  private async assertCanAccessStudent(user: AuthenticatedUser, studentId: string) {
-    if (user.role === UserRole.ADMIN) {
-      return;
-    }
-
-    if (user.role === UserRole.STUDENT) {
-      const currentStudentId = await this.getStudentIdByUserId(user.id);
-      if (currentStudentId === studentId) {
-        return;
-      }
-    }
-
-    if (user.role === UserRole.LECTURER) {
-      const lecturer = await this.prisma.lecturer.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
-      const assignment = lecturer
-        ? await this.prisma.advisorAssignment.findFirst({
-            where: {
-              lecturerId: lecturer.id,
-              studentId,
-              status: AssignmentStatus.ACTIVE,
-            },
-            select: { id: true },
-          })
-        : null;
-
-      if (assignment) {
-        return;
-      }
-    }
-
-    throw new ForbiddenException('You do not have permission to access this student');
   }
 
   private async getStudentIdByUserId(userId: string) {

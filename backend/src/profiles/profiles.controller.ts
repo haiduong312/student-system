@@ -23,6 +23,7 @@ import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
 import { profileFileUploadOptions } from '../common/upload/file-upload.options';
 import { EvidenceUploadDto } from './dto/evidence-upload.dto';
 import { UpdateProfileDto } from './dto/profile.dto';
@@ -44,7 +45,10 @@ import { ProfilesService } from './profiles.service';
 @ApiBearerAuth()
 @Controller('profiles')
 export class ProfilesController {
-  constructor(private readonly profilesService: ProfilesService) {}
+  constructor(
+    private readonly profilesService: ProfilesService,
+    private readonly studentAccessPolicy: StudentAccessPolicyService,
+  ) {}
 
   @Roles(UserRole.STUDENT)
   @ApiOkResponse({ description: 'Current student profile' })
@@ -328,39 +332,68 @@ export class ProfilesController {
     return this.profilesService.uploadEvidence(user.id, 'experiences', id, dto, file);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId')
-  getProfile(@Param('studentId') studentId: string) {
+  async getProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.getProfileByStudentId(studentId);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId/skills')
-  listSkills(@Param('studentId') studentId: string, @Query() query: StudentResourceQueryDto) {
+  async listSkills(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+    @Query() query: StudentResourceQueryDto,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.listSkills(studentId, query);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId/projects')
-  listProjects(@Param('studentId') studentId: string, @Query() query: StudentResourceQueryDto) {
+  async listProjects(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+    @Query() query: StudentResourceQueryDto,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.listProjects(studentId, query);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId/certificates')
-  listCertificates(@Param('studentId') studentId: string, @Query() query: StudentResourceQueryDto) {
+  async listCertificates(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+    @Query() query: StudentResourceQueryDto,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.listCertificates(studentId, query);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId/activities')
-  listActivities(@Param('studentId') studentId: string, @Query() query: StudentResourceQueryDto) {
+  async listActivities(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+    @Query() query: StudentResourceQueryDto,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.listActivities(studentId, query);
   }
 
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get(':studentId/experiences')
-  listExperiences(@Param('studentId') studentId: string, @Query() query: StudentResourceQueryDto) {
+  async listExperiences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+    @Query() query: StudentResourceQueryDto,
+  ) {
+    await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
     return this.profilesService.listExperiences(studentId, query);
   }
 }

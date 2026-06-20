@@ -29,6 +29,13 @@ interface RequiredSkillForAssessment {
   skillType: SkillType;
   requiredLevel: number;
   learningOrder: number;
+  specificityRank: number;
+}
+
+interface AssessmentProfileContext {
+  studentId: string;
+  careerGoalId: string;
+  specializationId: string | null;
 }
 
 interface SelectedQuestion {
@@ -61,11 +68,10 @@ interface SkillGrade {
 export class AssessmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async startAssessment(userId: string, dto: StartAssessmentDto) {
-    const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureCareerGoalExists(dto.careerGoalId);
+  async startAssessment(userId: string, _dto: StartAssessmentDto = {}) {
+    const profile = await this.getAssessmentProfile(userId);
 
-    return this.generateAssessmentForCareerGoal(studentId, dto.careerGoalId);
+    return this.generateAssessmentForProfile(profile);
   }
 
   async submitAssessment(
@@ -165,8 +171,11 @@ export class AssessmentsService {
     });
   }
 
-  async generateAssessmentForCareerGoal(studentId: string, careerGoalId: string) {
-    const requiredSkills = await this.getRequiredSkills(careerGoalId);
+  async generateAssessmentForProfile(profile: AssessmentProfileContext) {
+    const requiredSkills = await this.getRequiredSkills(
+      profile.careerGoalId,
+      profile.specializationId,
+    );
     if (!requiredSkills.length) {
       throw new BadRequestException('Career goal has no required skills configured');
     }
@@ -219,8 +228,8 @@ export class AssessmentsService {
     const assessment = await this.prisma.$transaction((tx) =>
       tx.assessment.create({
         data: {
-          studentId,
-          careerGoalId,
+          studentId: profile.studentId,
+          careerGoalId: profile.careerGoalId,
           status: AssessmentStatus.IN_PROGRESS,
           items: {
             create: selectedQuestions.map((selected, index) => ({
@@ -237,6 +246,7 @@ export class AssessmentsService {
     return {
       assessmentId: assessment.id,
       careerGoalId: assessment.careerGoalId,
+      specializationId: profile.specializationId,
       questions: selectedQuestions.map((selected) =>
         this.toStartQuestionResponse(selected),
       ),
@@ -256,21 +266,59 @@ export class AssessmentsService {
     return student.id;
   }
 
-  private async ensureCareerGoalExists(careerGoalId: string) {
-    const careerGoal = await this.prisma.careerGoal.findUnique({
-      where: { id: careerGoalId },
-      select: { id: true },
+  private async getAssessmentProfile(
+    userId: string,
+  ): Promise<AssessmentProfileContext> {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        profile: {
+          include: {
+            careerGoal: true,
+            specialization: true,
+          },
+        },
+      },
     });
-    if (!careerGoal) {
-      throw new NotFoundException('Career goal not found');
+
+    if (!student) {
+      throw new ForbiddenException('Current user is not a student');
     }
+    if (!student.profile) {
+      throw new BadRequestException('Student profile has not been created');
+    }
+    if (!student.profile.careerGoalId || !student.profile.careerGoal) {
+      throw new BadRequestException('Student has not selected a career goal');
+    }
+    if (
+      student.profile.specialization &&
+      student.profile.specialization.careerGoalId !== student.profile.careerGoalId
+    ) {
+      throw new BadRequestException(
+        'Selected specialization does not belong to the selected career goal',
+      );
+    }
+
+    return {
+      studentId: student.id,
+      careerGoalId: student.profile.careerGoalId,
+      specializationId: student.profile.specializationId,
+    };
   }
 
   private async getRequiredSkills(
     careerGoalId: string,
+    specializationId?: string | null,
   ): Promise<RequiredSkillForAssessment[]> {
     const requiredSkills = await this.prisma.careerRequiredSkill.findMany({
-      where: { careerGoalId, isRequired: true },
+      where: {
+        careerGoalId,
+        isRequired: true,
+        OR: specializationId
+          ? [{ specializationId: null }, { specializationId }]
+          : [{ specializationId: null }],
+      },
       orderBy: [{ learningOrder: 'asc' }, { updatedAt: 'asc' }],
       include: { skill: true },
     });
@@ -284,9 +332,11 @@ export class AssessmentsService {
         skillType: requiredSkill.skill.type,
         requiredLevel: requiredSkill.requiredLevel,
         learningOrder: requiredSkill.learningOrder,
+        specificityRank:
+          specializationId && requiredSkill.specializationId === specializationId ? 1 : 0,
       };
 
-      if (!existing || candidate.requiredLevel > existing.requiredLevel) {
+      if (!existing || candidate.specificityRank >= existing.specificityRank) {
         bySkillId.set(requiredSkill.skillId, candidate);
       }
     }

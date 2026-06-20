@@ -17,6 +17,7 @@ import {
   buildPaginatedResult,
   getPagination,
 } from '../common/pagination/pagination.util';
+import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
 import { buildUploadedFileUrl } from '../common/upload/file-upload.options';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
@@ -39,7 +40,10 @@ const EVIDENCE_INCLUDE = {
 
 @Injectable()
 export class EvidencesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly studentAccessPolicy: StudentAccessPolicyService,
+  ) {}
 
   async upload(userId: string, dto: CreateEvidenceDto, file?: any) {
     if (!file && !dto.evidenceUrl) {
@@ -114,7 +118,11 @@ export class EvidencesService {
       throw new NotFoundException('Evidence not found');
     }
 
-    await this.assertCanAccessEvidence(user, evidence.studentId);
+    await this.studentAccessPolicy.assertCanAccessStudent(
+      user,
+      evidence.studentId,
+      'You do not have permission to access this evidence',
+    );
     return evidence;
   }
 
@@ -270,57 +278,11 @@ export class EvidencesService {
       throw new BadRequestException('Evidence has already been reviewed');
     }
 
-    await this.assertCanReviewEvidence(user, evidence.studentId);
+    await this.studentAccessPolicy.assertCanReviewStudentEvidence(
+      user,
+      evidence.studentId,
+    );
     return evidence;
-  }
-
-  private async assertCanAccessEvidence(user: AuthenticatedUser, studentId: string) {
-    if (user.role === UserRole.ADMIN) {
-      return;
-    }
-
-    if (user.role === UserRole.STUDENT) {
-      const ownStudentId = await this.getStudentIdByUserId(user.id);
-      if (ownStudentId === studentId) {
-        return;
-      }
-    }
-
-    if (user.role === UserRole.LECTURER) {
-      await this.assertLecturerAssignedToStudent(user.id, studentId);
-      return;
-    }
-
-    throw new ForbiddenException('You do not have permission to access this evidence');
-  }
-
-  private async assertCanReviewEvidence(user: AuthenticatedUser, studentId: string) {
-    if (user.role === UserRole.ADMIN) {
-      return;
-    }
-
-    if (user.role === UserRole.LECTURER) {
-      await this.assertLecturerAssignedToStudent(user.id, studentId);
-      return;
-    }
-
-    throw new ForbiddenException('You do not have permission to review this evidence');
-  }
-
-  private async assertLecturerAssignedToStudent(userId: string, studentId: string) {
-    const lecturer = await this.getLecturerByUserId(userId);
-    const assignment = await this.prisma.advisorAssignment.findFirst({
-      where: {
-        lecturerId: lecturer.id,
-        studentId,
-        status: AssignmentStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
-
-    if (!assignment) {
-      throw new ForbiddenException('Lecturer is not assigned to this student');
-    }
   }
 
   private async getStudentIdByUserId(userId: string) {

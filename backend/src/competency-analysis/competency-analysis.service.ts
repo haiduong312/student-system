@@ -6,7 +6,6 @@ import {
 } from "@nestjs/common";
 import {
     AnalysisSkillStatus,
-    AssignmentStatus,
     MatchLevel,
     Prisma,
     RecommendationTemplate,
@@ -15,13 +14,13 @@ import {
     SkillLevel,
     StudentRecommendationStatus,
     TemplateStatus,
-    UserRole,
 } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface";
 import {
     buildPaginatedResult,
     getPagination,
 } from "../common/pagination/pagination.util";
+import { StudentAccessPolicyService } from "../common/student-access/student-access-policy.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AnalysisHistoryQueryDto } from "./dto/analysis-query.dto";
 import { AnalyzeCompetencyDto } from "./dto/analyze-competency.dto";
@@ -79,7 +78,10 @@ interface RecommendationDecision {
 
 @Injectable()
 export class CompetencyAnalysisService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly studentAccessPolicy: StudentAccessPolicyService,
+    ) {}
 
     analyzeForCurrentStudent(userId: string, dto?: AnalyzeCompetencyDto) {
         return this.analyzeMyCompetency(userId, dto);
@@ -148,7 +150,7 @@ export class CompetencyAnalysisService {
     }
 
     async analyzeForStudent(user: AuthenticatedUser, studentId: string) {
-        await this.assertCanAccessStudent(user, studentId);
+        await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
         const student = await this.prisma.student.findUnique({
             where: { id: studentId },
             select: { userId: true },
@@ -206,7 +208,10 @@ export class CompetencyAnalysisService {
             throw new NotFoundException("Analysis result not found");
         }
 
-        await this.assertCanAccessStudent(user, result.studentId);
+        await this.studentAccessPolicy.assertCanAccessStudent(
+            user,
+            result.studentId,
+        );
         return result;
     }
 
@@ -746,47 +751,6 @@ export class CompetencyAnalysisService {
         }
 
         return percent;
-    }
-
-    private async assertCanAccessStudent(
-        user: AuthenticatedUser,
-        studentId: string,
-    ) {
-        if (user.role === UserRole.ADMIN) {
-            return;
-        }
-
-        if (user.role === UserRole.STUDENT) {
-            const currentStudentId = await this.getStudentIdByUserId(user.id);
-            if (currentStudentId === studentId) {
-                return;
-            }
-        }
-
-        if (user.role === UserRole.LECTURER) {
-            const lecturer = await this.prisma.lecturer.findUnique({
-                where: { userId: user.id },
-                select: { id: true },
-            });
-            const assignment = lecturer
-                ? await this.prisma.advisorAssignment.findFirst({
-                      where: {
-                          lecturerId: lecturer.id,
-                          studentId,
-                          status: AssignmentStatus.ACTIVE,
-                      },
-                      select: { id: true },
-                  })
-                : null;
-
-            if (assignment) {
-                return;
-            }
-        }
-
-        throw new ForbiddenException(
-            "You do not have permission to access this student",
-        );
     }
 
     private async getStudentIdByUserId(userId: string) {

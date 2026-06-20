@@ -287,7 +287,15 @@ function QuestionCard({
       <Radio.Group value={value} onChange={(event) => onChange(event.target.value)}>
         <Space direction="vertical">
           {question.options.map((option) => (
-            <Radio key={option.id} value={option.id}>
+            <Radio
+              key={option.id}
+              value={option.id}
+              disabled={
+                question.questionType === 'MULTIPLE_CHOICE' &&
+                Boolean(value) &&
+                value !== option.id
+              }
+            >
               {option.optionText}
             </Radio>
           ))}
