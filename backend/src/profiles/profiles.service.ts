@@ -490,10 +490,13 @@ export class ProfilesService {
   private async ensureCareerGoalExists(careerGoalId: string) {
     const careerGoal = await this.prisma.careerGoal.findUnique({
       where: { id: careerGoalId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!careerGoal) {
       throw new NotFoundException('Career goal not found');
+    }
+    if (careerGoal.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Career goal is not active');
     }
   }
 
@@ -640,10 +643,13 @@ export class ProfilesService {
   private async ensureSkillExists(skillId: string) {
     const skill = await this.prisma.skill.findUnique({
       where: { id: skillId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!skill) {
       throw new NotFoundException('Skill not found');
+    }
+    if (skill.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Skill is not active');
     }
   }
 

@@ -12,6 +12,7 @@ import {
   UserRole,
   VerificationStatus,
 } from '@prisma/client';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import {
   buildPaginatedResult,
@@ -38,11 +39,16 @@ const EVIDENCE_INCLUDE = {
   },
 };
 
+type ReviewTargetStatus =
+  | typeof EvidenceStatus.VERIFIED
+  | typeof EvidenceStatus.REJECTED;
+
 @Injectable()
 export class EvidencesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly studentAccessPolicy: StudentAccessPolicyService,
+    private readonly activityLogs: ActivityLogsService,
   ) {}
 
   async upload(userId: string, dto: CreateEvidenceDto, file?: any) {
@@ -127,7 +133,11 @@ export class EvidencesService {
   }
 
   async verify(user: AuthenticatedUser, id: string, dto: VerifyEvidenceDto = {}) {
-    const evidence = await this.getEvidenceForReview(user, id);
+    const evidence = await this.getEvidenceForReview(
+      user,
+      id,
+      EvidenceStatus.VERIFIED,
+    );
     if (
       dto.currentLevel !== undefined &&
       evidence.relatedEntityType !== EvidenceEntityType.SKILL
@@ -137,17 +147,18 @@ export class EvidencesService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.evidence.update({
-        where: { id },
-        data: {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.updatePendingEvidenceForReview(
+        tx,
+        id,
+        EvidenceStatus.VERIFIED,
+        {
           status: EvidenceStatus.VERIFIED,
           reviewedById: user.id,
           reviewedAt: new Date(),
           reviewerNote: null,
         },
-        include: EVIDENCE_INCLUDE,
-      });
+      );
 
       await this.updateRelatedEntityStatus(
         tx,
@@ -160,22 +171,40 @@ export class EvidencesService {
 
       return updated;
     });
+    await this.activityLogs.record({
+      actorUserId: user.id,
+      action: 'EVIDENCE_VERIFIED',
+      entityType: 'Evidence',
+      entityId: updated.id,
+      description: {
+        studentId: evidence.studentId,
+        relatedEntityType: evidence.relatedEntityType,
+        relatedEntityId: evidence.relatedEntityId,
+      },
+    });
+
+    return updated;
   }
 
   async reject(user: AuthenticatedUser, id: string, dto: RejectEvidenceDto) {
-    const evidence = await this.getEvidenceForReview(user, id);
+    const evidence = await this.getEvidenceForReview(
+      user,
+      id,
+      EvidenceStatus.REJECTED,
+    );
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.evidence.update({
-        where: { id },
-        data: {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.updatePendingEvidenceForReview(
+        tx,
+        id,
+        EvidenceStatus.REJECTED,
+        {
           status: EvidenceStatus.REJECTED,
           reviewedById: user.id,
           reviewedAt: new Date(),
           reviewerNote: dto.reviewerNote,
         },
-        include: EVIDENCE_INCLUDE,
-      });
+      );
 
       await this.updateRelatedEntityStatus(
         tx,
@@ -186,6 +215,20 @@ export class EvidencesService {
 
       return updated;
     });
+    await this.activityLogs.record({
+      actorUserId: user.id,
+      action: 'EVIDENCE_REJECTED',
+      entityType: 'Evidence',
+      entityId: updated.id,
+      description: {
+        studentId: evidence.studentId,
+        relatedEntityType: evidence.relatedEntityType,
+        relatedEntityId: evidence.relatedEntityId,
+        reviewerNote: dto.reviewerNote,
+      },
+    });
+
+    return updated;
   }
 
   private async findMany(
@@ -260,7 +303,11 @@ export class EvidencesService {
     return buildPaginatedResult(data, total, page, limit);
   }
 
-  private async getEvidenceForReview(user: AuthenticatedUser, id: string) {
+  private async getEvidenceForReview(
+    user: AuthenticatedUser,
+    id: string,
+    targetStatus: ReviewTargetStatus,
+  ) {
     const evidence = await this.prisma.evidence.findUnique({
       where: { id },
       select: {
@@ -274,15 +321,83 @@ export class EvidencesService {
     if (!evidence) {
       throw new NotFoundException('Evidence not found');
     }
-    if (evidence.status !== EvidenceStatus.PENDING) {
-      throw new BadRequestException('Evidence has already been reviewed');
-    }
+    this.assertValidReviewTransition(evidence.status, targetStatus);
 
     await this.studentAccessPolicy.assertCanReviewStudentEvidence(
       user,
       evidence.studentId,
     );
     return evidence;
+  }
+
+  private async updatePendingEvidenceForReview(
+    tx: Prisma.TransactionClient,
+    id: string,
+    targetStatus: ReviewTargetStatus,
+    data: Prisma.EvidenceUncheckedUpdateInput,
+  ) {
+    try {
+      return await tx.evidence.update({
+        where: { id, status: EvidenceStatus.PENDING },
+        data,
+        include: EVIDENCE_INCLUDE,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2025'
+      ) {
+        throw error;
+      }
+
+      const current = await tx.evidence.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+      if (!current) {
+        throw new NotFoundException('Evidence not found');
+      }
+
+      this.assertValidReviewTransition(current.status, targetStatus);
+      throw new BadRequestException('Evidence is not pending review');
+    }
+  }
+
+  private assertValidReviewTransition(
+    currentStatus: EvidenceStatus,
+    targetStatus: ReviewTargetStatus,
+  ) {
+    if (currentStatus === EvidenceStatus.PENDING) {
+      return;
+    }
+
+    if (
+      currentStatus === EvidenceStatus.VERIFIED &&
+      targetStatus === EvidenceStatus.REJECTED
+    ) {
+      throw new BadRequestException(
+        'Verified evidence cannot be rejected directly. Reopen or resubmit is required.',
+      );
+    }
+
+    if (
+      currentStatus === EvidenceStatus.REJECTED &&
+      targetStatus === EvidenceStatus.VERIFIED
+    ) {
+      throw new BadRequestException(
+        'Rejected evidence cannot be verified directly. Reopen or resubmit is required.',
+      );
+    }
+
+    if (currentStatus === EvidenceStatus.VERIFIED) {
+      throw new BadRequestException('Evidence has already been verified');
+    }
+
+    if (currentStatus === EvidenceStatus.REJECTED) {
+      throw new BadRequestException('Evidence has already been rejected');
+    }
+
+    throw new BadRequestException('Evidence is not pending review');
   }
 
   private async getStudentIdByUserId(userId: string) {

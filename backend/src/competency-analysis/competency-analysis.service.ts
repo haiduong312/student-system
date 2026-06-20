@@ -6,6 +6,9 @@ import {
 } from "@nestjs/common";
 import {
     AnalysisSkillStatus,
+    CatalogStatus,
+    EvidenceEntityType,
+    EvidenceStatus,
     MatchLevel,
     Prisma,
     RecommendationTemplate,
@@ -15,6 +18,7 @@ import {
     StudentRecommendationStatus,
     TemplateStatus,
 } from "@prisma/client";
+import { ActivityLogsService } from "../activity-logs/activity-logs.service";
 import { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface";
 import {
     buildPaginatedResult,
@@ -36,6 +40,11 @@ type RecommendationSource =
     | "CATEGORY_SKILL_TEMPLATE"
     | "SKILL_TEMPLATE"
     | "DEFAULT_GENERATED";
+
+const EVIDENCE_COMPLETION_POINTS = 15;
+const VERIFIED_EVIDENCE_WEIGHT = 1;
+const PENDING_EVIDENCE_WEIGHT = 0.3;
+const REJECTED_EVIDENCE_WEIGHT = 0;
 
 interface StudentProfileContext {
     studentId: string;
@@ -81,6 +90,7 @@ export class CompetencyAnalysisService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly studentAccessPolicy: StudentAccessPolicyService,
+        private readonly activityLogs: ActivityLogsService,
     ) {}
 
     analyzeForCurrentStudent(userId: string, dto?: AnalyzeCompetencyDto) {
@@ -91,7 +101,15 @@ export class CompetencyAnalysisService {
         userId: string,
         dto: AnalyzeCompetencyDto = {},
     ): Promise<CompetencyAnalysisResponseDto> {
-        const profile = await this.getStudentProfile(userId);
+        return this.analyzeCompetencyForStudentUser(userId, userId, dto);
+    }
+
+    private async analyzeCompetencyForStudentUser(
+        studentUserId: string,
+        actorUserId: string,
+        dto: AnalyzeCompetencyDto = {},
+    ): Promise<CompetencyAnalysisResponseDto> {
+        const profile = await this.getStudentProfile(studentUserId);
         const requiredSkills = await this.getRequiredSkills(
             profile.careerGoalId,
             profile.specializationId,
@@ -111,6 +129,8 @@ export class CompetencyAnalysisService {
             this.calculateCompletionPercent(
                 profile.studentId,
                 profile.careerGoalId,
+                profile.specializationId,
+                requiredSkills.map((skill) => skill.skillId),
             ),
         ]);
 
@@ -135,7 +155,7 @@ export class CompetencyAnalysisService {
             analyzedSkills,
         );
 
-        return this.saveAnalysisWithRecommendations({
+        const result = await this.saveAnalysisWithRecommendations({
             profile,
             analyzedSkills,
             completionPercent,
@@ -147,6 +167,21 @@ export class CompetencyAnalysisService {
             deleteOldNewRecommendations:
                 dto.deleteOldNewRecommendations ?? true,
         });
+        await this.activityLogs.record({
+            actorUserId,
+            action: "COMPETENCY_ANALYSIS_RUN",
+            entityType: "CompetencyAnalysisResult",
+            entityId: result.analysisResultId,
+            description: {
+                studentId: profile.studentId,
+                careerGoalId: profile.careerGoalId,
+                specializationId: profile.specializationId,
+                matchPercent: result.matchPercent,
+                matchLevel: result.matchLevel,
+            },
+        });
+
+        return result;
     }
 
     async analyzeForStudent(user: AuthenticatedUser, studentId: string) {
@@ -159,7 +194,7 @@ export class CompetencyAnalysisService {
             throw new NotFoundException("Student not found");
         }
 
-        return this.analyzeMyCompetency(student.userId);
+        return this.analyzeCompetencyForStudentUser(student.userId, user.id);
     }
 
     analyzeStudentById(studentId: string) {
@@ -242,6 +277,9 @@ export class CompetencyAnalysisService {
                 "Student has not selected a career goal",
             );
         }
+        if (student.profile.careerGoal.status !== CatalogStatus.ACTIVE) {
+            throw new BadRequestException("Selected career goal is not active");
+        }
         if (
             student.profile.specialization &&
             student.profile.specialization.careerGoalId !==
@@ -250,6 +288,12 @@ export class CompetencyAnalysisService {
             throw new BadRequestException(
                 "Selected specialization does not belong to the selected career goal",
             );
+        }
+        if (
+            student.profile.specialization &&
+            student.profile.specialization.status !== CatalogStatus.ACTIVE
+        ) {
+            throw new BadRequestException("Selected specialization is not active");
         }
 
         return {
@@ -269,6 +313,7 @@ export class CompetencyAnalysisService {
             where: {
                 careerGoalId,
                 isRequired: true,
+                skill: { status: CatalogStatus.ACTIVE },
                 OR: specializationId
                     ? [{ specializationId: null }, { specializationId }]
                     : [{ specializationId: null }],
@@ -454,7 +499,7 @@ export class CompetencyAnalysisService {
             throw new NotFoundException("Student not found");
         }
 
-        return this.analyzeMyCompetency(student.userId);
+        return this.analyzeCompetencyForStudentUser(student.userId, student.userId);
     }
 
     private async saveAnalysisWithRecommendations(input: {
@@ -708,6 +753,8 @@ export class CompetencyAnalysisService {
     private async calculateCompletionPercent(
         studentId: string,
         careerGoalId?: string | null,
+        specializationId?: string | null,
+        requiredSkillIds: string[] = [],
     ) {
         const [
             student,
@@ -716,7 +763,7 @@ export class CompetencyAnalysisService {
             certificates,
             activities,
             experiences,
-            evidences,
+            evidenceCompletionScore,
         ] = await Promise.all([
             this.prisma.student.findUnique({ where: { id: studentId } }),
             this.prisma.studentSkill.count({ where: { studentId } }),
@@ -724,7 +771,12 @@ export class CompetencyAnalysisService {
             this.prisma.studentCertificate.count({ where: { studentId } }),
             this.prisma.studentActivity.count({ where: { studentId } }),
             this.prisma.studentExperience.count({ where: { studentId } }),
-            this.prisma.evidence.count({ where: { studentId } }),
+            this.calculateEvidenceCompletionScore({
+                studentId,
+                careerGoalId,
+                specializationId,
+                requiredSkillIds,
+            }),
         ]);
 
         let percent = 0;
@@ -746,11 +798,116 @@ export class CompetencyAnalysisService {
         if (activities > 0 || experiences > 0) {
             percent += 10;
         }
-        if (evidences > 0) {
-            percent += 15;
+        percent += evidenceCompletionScore;
+
+        return this.round(Math.min(percent, 100));
+    }
+
+    private async calculateEvidenceCompletionScore(input: {
+        studentId: string;
+        careerGoalId?: string | null;
+        specializationId?: string | null;
+        requiredSkillIds: string[];
+    }) {
+        const evidences = await this.prisma.evidence.findMany({
+            where: { studentId: input.studentId },
+            select: {
+                status: true,
+                relatedEntityType: true,
+                relatedEntityId: true,
+            },
+        });
+
+        if (!evidences.length) {
+            return 0;
         }
 
-        return percent;
+        const scopedEvidences = await this.filterEvidencesByAnalysisScope(
+            evidences,
+            input,
+        );
+        const weightedEvidenceScore = scopedEvidences.reduce(
+            (sum, evidence) => sum + this.getEvidenceStatusWeight(evidence.status),
+            0,
+        );
+
+        return this.round(
+            Math.min(weightedEvidenceScore, 1) * EVIDENCE_COMPLETION_POINTS,
+        );
+    }
+
+    private async filterEvidencesByAnalysisScope(
+        evidences: Array<{
+            status: EvidenceStatus;
+            relatedEntityType: EvidenceEntityType;
+            relatedEntityId: string;
+        }>,
+        input: {
+            studentId: string;
+            careerGoalId?: string | null;
+            specializationId?: string | null;
+            requiredSkillIds: string[];
+        },
+    ) {
+        const requiredSkillIds = Array.from(new Set(input.requiredSkillIds));
+        const [scopedStudentSkills, scopedRoadmapItems] = await Promise.all([
+            requiredSkillIds.length
+                ? this.prisma.studentSkill.findMany({
+                      where: {
+                          studentId: input.studentId,
+                          skillId: { in: requiredSkillIds },
+                      },
+                      select: { id: true },
+                  })
+                : Promise.resolve([]),
+            input.careerGoalId
+                ? this.prisma.roadmapItem.findMany({
+                      where: {
+                          roadmap: {
+                              studentId: input.studentId,
+                              careerGoalId: input.careerGoalId,
+                              specializationId: input.specializationId ?? null,
+                          },
+                      },
+                      select: { id: true },
+                  })
+                : Promise.resolve([]),
+        ]);
+        const scopedStudentSkillIds = new Set(
+            scopedStudentSkills.map((skill) => skill.id),
+        );
+        const scopedRoadmapItemIds = new Set(
+            scopedRoadmapItems.map((item) => item.id),
+        );
+
+        return evidences.filter((evidence) => {
+            switch (evidence.relatedEntityType) {
+                case EvidenceEntityType.SKILL:
+                    return scopedStudentSkillIds.has(evidence.relatedEntityId);
+                case EvidenceEntityType.ROADMAP_ITEM:
+                    return scopedRoadmapItemIds.has(evidence.relatedEntityId);
+                case EvidenceEntityType.PROJECT:
+                case EvidenceEntityType.CERTIFICATE:
+                case EvidenceEntityType.ACTIVITY:
+                case EvidenceEntityType.EXPERIENCE:
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+
+    private getEvidenceStatusWeight(status: EvidenceStatus) {
+        switch (status) {
+            case EvidenceStatus.VERIFIED:
+                return VERIFIED_EVIDENCE_WEIGHT;
+            case EvidenceStatus.PENDING:
+                return PENDING_EVIDENCE_WEIGHT;
+            case EvidenceStatus.REJECTED:
+                return REJECTED_EVIDENCE_WEIGHT;
+            default:
+                return 0;
+        }
     }
 
     private async getStudentIdByUserId(userId: string) {

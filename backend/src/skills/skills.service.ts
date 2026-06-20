@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CatalogStatus, Prisma } from '@prisma/client';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -21,28 +22,48 @@ const SORTABLE_FIELDS = new Set([
 
 @Injectable()
 export class SkillsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLogs: ActivityLogsService,
+  ) {}
 
-  async create(dto: CreateSkillDto) {
+  async create(dto: CreateSkillDto, actorUserId?: string) {
     if (dto.categoryId) {
       await this.ensureCategoryExists(dto.categoryId);
     }
 
     try {
-      return await this.prisma.skill.create({
+      const skill = await this.prisma.skill.create({
         data: dto,
         include: this.detailInclude(),
       });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'SKILL_CREATED',
+        entityType: 'Skill',
+        entityId: skill.id,
+        description: {
+          name: skill.name,
+          type: skill.type,
+          status: skill.status,
+        },
+      });
+
+      return skill;
     } catch (error) {
       this.handleKnownError(error);
     }
   }
 
-  async findAll(query: SkillQueryDto) {
+  async findAll(query: SkillQueryDto, options: { activeOnly?: boolean } = {}) {
     const { page, limit, skip, take } = getPagination(query);
     const where: Prisma.SkillWhereInput = {
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      ...(options.activeOnly
+        ? { status: CatalogStatus.ACTIVE }
+        : query.status
+          ? { status: query.status }
+          : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.search
         ? {
@@ -92,28 +113,47 @@ export class SkillsService {
     return skill;
   }
 
-  async update(id: string, dto: UpdateSkillDto) {
+  async update(id: string, dto: UpdateSkillDto, actorUserId?: string) {
     await this.ensureExists(id);
     if (dto.categoryId) {
       await this.ensureCategoryExists(dto.categoryId);
     }
 
     try {
-      return await this.prisma.skill.update({
+      const skill = await this.prisma.skill.update({
         where: { id },
         data: dto,
         include: this.detailInclude(),
       });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'SKILL_UPDATED',
+        entityType: 'Skill',
+        entityId: skill.id,
+        description: {
+          name: skill.name,
+          status: skill.status,
+          changedFields: Object.keys(dto),
+        },
+      });
+
+      return skill;
     } catch (error) {
       this.handleKnownError(error);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorUserId?: string) {
     await this.ensureExists(id);
 
     try {
       await this.prisma.skill.delete({ where: { id } });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'SKILL_DELETED',
+        entityType: 'Skill',
+        entityId: id,
+      });
       return { deleted: true };
     } catch (error) {
       this.handleKnownError(error);

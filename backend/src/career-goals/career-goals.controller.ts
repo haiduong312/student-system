@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
+import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CareerGoalQueryDto } from './dto/career-goal-query.dto';
 import { CareerRequiredSkillQueryDto } from './dto/career-required-skill-query.dto';
@@ -20,14 +22,23 @@ export class CareerGoalsController {
   @ApiCreatedResponse({ description: 'Career goal created' })
   @Roles(UserRole.ADMIN, UserRole.LECTURER)
   @Post()
-  create(@Body() dto: CreateCareerGoalDto) {
-    return this.careerGoalsService.create(dto);
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCareerGoalDto,
+  ) {
+    return this.careerGoalsService.create(dto, user.id);
   }
 
   @ApiOkResponse({ description: 'Paginated career goals' })
+  @Roles(UserRole.ADMIN, UserRole.LECTURER, UserRole.STUDENT)
   @Get()
-  findAll(@Query() query: CareerGoalQueryDto) {
-    return this.careerGoalsService.findAll(query);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: CareerGoalQueryDto,
+  ) {
+    return this.careerGoalsService.findAll(query, {
+      activeOnly: user.role !== UserRole.ADMIN,
+    });
   }
 
   @ApiOkResponse({ description: 'Career goal detail' })
@@ -38,14 +49,18 @@ export class CareerGoalsController {
 
   @ApiOkResponse({ description: 'Career goal updated' })
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateCareerGoalDto) {
-    return this.careerGoalsService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateCareerGoalDto,
+  ) {
+    return this.careerGoalsService.update(id, dto, user.id);
   }
 
   @ApiOkResponse({ description: 'Career goal deleted' })
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.careerGoalsService.remove(id);
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.careerGoalsService.remove(id, user.id);
   }
 
   @ApiCreatedResponse({ description: 'Career required skill created' })

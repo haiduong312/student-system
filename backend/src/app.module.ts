@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -33,6 +34,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    ActivityLogsModule,
     AuthModule,
     UsersModule,
     StudentsModule,

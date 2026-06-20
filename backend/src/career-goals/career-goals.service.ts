@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, SkillType } from '@prisma/client';
+import { CatalogStatus, Prisma, SkillType } from '@prisma/client';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -33,25 +34,47 @@ const REQUIRED_SKILL_SORTABLE_FIELDS = new Set([
 
 @Injectable()
 export class CareerGoalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLogs: ActivityLogsService,
+  ) {}
 
-  async create(dto: CreateCareerGoalDto) {
+  async create(dto: CreateCareerGoalDto, actorUserId?: string) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const careerGoal = await this.prisma.$transaction(async (tx) => {
         const careerGoal = await tx.careerGoal.create({ data: dto });
         await this.attachCommonSkills(tx, careerGoal.id);
 
         return careerGoal;
       });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'CAREER_GOAL_CREATED',
+        entityType: 'CareerGoal',
+        entityId: careerGoal.id,
+        description: {
+          name: careerGoal.name,
+          status: careerGoal.status,
+        },
+      });
+
+      return careerGoal;
     } catch (error) {
       this.handleKnownError(error, 'Career goal already exists');
     }
   }
 
-  async findAll(query: CareerGoalQueryDto) {
+  async findAll(
+    query: CareerGoalQueryDto,
+    options: { activeOnly?: boolean } = {},
+  ) {
     const { page, limit, skip, take } = getPagination(query);
     const where: Prisma.CareerGoalWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
+      ...(options.activeOnly
+        ? { status: CatalogStatus.ACTIVE }
+        : query.status
+          ? { status: query.status }
+          : {}),
       ...(query.search
         ? {
             OR: [
@@ -111,21 +134,43 @@ export class CareerGoalsService {
     return careerGoal;
   }
 
-  async update(id: string, dto: UpdateCareerGoalDto) {
+  async update(id: string, dto: UpdateCareerGoalDto, actorUserId?: string) {
     await this.ensureCareerGoalExists(id);
 
     try {
-      return await this.prisma.careerGoal.update({ where: { id }, data: dto });
+      const careerGoal = await this.prisma.careerGoal.update({
+        where: { id },
+        data: dto,
+      });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'CAREER_GOAL_UPDATED',
+        entityType: 'CareerGoal',
+        entityId: careerGoal.id,
+        description: {
+          name: careerGoal.name,
+          status: careerGoal.status,
+          changedFields: Object.keys(dto),
+        },
+      });
+
+      return careerGoal;
     } catch (error) {
       this.handleKnownError(error, 'Career goal already exists');
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorUserId?: string) {
     await this.ensureCareerGoalExists(id);
 
     try {
       await this.prisma.careerGoal.delete({ where: { id } });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'CAREER_GOAL_DELETED',
+        entityType: 'CareerGoal',
+        entityId: id,
+      });
       return { deleted: true };
     } catch (error) {
       this.handleKnownError(error, 'Career goal is being used');
@@ -296,7 +341,7 @@ export class CareerGoalsService {
     careerGoalId: string,
   ) {
     const commonSkills = await tx.skill.findMany({
-      where: { type: SkillType.COMMON },
+      where: { type: SkillType.COMMON, status: CatalogStatus.ACTIVE },
       select: {
         id: true,
         defaultRequiredLevel: true,

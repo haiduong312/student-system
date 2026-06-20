@@ -1,5 +1,15 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CatalogStatus,
+  Prisma,
+  StudentRecommendationStatus,
+  TemplateStatus,
+} from '@prisma/client';
 import {
   buildPaginatedResult,
   getPagination,
@@ -7,6 +17,26 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RecommendationQueryDto } from './dto/recommendation-query.dto';
 import { UpdateRecommendationStatusDto } from './dto/update-recommendation-status.dto';
+
+const RECOMMENDATION_STATUS_TRANSITIONS: Record<
+  StudentRecommendationStatus,
+  StudentRecommendationStatus[]
+> = {
+  [StudentRecommendationStatus.NEW]: [
+    StudentRecommendationStatus.SAVED,
+    StudentRecommendationStatus.DISMISSED,
+  ],
+  [StudentRecommendationStatus.SAVED]: [
+    StudentRecommendationStatus.IN_PROGRESS,
+    StudentRecommendationStatus.DISMISSED,
+  ],
+  [StudentRecommendationStatus.IN_PROGRESS]: [
+    StudentRecommendationStatus.SAVED,
+    StudentRecommendationStatus.DONE,
+  ],
+  [StudentRecommendationStatus.DONE]: [],
+  [StudentRecommendationStatus.DISMISSED]: [],
+};
 
 @Injectable()
 export class RecommendationsService {
@@ -17,15 +47,24 @@ export class RecommendationsService {
     const { page, limit, skip, take } = getPagination(query);
     const where: Prisma.StudentRecommendationWhereInput = {
       studentId,
+      skill: { status: CatalogStatus.ACTIVE },
+      OR: [
+        { recommendationTemplateId: null },
+        { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+      ],
       ...(query.status ? { status: query.status } : {}),
       ...(query.skillId ? { skillId: query.skillId } : {}),
       ...(query.search
         ? {
-            OR: [
-              { title: { contains: query.search, mode: 'insensitive' } },
-              { description: { contains: query.search, mode: 'insensitive' } },
-              { reason: { contains: query.search, mode: 'insensitive' } },
-              { skill: { name: { contains: query.search, mode: 'insensitive' } } },
+            AND: [
+              {
+                OR: [
+                  { title: { contains: query.search, mode: 'insensitive' } },
+                  { description: { contains: query.search, mode: 'insensitive' } },
+                  { reason: { contains: query.search, mode: 'insensitive' } },
+                  { skill: { name: { contains: query.search, mode: 'insensitive' } } },
+                ],
+              },
             ],
           }
         : {}),
@@ -57,18 +96,54 @@ export class RecommendationsService {
   ) {
     const studentId = await this.getStudentIdByUserId(userId);
     const recommendation = await this.prisma.studentRecommendation.findFirst({
-      where: { id, studentId },
-      select: { id: true },
+      where: {
+        id,
+        studentId,
+        skill: { status: CatalogStatus.ACTIVE },
+        OR: [
+          { recommendationTemplateId: null },
+          { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+        ],
+      },
+      include: { skill: true, recommendationTemplate: true },
     });
     if (!recommendation) {
       throw new NotFoundException('Recommendation not found');
     }
+    if (recommendation.status === dto.status) {
+      return recommendation;
+    }
+
+    this.assertValidStatusTransition(recommendation.status, dto.status);
 
     return this.prisma.studentRecommendation.update({
       where: { id },
       data: { status: dto.status },
       include: { skill: true, recommendationTemplate: true },
     });
+  }
+
+  private assertValidStatusTransition(
+    currentStatus: StudentRecommendationStatus,
+    nextStatus: StudentRecommendationStatus,
+  ) {
+    const allowedNextStatuses = RECOMMENDATION_STATUS_TRANSITIONS[currentStatus];
+    if (allowedNextStatuses.includes(nextStatus)) {
+      return;
+    }
+
+    if (
+      currentStatus === StudentRecommendationStatus.DONE ||
+      currentStatus === StudentRecommendationStatus.DISMISSED
+    ) {
+      throw new BadRequestException(
+        `Recommendation in ${currentStatus} status cannot be changed`,
+      );
+    }
+
+    throw new BadRequestException(
+      `Invalid recommendation status transition: ${currentStatus} -> ${nextStatus}`,
+    );
   }
 
   private async getStudentIdByUserId(userId: string) {

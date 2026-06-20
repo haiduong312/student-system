@@ -8,6 +8,7 @@ import {
   AssessmentQuestion,
   AssessmentOption,
   AssessmentStatus,
+  CatalogStatus,
   Prisma,
   QuestionStatus,
   SkillType,
@@ -291,6 +292,9 @@ export class AssessmentsService {
     if (!student.profile.careerGoalId || !student.profile.careerGoal) {
       throw new BadRequestException('Student has not selected a career goal');
     }
+    if (student.profile.careerGoal.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Selected career goal is not active');
+    }
     if (
       student.profile.specialization &&
       student.profile.specialization.careerGoalId !== student.profile.careerGoalId
@@ -298,6 +302,12 @@ export class AssessmentsService {
       throw new BadRequestException(
         'Selected specialization does not belong to the selected career goal',
       );
+    }
+    if (
+      student.profile.specialization &&
+      student.profile.specialization.status !== CatalogStatus.ACTIVE
+    ) {
+      throw new BadRequestException('Selected specialization is not active');
     }
 
     return {
@@ -315,6 +325,7 @@ export class AssessmentsService {
       where: {
         careerGoalId,
         isRequired: true,
+        skill: { status: CatalogStatus.ACTIVE },
         OR: specializationId
           ? [{ specializationId: null }, { specializationId }]
           : [{ specializationId: null }],
@@ -354,6 +365,7 @@ export class AssessmentsService {
     return this.prisma.assessmentQuestion.findMany({
       where: {
         skillId: requiredSkill.skillId,
+        skill: { status: CatalogStatus.ACTIVE },
         status: QuestionStatus.ACTIVE,
         level: { lte: requiredSkill.requiredLevel },
       },

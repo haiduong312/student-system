@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   AnalysisSkillStatus,
+  CatalogStatus,
   DifficultyLevel,
   Prisma,
   RecommendationType,
@@ -14,7 +15,9 @@ import {
   RoadmapPhase,
   RoadmapStatus,
   SkillLevel,
+  TemplateStatus,
 } from '@prisma/client';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +36,23 @@ const PHASE_ORDER: Record<RoadmapPhase, number> = {
   [RoadmapPhase.SPECIALIZATION]: 3,
   [RoadmapPhase.PRACTICE_PROJECT]: 4,
   [RoadmapPhase.PORTFOLIO_PREPARATION]: 5,
+};
+
+const ROADMAP_ITEM_STATUS_TRANSITIONS: Record<
+  RoadmapItemStatus,
+  RoadmapItemStatus[]
+> = {
+  [RoadmapItemStatus.TODO]: [
+    RoadmapItemStatus.IN_PROGRESS,
+    RoadmapItemStatus.CANCELLED,
+  ],
+  [RoadmapItemStatus.IN_PROGRESS]: [
+    RoadmapItemStatus.TODO,
+    RoadmapItemStatus.DONE,
+    RoadmapItemStatus.CANCELLED,
+  ],
+  [RoadmapItemStatus.DONE]: [RoadmapItemStatus.IN_PROGRESS],
+  [RoadmapItemStatus.CANCELLED]: [],
 };
 
 type RoadmapDetail = Prisma.DevelopmentRoadmapGetPayload<{
@@ -115,6 +135,7 @@ export class RoadmapsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly studentAccessPolicy: StudentAccessPolicyService,
+    private readonly activityLogs: ActivityLogsService,
   ) {}
 
   async generateMyRoadmap(userId: string, _dto: GenerateRoadmapDto = {}) {
@@ -122,6 +143,7 @@ export class RoadmapsService {
     return this.generateRoadmapForStudent(
       studentId,
       _dto.archiveCurrentActiveRoadmap ?? true,
+      userId,
     );
   }
 
@@ -131,7 +153,7 @@ export class RoadmapsService {
 
   async generateForStudent(user: AuthenticatedUser, studentId: string) {
     await this.studentAccessPolicy.assertCanAccessStudent(user, studentId);
-    return this.generateRoadmapForStudent(studentId);
+    return this.generateRoadmapForStudent(studentId, true, user.id);
   }
 
   async getMyActiveRoadmap(userId: string) {
@@ -208,8 +230,21 @@ export class RoadmapsService {
     ) {
       throw new BadRequestException('Archived or cancelled roadmap items cannot be updated');
     }
+    if (item.status === dto.status) {
+      const roadmap = await this.prisma.developmentRoadmap.findUnique({
+        where: { id: item.roadmapId },
+        include: this.roadmapDetailInclude(),
+      });
+      if (!roadmap) {
+        throw new NotFoundException('Roadmap not found');
+      }
 
-    return this.prisma.$transaction(async (tx) => {
+      return this.toRoadmapResponse(roadmap);
+    }
+
+    this.assertValidRoadmapItemStatusTransition(item.status, dto.status, dto.note);
+
+    const roadmap = await this.prisma.$transaction(async (tx) => {
       await tx.roadmapItem.update({
         where: { id: itemId },
         data: { status: dto.status },
@@ -244,6 +279,20 @@ export class RoadmapsService {
 
       return this.toRoadmapResponse(roadmap);
     });
+    await this.activityLogs.record({
+      actorUserId: userId,
+      action: 'ROADMAP_ITEM_STATUS_UPDATED',
+      entityType: 'RoadmapItem',
+      entityId: itemId,
+      description: {
+        roadmapId: item.roadmapId,
+        fromStatus: item.status,
+        toStatus: dto.status,
+        note: dto.note,
+      },
+    });
+
+    return roadmap;
   }
 
   async updateItemStatus(
@@ -254,9 +303,37 @@ export class RoadmapsService {
     return this.updateRoadmapItemStatus(userId, itemId, dto);
   }
 
+  private assertValidRoadmapItemStatusTransition(
+    currentStatus: RoadmapItemStatus,
+    nextStatus: RoadmapItemStatus,
+    note?: string,
+  ) {
+    const allowedNextStatuses = ROADMAP_ITEM_STATUS_TRANSITIONS[currentStatus];
+    if (!allowedNextStatuses.includes(nextStatus)) {
+      if (currentStatus === RoadmapItemStatus.CANCELLED) {
+        throw new BadRequestException('Cancelled roadmap items cannot be changed');
+      }
+
+      throw new BadRequestException(
+        `Invalid roadmap item status transition: ${currentStatus} -> ${nextStatus}`,
+      );
+    }
+
+    if (
+      currentStatus === RoadmapItemStatus.DONE &&
+      nextStatus === RoadmapItemStatus.IN_PROGRESS &&
+      !note?.trim()
+    ) {
+      throw new BadRequestException(
+        'A note is required to move a DONE roadmap item back to IN_PROGRESS',
+      );
+    }
+  }
+
   private async generateRoadmapForStudent(
     studentId: string,
     archiveCurrentActiveRoadmap = true,
+    actorUserId?: string,
   ) {
     const profile = await this.getStudentProfile(studentId);
     const careerGoalId = profile.careerGoalId;
@@ -303,7 +380,7 @@ export class RoadmapsService {
       throw new BadRequestException('No roadmap items can be generated from recommendations');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const roadmap = await this.prisma.$transaction(async (tx) => {
       const version = await this.getNextRoadmapVersion(tx, studentId);
       if (archiveCurrentActiveRoadmap) {
         await this.archiveCurrentActiveRoadmap(tx, studentId);
@@ -352,6 +429,24 @@ export class RoadmapsService {
 
       return this.toRoadmapResponse(roadmap);
     });
+    await this.activityLogs.record({
+      actorUserId,
+      action: 'ROADMAP_GENERATED',
+      entityType: 'DevelopmentRoadmap',
+      entityId: roadmap.roadmapId,
+      description: {
+        studentId,
+        careerGoalId,
+        specializationId: profile.specializationId,
+        version: roadmap.version,
+        itemCount: roadmap.phases.reduce(
+          (sum, phase) => sum + phase.items.length,
+          0,
+        ),
+      },
+    });
+
+    return roadmap;
   }
 
   private async getStudentProfile(studentId: string) {
@@ -366,10 +461,16 @@ export class RoadmapsService {
     if (!profile.careerGoalId || !profile.careerGoal) {
       throw new BadRequestException('Student has not selected a career goal');
     }
+    if (profile.careerGoal.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Selected career goal is not active');
+    }
     if (profile.specialization && profile.specialization.careerGoalId !== profile.careerGoalId) {
       throw new BadRequestException(
         'Selected specialization does not belong to the selected career goal',
       );
+    }
+    if (profile.specialization && profile.specialization.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Selected specialization is not active');
     }
 
     return profile;
@@ -423,6 +524,11 @@ export class RoadmapsService {
         studentId,
         analysisResultId,
         skillId: { in: skillIds },
+        skill: { status: CatalogStatus.ACTIVE },
+        OR: [
+          { recommendationTemplateId: null },
+          { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+        ],
       },
       include: {
         recommendationTemplate: true,
@@ -441,6 +547,7 @@ export class RoadmapsService {
       where: {
         careerGoalId,
         skillId: { in: skillIds },
+        skill: { status: CatalogStatus.ACTIVE },
         OR: specializationId
           ? [{ specializationId: null }, { specializationId }]
           : [{ specializationId: null }],

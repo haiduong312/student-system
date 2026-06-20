@@ -55,7 +55,11 @@ export class SpecializationsService {
     const { page, limit, skip, take } = getPagination(query);
     const careerGoalId = query.careerGoalId;
     if (careerGoalId) {
-      await this.ensureCareerGoalExists(careerGoalId);
+      if (options.activeOnly) {
+        await this.ensureActiveCareerGoalExists(careerGoalId);
+      } else {
+        await this.ensureCareerGoalExists(careerGoalId);
+      }
     }
 
     const where = this.buildWhere(query, {
@@ -85,7 +89,11 @@ export class SpecializationsService {
     query: SpecializationQueryDto,
     options: { activeOnly?: boolean } = {},
   ) {
-    await this.ensureCareerGoalExists(careerGoalId);
+    if (options.activeOnly) {
+      await this.ensureActiveCareerGoalExists(careerGoalId);
+    } else {
+      await this.ensureCareerGoalExists(careerGoalId);
+    }
 
     const { page, limit, skip, take } = getPagination(query);
     const where = this.buildWhere(query, {
@@ -259,7 +267,10 @@ export class SpecializationsService {
     return {
       ...(options.careerGoalId ? { careerGoalId: options.careerGoalId } : {}),
       ...(options.activeOnly
-        ? { status: CatalogStatus.ACTIVE }
+        ? {
+            status: CatalogStatus.ACTIVE,
+            careerGoal: { status: CatalogStatus.ACTIVE },
+          }
         : query.status
           ? { status: query.status }
           : {}),
@@ -408,6 +419,19 @@ export class SpecializationsService {
     });
     if (!exists) {
       throw new NotFoundException('Career goal not found');
+    }
+  }
+
+  private async ensureActiveCareerGoalExists(id: string) {
+    const careerGoal = await this.prisma.careerGoal.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!careerGoal) {
+      throw new NotFoundException('Career goal not found');
+    }
+    if (careerGoal.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Career goal is not active');
     }
   }
 

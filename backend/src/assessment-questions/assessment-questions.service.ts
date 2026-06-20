@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, QuestionStatus, QuestionType } from '@prisma/client';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -27,13 +28,16 @@ const SORTABLE_FIELDS = new Set([
 
 @Injectable()
 export class AssessmentQuestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLogs: ActivityLogsService,
+  ) {}
 
-  async create(dto: CreateAssessmentQuestionDto) {
+  async create(dto: CreateAssessmentQuestionDto, actorUserId?: string) {
     this.validateOptions(dto.questionType, dto.options);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const question = await this.prisma.$transaction(async (tx) => {
         await this.ensureSkillExists(tx, dto.skillId);
 
         return tx.assessmentQuestion.create({
@@ -51,6 +55,19 @@ export class AssessmentQuestionsService {
           include: this.detailInclude(),
         });
       });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'ASSESSMENT_QUESTION_CREATED',
+        entityType: 'AssessmentQuestion',
+        entityId: question.id,
+        description: {
+          skillId: question.skillId,
+          questionType: question.questionType,
+          status: question.status,
+        },
+      });
+
+      return question;
     } catch (error) {
       this.handleKnownError(error);
     }
@@ -104,9 +121,9 @@ export class AssessmentQuestionsService {
     return question;
   }
 
-  async update(id: string, dto: UpdateAssessmentQuestionDto) {
+  async update(id: string, dto: UpdateAssessmentQuestionDto, actorUserId?: string) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const question = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.assessmentQuestion.findUnique({
           where: { id },
           include: { options: { orderBy: { orderIndex: 'asc' } } },
@@ -149,19 +166,45 @@ export class AssessmentQuestionsService {
           include: this.detailInclude(),
         });
       });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'ASSESSMENT_QUESTION_UPDATED',
+        entityType: 'AssessmentQuestion',
+        entityId: question.id,
+        description: {
+          skillId: question.skillId,
+          questionType: question.questionType,
+          status: question.status,
+          changedFields: Object.keys(dto),
+        },
+      });
+
+      return question;
     } catch (error) {
       this.handleKnownError(error);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorUserId?: string) {
     await this.findOne(id);
 
-    return this.prisma.assessmentQuestion.update({
+    const question = await this.prisma.assessmentQuestion.update({
       where: { id },
       data: { status: QuestionStatus.INACTIVE },
       include: this.detailInclude(),
     });
+    await this.activityLogs.record({
+      actorUserId,
+      action: 'ASSESSMENT_QUESTION_DEACTIVATED',
+      entityType: 'AssessmentQuestion',
+      entityId: question.id,
+      description: {
+        skillId: question.skillId,
+        questionType: question.questionType,
+      },
+    });
+
+    return question;
   }
 
   private validateOptions(

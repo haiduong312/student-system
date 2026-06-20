@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -18,16 +19,29 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly activityLogs: ActivityLogsService,
   ) {}
 
   async login(dto: LoginDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
+      await this.activityLogs.record({
+        action: 'LOGIN_FAILED',
+        entityType: 'User',
+        description: { email: dto.email, reason: 'USER_NOT_FOUND' },
+      });
       throw new UnauthorizedException('Invalid email or password');
     }
 
     const passwordMatched = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatched) {
+      await this.activityLogs.record({
+        actorUserId: user.id,
+        action: 'LOGIN_FAILED',
+        entityType: 'User',
+        entityId: user.id,
+        description: { email: user.email, reason: 'INVALID_PASSWORD' },
+      });
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -43,6 +57,13 @@ export class AuthService {
 
     await this.usersService.updateRefreshTokenHash(user.id, tokens.refreshToken);
     await this.usersService.markLastLogin(user.id);
+    await this.activityLogs.record({
+      actorUserId: user.id,
+      action: 'LOGIN_SUCCESS',
+      entityType: 'User',
+      entityId: user.id,
+      description: { email: user.email, role: user.role },
+    });
 
     return {
       ...tokens,
