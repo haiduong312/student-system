@@ -317,8 +317,8 @@ export class RoadmapsService {
       }
 
       const title = latestAnalysis.specialization
-        ? `Personal Development Roadmap for ${latestAnalysis.careerGoal.name} - ${latestAnalysis.specialization.name}`
-        : `Personal Development Roadmap for ${latestAnalysis.careerGoal.name}`;
+        ? `${latestAnalysis.specialization.name} Roadmap`
+        : `${latestAnalysis.careerGoal.name} Roadmap`;
 
       const roadmap = await tx.developmentRoadmap.create({
         data: {

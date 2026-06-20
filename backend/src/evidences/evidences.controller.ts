@@ -26,6 +26,7 @@ import { profileFileUploadOptions } from '../common/upload/file-upload.options';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
 import { EvidenceQueryDto } from './dto/evidence-query.dto';
 import { RejectEvidenceDto } from './dto/reject-evidence.dto';
+import { VerifyEvidenceDto } from './dto/verify-evidence.dto';
 import { EvidencesService } from './evidences.service';
 
 @ApiTags('evidences')
@@ -99,9 +100,14 @@ export class EvidencesController {
 
   @Roles(UserRole.LECTURER, UserRole.ADMIN)
   @ApiOkResponse({ description: 'Evidence verified' })
+  @ApiBody({ type: VerifyEvidenceDto, required: false })
   @Patch(':id/verify')
-  verify(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.evidencesService.verify(user, id);
+  verify(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VerifyEvidenceDto,
+  ) {
+    return this.evidencesService.verify(user, id, dto);
   }
 
   @Roles(UserRole.LECTURER, UserRole.ADMIN)

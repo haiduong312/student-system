@@ -22,6 +22,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
 import { EvidenceQueryDto } from './dto/evidence-query.dto';
 import { RejectEvidenceDto } from './dto/reject-evidence.dto';
+import { VerifyEvidenceDto } from './dto/verify-evidence.dto';
 
 const EVIDENCE_INCLUDE = {
   student: {
@@ -117,8 +118,16 @@ export class EvidencesService {
     return evidence;
   }
 
-  async verify(user: AuthenticatedUser, id: string) {
+  async verify(user: AuthenticatedUser, id: string, dto: VerifyEvidenceDto = {}) {
     const evidence = await this.getEvidenceForReview(user, id);
+    if (
+      dto.currentLevel !== undefined &&
+      evidence.relatedEntityType !== EvidenceEntityType.SKILL
+    ) {
+      throw new BadRequestException(
+        'Current level can only be set when verifying skill evidence',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.evidence.update({
@@ -138,6 +147,7 @@ export class EvidencesService {
         evidence.relatedEntityId,
         VerificationStatus.VERIFIED,
         user.id,
+        dto.currentLevel,
       );
 
       return updated;
@@ -255,6 +265,9 @@ export class EvidencesService {
     });
     if (!evidence) {
       throw new NotFoundException('Evidence not found');
+    }
+    if (evidence.status !== EvidenceStatus.PENDING) {
+      throw new BadRequestException('Evidence has already been reviewed');
     }
 
     await this.assertCanReviewEvidence(user, evidence.studentId);
@@ -379,6 +392,7 @@ export class EvidencesService {
     entityId: string,
     status: VerificationStatus,
     reviewedById?: string,
+    currentLevel?: number,
   ) {
     switch (entityType) {
       case EvidenceEntityType.SKILL:
@@ -388,6 +402,9 @@ export class EvidencesService {
             evidenceStatus: status,
             verifiedById: status === VerificationStatus.VERIFIED ? reviewedById : null,
             verifiedAt: status === VerificationStatus.VERIFIED ? new Date() : null,
+            ...(status === VerificationStatus.VERIFIED && currentLevel !== undefined
+              ? { currentLevel }
+              : {}),
           },
         });
       case EvidenceEntityType.PROJECT:

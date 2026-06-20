@@ -1,10 +1,17 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EvidenceEntityType, EvidenceStatus, Prisma, VerificationStatus } from '@prisma/client';
+import {
+  CatalogStatus,
+  EvidenceEntityType,
+  EvidenceStatus,
+  Prisma,
+  VerificationStatus,
+} from '@prisma/client';
 import {
   buildPaginatedResult,
   getPagination,
@@ -27,9 +34,18 @@ import { CreateStudentProjectDto, UpdateStudentProjectDto } from './dto/student-
 import { CreateStudentSkillDto, UpdateStudentSkillDto } from './dto/student-skill.dto';
 
 type EvidenceResource = 'skills' | 'projects' | 'certificates' | 'activities' | 'experiences';
+type ProfileMutableData = {
+  careerGoalId?: string | null;
+  specializationId?: string | null;
+  summary?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+};
 
 const PROFILE_INCLUDE = {
   careerGoal: true,
+  specialization: true,
   student: {
     include: {
       user: {
@@ -65,14 +81,12 @@ export class ProfilesService {
 
   async updateProfile(studentId: string, dto: UpdateProfileDto) {
     await this.ensureStudentExists(studentId);
-    if (dto.careerGoalId) {
-      await this.ensureCareerGoalExists(dto.careerGoalId);
-    }
+    const data = await this.buildProfileUpdateData(studentId, dto);
 
     return this.prisma.studentProfile.upsert({
       where: { studentId },
-      create: { studentId, ...dto, lastUpdatedAt: new Date() },
-      update: { ...dto, lastUpdatedAt: new Date() },
+      create: { studentId, ...data, lastUpdatedAt: new Date() },
+      update: { ...data, lastUpdatedAt: new Date() },
       include: PROFILE_INCLUDE,
     });
   }
@@ -135,7 +149,12 @@ export class ProfilesService {
 
     try {
       return await this.prisma.studentSkill.create({
-        data: { ...dto, studentId },
+        data: {
+          studentId,
+          skillId: dto.skillId,
+          currentLevel: 0,
+          description: dto.description,
+        },
         include: { skill: { include: { category: true } } },
       });
     } catch (error) {
@@ -159,14 +178,11 @@ export class ProfilesService {
   async updateSkill(userId: string, id: string, dto: UpdateStudentSkillDto) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsSkill(studentId, id);
-    if (dto.skillId) {
-      await this.ensureSkillExists(dto.skillId);
-    }
 
     try {
       return await this.prisma.studentSkill.update({
         where: { id },
-        data: dto,
+        data: { description: dto.description },
         include: { skill: { include: { category: true } } },
       });
     } catch (error) {
@@ -479,6 +495,146 @@ export class ProfilesService {
     if (!careerGoal) {
       throw new NotFoundException('Career goal not found');
     }
+  }
+
+  private async buildProfileUpdateData(studentId: string, dto: UpdateProfileDto) {
+    const existingProfile = await this.prisma.studentProfile.findUnique({
+      where: { studentId },
+      select: { careerGoalId: true, specializationId: true },
+    });
+    const careerGoalProvided = this.hasOwn(dto, 'careerGoalId');
+    const specializationProvided = this.hasOwn(dto, 'specializationId');
+    const nextCareerGoalId = careerGoalProvided
+      ? this.normalizeOptionalId(dto.careerGoalId, 'Career goal is required')
+      : existingProfile?.careerGoalId ?? null;
+    const data: ProfileMutableData = {};
+
+    if (nextCareerGoalId) {
+      await this.ensureCareerGoalExists(nextCareerGoalId);
+    }
+
+    if (careerGoalProvided) {
+      data.careerGoalId = nextCareerGoalId;
+    }
+
+    if (specializationProvided) {
+      data.specializationId = await this.resolveRequestedSpecializationId(
+        dto.specializationId,
+        nextCareerGoalId,
+      );
+    } else if (careerGoalProvided) {
+      data.specializationId = await this.resolveExistingSpecializationAfterCareerGoalChange(
+        existingProfile?.specializationId ?? null,
+        nextCareerGoalId,
+      );
+    }
+
+    this.copyProfileField(data, dto, 'summary');
+    this.copyProfileField(data, dto, 'githubUrl');
+    this.copyProfileField(data, dto, 'linkedinUrl');
+    this.copyProfileField(data, dto, 'portfolioUrl');
+
+    return data;
+  }
+
+  private async resolveRequestedSpecializationId(
+    specializationId: string | null | undefined,
+    careerGoalId: string | null,
+  ) {
+    const normalizedSpecializationId = this.normalizeOptionalId(
+      specializationId,
+      'Specialization is required',
+    );
+    if (!normalizedSpecializationId) {
+      return null;
+    }
+    if (!careerGoalId) {
+      throw new BadRequestException('Select a career goal before selecting a specialization');
+    }
+
+    await this.ensureSpecializationBelongsToCareerGoal(
+      normalizedSpecializationId,
+      careerGoalId,
+    );
+    return normalizedSpecializationId;
+  }
+
+  private async resolveExistingSpecializationAfterCareerGoalChange(
+    currentSpecializationId: string | null,
+    nextCareerGoalId: string | null,
+  ) {
+    if (!currentSpecializationId || !nextCareerGoalId) {
+      return null;
+    }
+
+    const stillValid = await this.isSpecializationValidForCareerGoal(
+      currentSpecializationId,
+      nextCareerGoalId,
+    );
+    return stillValid ? currentSpecializationId : null;
+  }
+
+  private async ensureSpecializationBelongsToCareerGoal(
+    specializationId: string,
+    careerGoalId: string,
+  ) {
+    const specialization = await this.prisma.specialization.findUnique({
+      where: { id: specializationId },
+      select: { id: true, careerGoalId: true, status: true },
+    });
+    if (!specialization) {
+      throw new NotFoundException('Specialization not found');
+    }
+    if (specialization.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Specialization is not active');
+    }
+    if (specialization.careerGoalId !== careerGoalId) {
+      throw new BadRequestException(
+        'Selected specialization does not belong to the selected career goal',
+      );
+    }
+  }
+
+  private async isSpecializationValidForCareerGoal(
+    specializationId: string,
+    careerGoalId: string,
+  ) {
+    const specialization = await this.prisma.specialization.findFirst({
+      where: {
+        id: specializationId,
+        careerGoalId,
+        status: CatalogStatus.ACTIVE,
+      },
+      select: { id: true },
+    });
+
+    return Boolean(specialization);
+  }
+
+  private normalizeOptionalId(value: string | null | undefined, message: string) {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new BadRequestException(message);
+    }
+
+    return normalized;
+  }
+
+  private copyProfileField(
+    data: ProfileMutableData,
+    dto: UpdateProfileDto,
+    field: 'summary' | 'githubUrl' | 'linkedinUrl' | 'portfolioUrl',
+  ) {
+    if (this.hasOwn(dto, field)) {
+      data[field] = dto[field];
+    }
+  }
+
+  private hasOwn<T extends object>(value: T, key: keyof T) {
+    return Object.prototype.hasOwnProperty.call(value, key);
   }
 
   private async ensureSkillExists(skillId: string) {

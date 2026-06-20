@@ -1,12 +1,13 @@
 'use client';
 
-import { Button, Card, List, Modal, Progress, Select, Space, Table, Tag, Typography, App } from 'antd';
+import { App, Button, Card, Descriptions, List, Modal, Progress, Select, Space, Table, Tag, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { getData, getPage, patchData, postData } from '@/lib/request';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
-import type { Evidence, NotificationItem, Recommendation, Roadmap } from '@/types/domain';
+import type { CareerGoal, CompetencyAnalysis, Evidence, NotificationItem, Recommendation, Roadmap, RoadmapItem, Specialization } from '@/types/domain';
 
 export function StudentEvidencesView() {
   const query = useQuery({ queryKey: ['evidences', 'me'], queryFn: () => getPage<Evidence>('/evidences/me', { limit: 50 }) });
@@ -17,8 +18,42 @@ export function LecturerEvidenceReviewView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['evidences', 'pending'], queryFn: () => getPage<Evidence>('/evidences/pending', { limit: 50 }) });
-  const verify = useMutation({ mutationFn: (id: string) => patchData(`/evidences/${id}/verify`, {}), onSuccess: () => { message.success('Verified'); queryClient.invalidateQueries({ queryKey: ['evidences'] }); } });
+  const verify = useMutation({ mutationFn: ({ id, currentLevel }: { id: string; currentLevel?: number }) => patchData(`/evidences/${id}/verify`, currentLevel === undefined ? {} : { currentLevel }), onSuccess: () => { message.success('Verified'); queryClient.invalidateQueries({ queryKey: ['evidences'] }); } });
   const reject = useMutation({ mutationFn: ({ id, reviewerNote }: { id: string; reviewerNote: string }) => patchData(`/evidences/${id}/reject`, { reviewerNote }), onSuccess: () => { message.success('Rejected'); queryClient.invalidateQueries({ queryKey: ['evidences'] }); } });
+  const handleVerify = (row: Evidence) => {
+    if (row.relatedEntityType !== 'SKILL') {
+      verify.mutate({ id: row.id });
+      return;
+    }
+
+    let currentLevel: number | undefined;
+    Modal.confirm({
+      title: 'Verify skill evidence',
+      content: (
+        <Select
+          style={{ width: '100%' }}
+          placeholder="Current level"
+          onChange={(value) => {
+            currentLevel = value;
+          }}
+          options={[0, 1, 2, 3].map((value) => ({
+            value,
+            label: String(value),
+          }))}
+        />
+      ),
+      okText: 'Verify',
+      onOk: () => {
+        if (currentLevel === undefined) {
+          message.error('Select current level');
+          return Promise.reject();
+        }
+
+        verify.mutate({ id: row.id, currentLevel });
+        return undefined;
+      },
+    });
+  };
 
   return (
     <QueryState loading={query.isLoading} error={query.error}>
@@ -28,7 +63,7 @@ export function LecturerEvidenceReviewView() {
         { title: 'Entity', dataIndex: 'relatedEntityType' },
         { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
         { title: 'Note', dataIndex: 'note' },
-        { title: 'Actions', render: (_value: unknown, row: Evidence) => <Space><Button onClick={() => verify.mutate(row.id)}>Verify</Button><Button danger onClick={() => Modal.confirm({ title: 'Reject evidence', content: 'Reject this evidence?', onOk: () => reject.mutate({ id: row.id, reviewerNote: 'Rejected by advisor' }) })}>Reject</Button></Space> },
+        { title: 'Actions', render: (_value: unknown, row: Evidence) => <Space><Button onClick={() => handleVerify(row)}>Verify</Button><Button danger onClick={() => Modal.confirm({ title: 'Reject evidence', content: 'Reject this evidence?', onOk: () => reject.mutate({ id: row.id, reviewerNote: 'Rejected by advisor' }) })}>Reject</Button></Space> },
       ]} />
     </QueryState>
   );
@@ -59,9 +94,7 @@ export function RecommendationsView() {
 export function RoadmapView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const list = useQuery({ queryKey: ['roadmaps', 'me'], queryFn: () => getPage<Roadmap>('/roadmaps/me', { limit: 10, status: 'ACTIVE' }) });
-  const active = list.data?.data?.[0];
-  const detail = useQuery({ queryKey: ['roadmap', active?.id], queryFn: () => getData<Roadmap>(`/roadmaps/${active?.id}`), enabled: Boolean(active?.id) });
+  const roadmap = useQuery({ queryKey: ['roadmaps', 'me', 'active'], queryFn: () => getData<Roadmap | null>('/roadmaps/me') });
   const generate = useMutation({
     mutationFn: () => postData('/roadmaps/generate/me', {}),
     onSuccess: () => {
@@ -73,12 +106,13 @@ export function RoadmapView() {
     },
   });
   const update = useMutation({ mutationFn: ({ id, status }: { id: string; status: string }) => patchData(`/roadmaps/items/${id}/status`, { status }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roadmaps'] }); queryClient.invalidateQueries({ queryKey: ['roadmap'] }); } });
+  const roadmapItems = roadmap.data ? getRoadmapItems(roadmap.data) : [];
 
   return (
-    <QueryState loading={list.isLoading || detail.isLoading} error={list.error || detail.error}>
+    <QueryState loading={roadmap.isLoading} error={roadmap.error}>
       <PageHeader title="Roadmap" />
       <Space style={{ marginBottom: 16 }}><Button type="primary" onClick={() => generate.mutate()} loading={generate.isPending}>Generate Roadmap</Button></Space>
-      {detail.data ? <Card title={detail.data.title}><Progress percent={Number(detail.data.progressPercent)} /><List dataSource={detail.data.items ?? []} renderItem={(item) => <List.Item actions={[<Select key="status" value={item.status} onChange={(status) => update.mutate({ id: item.id, status })} options={['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'].map((value) => ({ value }))} />]}><List.Item.Meta title={`${item.orderIndex}. ${item.title}`} description={item.description} /></List.Item>} /></Card> : <Card>No active roadmap.</Card>}
+      {roadmap.data ? <Card title={getRoadmapDisplayTitle(roadmap.data)}><CareerScopeSummary careerGoal={roadmap.data.careerGoal} specialization={roadmap.data.specialization} /><Progress percent={Number(roadmap.data.progressPercent)} /><List dataSource={roadmapItems} renderItem={(item) => <List.Item actions={[<Select key="status" value={item.status} onChange={(status) => update.mutate({ id: item.id, status })} options={['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'].map((value) => ({ value }))} />]}><List.Item.Meta title={<Space>{`${item.orderIndex}. ${item.title}`}{item.roadmapPhase ? <Tag>{item.roadmapPhase}</Tag> : null}</Space>} description={item.description} /></List.Item>} /></Card> : <Card>No active roadmap.</Card>}
     </QueryState>
   );
 }
@@ -97,17 +131,56 @@ export function NotificationsView() {
 
 export function AnalysisView() {
   const { message } = App.useApp();
-  const analyze = useMutation({ mutationFn: () => postData<any>('/competency/analyze/me', {}), onSuccess: () => message.success('Analysis completed') });
+  const analyze = useMutation({ mutationFn: () => postData<CompetencyAnalysis>('/competency/analyze/me', {}), onSuccess: () => message.success('Analysis completed') });
   return (
     <>
       <PageHeader title="Competency Analysis" />
       <Card>
         <Typography.Paragraph>Run analysis against your selected career goal.</Typography.Paragraph>
         <Button type="primary" loading={analyze.isPending} onClick={() => analyze.mutate()}>Analyze Now</Button>
-        {analyze.data ? <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(analyze.data, null, 2)}</pre> : null}
+        {analyze.data ? <><CareerScopeSummary careerGoal={analyze.data.careerGoal} specialization={analyze.data.specialization} style={{ marginTop: 16 }} /><pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(analyze.data, null, 2)}</pre></> : null}
       </Card>
     </>
   );
+}
+
+function CareerScopeSummary({ careerGoal, specialization, style }: { careerGoal?: CareerGoal | string | null; specialization?: Specialization | string | null; style?: CSSProperties }) {
+  return (
+    <Descriptions bordered column={1} size="small" style={style}>
+      <Descriptions.Item label="Career Goal">{getEntityName(careerGoal) ?? '-'}</Descriptions.Item>
+      <Descriptions.Item label="Specialization">{getSpecializationDisplayName(specialization)}</Descriptions.Item>
+    </Descriptions>
+  );
+}
+
+function getRoadmapDisplayTitle(roadmap: Roadmap) {
+  const specializationName = getEntityName(roadmap.specialization);
+  const careerGoalName = getEntityName(roadmap.careerGoal);
+  const scopeName = specializationName ?? careerGoalName;
+
+  return scopeName ? `${scopeName} Roadmap` : roadmap.title;
+}
+
+function getRoadmapItems(roadmap: Roadmap): RoadmapItem[] {
+  if (roadmap.phases?.length) {
+    return roadmap.phases.flatMap((phase) =>
+      phase.items.map((item) => ({ ...item, roadmapPhase: item.roadmapPhase ?? phase.phase })),
+    );
+  }
+
+  return roadmap.items ?? [];
+}
+
+function getSpecializationDisplayName(specialization?: Specialization | string | null) {
+  return getEntityName(specialization) ?? 'General';
+}
+
+function getEntityName(value?: CareerGoal | Specialization | string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return typeof value === 'string' ? value : value.name;
 }
 
 function EvidenceTable({ title, query }: { title: string; query: any }) {

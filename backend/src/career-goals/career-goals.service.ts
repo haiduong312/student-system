@@ -17,7 +17,12 @@ import { CreateCareerRequiredSkillDto } from './dto/create-career-required-skill
 import { UpdateCareerGoalDto } from './dto/update-career-goal.dto';
 import { UpdateCareerRequiredSkillDto } from './dto/update-career-required-skill.dto';
 
-const CAREER_SORTABLE_FIELDS = new Set(['name', 'status', 'createdAt', 'updatedAt']);
+const CAREER_SORTABLE_FIELDS = new Set([
+  'name',
+  'status',
+  'createdAt',
+  'updatedAt',
+]);
 const REQUIRED_SKILL_SORTABLE_FIELDS = new Set([
   'requiredLevel',
   'weight',
@@ -66,7 +71,15 @@ export class CareerGoalsService {
         skip,
         take,
         orderBy: { [sortBy]: query.sortOrder },
-        include: { _count: { select: { requiredSkills: true, studentProfiles: true } } },
+        include: {
+          _count: {
+            select: {
+              requiredSkills: true,
+              specializations: true,
+              studentProfiles: true,
+            },
+          },
+        },
       }),
       this.prisma.careerGoal.count({ where }),
     ]);
@@ -82,7 +95,13 @@ export class CareerGoalsService {
           orderBy: { learningOrder: 'asc' },
           include: { skill: { include: { category: true } } },
         },
-        _count: { select: { studentProfiles: true, roadmaps: true } },
+        _count: {
+          select: {
+            specializations: true,
+            studentProfiles: true,
+            roadmaps: true,
+          },
+        },
       },
     });
     if (!careerGoal) {
@@ -127,7 +146,10 @@ export class CareerGoalsService {
         include: { skill: { include: { category: true } }, careerGoal: true },
       });
     } catch (error) {
-      this.handleKnownError(error, 'Skill is already configured for this career goal');
+      this.handleKnownError(
+        error,
+        'Skill is already configured for this career goal',
+      );
     }
   }
 
@@ -140,13 +162,24 @@ export class CareerGoalsService {
     const { page, limit, skip, take } = getPagination(query);
     const where: Prisma.CareerRequiredSkillWhereInput = {
       careerGoalId,
+      specializationId: null,
       ...(query.skillId ? { skillId: query.skillId } : {}),
-      ...(typeof query.isRequired === 'boolean' ? { isRequired: query.isRequired } : {}),
+      ...(typeof query.isRequired === 'boolean'
+        ? { isRequired: query.isRequired }
+        : {}),
       ...(query.search
         ? {
             OR: [
-              { skill: { name: { contains: query.search, mode: 'insensitive' } } },
-              { skill: { description: { contains: query.search, mode: 'insensitive' } } },
+              {
+                skill: {
+                  name: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              {
+                skill: {
+                  description: { contains: query.search, mode: 'insensitive' },
+                },
+              },
             ],
           }
         : {}),
@@ -191,14 +224,19 @@ export class CareerGoalsService {
         include: { skill: { include: { category: true } }, careerGoal: true },
       });
     } catch (error) {
-      this.handleKnownError(error, 'Skill is already configured for this career goal');
+      this.handleKnownError(
+        error,
+        'Skill is already configured for this career goal',
+      );
     }
   }
 
   async removeRequiredSkill(careerGoalId: string, requiredSkillId: string) {
     await this.ensureRequiredSkillExists(careerGoalId, requiredSkillId);
 
-    await this.prisma.careerRequiredSkill.delete({ where: { id: requiredSkillId } });
+    await this.prisma.careerRequiredSkill.delete({
+      where: { id: requiredSkillId },
+    });
     return { deleted: true };
   }
 
@@ -224,7 +262,7 @@ export class CareerGoalsService {
 
   private async ensureRequiredSkillExists(careerGoalId: string, id: string) {
     const exists = await this.prisma.careerRequiredSkill.findFirst({
-      where: { id, careerGoalId },
+      where: { id, careerGoalId, specializationId: null },
       select: { id: true },
     });
     if (!exists) {
@@ -247,7 +285,9 @@ export class CareerGoalsService {
       select: { id: true },
     });
     if (exists) {
-      throw new ConflictException('Skill is already configured for this career goal');
+      throw new ConflictException(
+        'Skill is already configured for this career goal',
+      );
     }
   }
 

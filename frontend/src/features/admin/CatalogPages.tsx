@@ -3,6 +3,7 @@
 import {
   App,
   Button,
+  Descriptions,
   Drawer,
   Form,
   Input,
@@ -10,7 +11,9 @@ import {
   Modal,
   Select,
   Space,
+  Switch,
   Table,
+  Tabs,
   Tag,
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
@@ -23,9 +26,11 @@ import { SearchBar } from '@/components/ui/SearchBar';
 import type {
   CareerGoal,
   CareerRequiredSkill,
+  RoadmapPhase,
   Skill,
   SkillCategory,
   SkillType,
+  Specialization,
 } from '@/types/domain';
 
 type CatalogKind = 'skill-categories' | 'skills' | 'career-goals';
@@ -40,6 +45,13 @@ const skillTypeOptions: Array<{ value: SkillType; label: string }> = [
   { value: 'COMMON', label: 'COMMON' },
   { value: 'CAREER_SPECIFIC', label: 'CAREER_SPECIFIC' },
 ];
+const roadmapPhaseOptions: Array<{ value: RoadmapPhase; label: string }> = [
+  { value: 'CORE_FOUNDATION', label: 'Core Foundation' },
+  { value: 'CAREER_TRACK', label: 'Career Track' },
+  { value: 'SPECIALIZATION', label: 'Specialization' },
+  { value: 'PRACTICE_PROJECT', label: 'Practice Project' },
+  { value: 'PORTFOLIO_PREPARATION', label: 'Portfolio Preparation' },
+];
 
 export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const { message } = App.useApp();
@@ -47,7 +59,8 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<any | null>(null);
   const [open, setOpen] = useState(false);
-  const [selectedCareerGoal, setSelectedCareerGoal] = useState<CareerGoal | null>(null);
+  const [selectedCareerGoal, setSelectedCareerGoal] =
+    useState<CareerGoal | null>(null);
   const [form] = Form.useForm();
   const selectedSkillType = Form.useWatch('type', form);
 
@@ -57,14 +70,20 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   });
   const categories = useQuery({
     queryKey: ['skill-categories', 'options'],
-    queryFn: () => getPage<SkillCategory>('/skill-categories', { limit: 100, status: 'ACTIVE' }),
+    queryFn: () =>
+      getPage<SkillCategory>('/skill-categories', {
+        limit: 100,
+        status: 'ACTIVE',
+      }),
     enabled: kind === 'skills',
   });
 
   const save = useMutation({
     mutationFn: (values: any) => {
       const payload = buildCatalogPayload(kind, values);
-      return editing ? patchData(`/${kind}/${editing.id}`, payload) : postData(`/${kind}`, payload);
+      return editing
+        ? patchData(`/${kind}/${editing.id}`, payload)
+        : postData(`/${kind}`, payload);
     },
     onSuccess: () => {
       message.success('Saved');
@@ -85,7 +104,9 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const openForm = (record?: any) => {
     setEditing(record ?? null);
     form.resetFields();
-    form.setFieldsValue(record ?? { status: 'ACTIVE', type: 'CAREER_SPECIFIC' });
+    form.setFieldsValue(
+      record ?? { status: 'ACTIVE', type: 'CAREER_SPECIFIC' },
+    );
     setOpen(true);
   };
 
@@ -95,7 +116,15 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
       <SearchBar
         onSearch={setSearch}
         onRefresh={() => query.refetch()}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>Add</Button>}
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openForm()}
+          >
+            Add
+          </Button>
+        }
       />
       <Table<any>
         rowKey="id"
@@ -105,20 +134,28 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           { title: 'Name', dataIndex: 'name' },
           ...(kind === 'skills'
             ? [
-                { title: 'Type', render: (_: unknown, row: Skill) => <SkillTypeTag type={row.type} /> },
+                {
+                  title: 'Type',
+                  render: (_: unknown, row: Skill) => (
+                    <SkillTypeTag type={row.type} />
+                  ),
+                },
                 {
                   title: 'Default Level',
                   render: (_: unknown, row: Skill) =>
-                    row.type === 'COMMON' ? row.defaultRequiredLevel ?? '-' : '-',
+                    row.type === 'COMMON'
+                      ? (row.defaultRequiredLevel ?? '-')
+                      : '-',
                 },
                 {
                   title: 'Default Weight',
                   render: (_: unknown, row: Skill) =>
-                    row.type === 'COMMON' ? row.defaultWeight ?? '-' : '-',
+                    row.type === 'COMMON' ? (row.defaultWeight ?? '-') : '-',
                 },
                 {
                   title: 'Questions',
-                  render: (_: unknown, row: Skill) => row._count?.assessmentQuestions ?? 0,
+                  render: (_: unknown, row: Skill) =>
+                    row._count?.assessmentQuestions ?? 0,
                 },
               ]
             : []),
@@ -126,21 +163,35 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
             ? [
                 {
                   title: 'Required Skills',
-                  render: (_: unknown, row: CareerGoal) => row._count?.requiredSkills ?? 0,
+                  render: (_: unknown, row: CareerGoal) =>
+                    row._count?.requiredSkills ?? 0,
+                },
+                {
+                  title: 'Specializations',
+                  render: (_: unknown, row: CareerGoal) =>
+                    row._count?.specializations ?? '-',
                 },
               ]
             : []),
-          { title: 'Status', dataIndex: 'status', render: (status) => <Tag>{status}</Tag> },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            render: (status) => <Tag>{status}</Tag>,
+          },
           { title: 'Description', dataIndex: 'description', ellipsis: true },
           {
             title: 'Actions',
             render: (_value: unknown, record: any) => (
               <Space>
                 {kind === 'career-goals' ? (
-                  <Button onClick={() => setSelectedCareerGoal(record)}>Required Skills</Button>
+                  <Button onClick={() => setSelectedCareerGoal(record)}>
+                    Manage
+                  </Button>
                 ) : null}
                 <Button onClick={() => openForm(record)}>Edit</Button>
-                <Button danger onClick={() => remove.mutate(record.id)}>Delete</Button>
+                <Button danger onClick={() => remove.mutate(record.id)}>
+                  Delete
+                </Button>
               </Space>
             ),
           },
@@ -153,7 +204,11 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
       >
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => save.mutate(values)}
+        >
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
@@ -190,7 +245,11 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
                     rules={[{ required: true }]}
                     style={{ width: '50%' }}
                   >
-                    <InputNumber min={0.01} step={0.5} style={{ width: '100%' }} />
+                    <InputNumber
+                      min={0.01}
+                      step={0.5}
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
                 </Space.Compact>
               ) : null}
@@ -204,7 +263,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           </Form.Item>
         </Form>
       </Modal>
-      <RequiredSkillsDrawer
+      <CareerGoalDetailDrawer
         careerGoal={selectedCareerGoal}
         open={Boolean(selectedCareerGoal)}
         onClose={() => setSelectedCareerGoal(null)}
@@ -213,7 +272,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   );
 }
 
-function RequiredSkillsDrawer({
+function CareerGoalDetailDrawer({
   careerGoal,
   open,
   onClose,
@@ -222,23 +281,123 @@ function RequiredSkillsDrawer({
   open: boolean;
   onClose: () => void;
 }) {
+  return (
+    <Drawer title={careerGoal?.name} open={open} onClose={onClose} width={1080}>
+      <Tabs
+        items={[
+          {
+            key: 'overview',
+            label: 'Overview',
+            children: <CareerGoalOverview careerGoal={careerGoal} />,
+          },
+          {
+            key: 'required-skills',
+            label: 'Required Skills',
+            children: (
+              <RequiredSkillsManager
+                enabled={open && Boolean(careerGoal?.id)}
+                endpoint={
+                  careerGoal
+                    ? `/career-goals/${careerGoal.id}/required-skills`
+                    : ''
+                }
+                queryKey={[
+                  'career-required-skills',
+                  'career-goal',
+                  careerGoal?.id,
+                ]}
+                invalidateKeys={[
+                  ['career-required-skills', 'career-goal', careerGoal?.id],
+                  ['career-goals'],
+                ]}
+                defaultRoadmapPhase="CAREER_TRACK"
+              />
+            ),
+          },
+          {
+            key: 'specializations',
+            label: 'Specializations',
+            children: (
+              <SpecializationsTab careerGoal={careerGoal} open={open} />
+            ),
+          },
+        ]}
+      />
+    </Drawer>
+  );
+}
+
+function CareerGoalOverview({ careerGoal }: { careerGoal: CareerGoal | null }) {
+  if (!careerGoal) {
+    return null;
+  }
+
+  return (
+    <Descriptions bordered column={1} size="small">
+      <Descriptions.Item label="Name">{careerGoal.name}</Descriptions.Item>
+      <Descriptions.Item label="Status">
+        <StatusTag status={careerGoal.status} />
+      </Descriptions.Item>
+      <Descriptions.Item label="Description">
+        {careerGoal.description || '-'}
+      </Descriptions.Item>
+      <Descriptions.Item label="Required Skills">
+        {careerGoal._count?.requiredSkills ?? 0}
+      </Descriptions.Item>
+      <Descriptions.Item label="Student Profiles">
+        {careerGoal._count?.studentProfiles ?? 0}
+      </Descriptions.Item>
+      <Descriptions.Item label="Updated">
+        {formatDate(careerGoal.updatedAt)}
+      </Descriptions.Item>
+    </Descriptions>
+  );
+}
+
+function RequiredSkillsManager({
+  enabled,
+  endpoint,
+  queryKey,
+  invalidateKeys,
+  defaultRoadmapPhase,
+  scope = 'career-goal',
+  careerGoal,
+  specialization,
+  careerLevelSkillIds,
+  careerLevelLoading = false,
+}: {
+  enabled: boolean;
+  endpoint: string;
+  queryKey: unknown[];
+  invalidateKeys: unknown[][];
+  defaultRoadmapPhase: RoadmapPhase;
+  scope?: 'career-goal' | 'specialization';
+  careerGoal?: CareerGoal | null;
+  specialization?: Specialization | null;
+  careerLevelSkillIds?: Set<string>;
+  careerLevelLoading?: boolean;
+}) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<CareerRequiredSkill | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
-  const endpoint = careerGoal ? `/career-goals/${careerGoal.id}/required-skills` : '';
+  const isSpecializationScope = scope === 'specialization';
 
   const requiredSkills = useQuery({
-    queryKey: ['career-required-skills', careerGoal?.id],
+    queryKey,
     queryFn: () => getPage<CareerRequiredSkill>(endpoint, { limit: 100 }),
-    enabled: Boolean(careerGoal?.id),
+    enabled,
   });
   const careerSpecificSkills = useQuery({
     queryKey: ['skills', 'career-specific-options'],
     queryFn: () =>
-      getPage<Skill>('/skills', { limit: 200, status: 'ACTIVE', type: 'CAREER_SPECIFIC' }),
-    enabled: open,
+      getPage<Skill>('/skills', {
+        limit: 200,
+        status: 'ACTIVE',
+        type: 'CAREER_SPECIFIC',
+      }),
+    enabled,
   });
 
   const save = useMutation({
@@ -257,16 +416,24 @@ function RequiredSkillsDrawer({
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
-      queryClient.invalidateQueries({ queryKey: ['career-required-skills', careerGoal?.id] });
-      queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+      invalidateKeys.forEach((key) =>
+        queryClient.invalidateQueries({ queryKey: key }),
+      );
+    },
+    onError: (error) => {
+      message.error(getErrorMessage(error));
     },
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteData(`${endpoint}/${id}`),
     onSuccess: () => {
       message.success('Deleted');
-      queryClient.invalidateQueries({ queryKey: ['career-required-skills', careerGoal?.id] });
-      queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+      invalidateKeys.forEach((key) =>
+        queryClient.invalidateQueries({ queryKey: key }),
+      );
+    },
+    onError: (error) => {
+      message.error(getErrorMessage(error));
     },
   });
 
@@ -280,50 +447,127 @@ function RequiredSkillsDrawer({
             requiredLevel: record.requiredLevel,
             weight: Number(record.weight),
             learningOrder: record.learningOrder,
+            roadmapPhase: record.roadmapPhase ?? defaultRoadmapPhase,
           }
         : {
             requiredLevel: 1,
             weight: 1,
             learningOrder: (requiredSkills.data?.data.length ?? 0) + 1,
+            roadmapPhase: defaultRoadmapPhase,
           },
     );
     setModalOpen(true);
   };
+  const requiredSkillRows = requiredSkills.data?.data ?? [];
   const existingSkillIds = new Set(
-    (requiredSkills.data?.data ?? []).map((requiredSkill) => requiredSkill.skillId),
+    requiredSkillRows.map((requiredSkill) => requiredSkill.skillId),
   );
   const skillOptions = (careerSpecificSkills.data?.data ?? [])
-    .filter((skill) => editing?.skillId === skill.id || !existingSkillIds.has(skill.id))
+    .filter(
+      (skill) =>
+        editing?.skillId === skill.id || !existingSkillIds.has(skill.id),
+    )
     .map((skill) => ({
       label: skill.name,
       value: skill.id,
     }));
+  const duplicateSkillMessage = isSpecializationScope
+    ? 'Skill is already configured for this specialization'
+    : 'Skill is already configured for this career goal';
+  const specializationCareerGoal = careerGoal ?? specialization?.careerGoal;
 
   return (
-    <Drawer title={careerGoal?.name} open={open} onClose={onClose} width={860}>
-      <QueryState loading={requiredSkills.isLoading} error={requiredSkills.error}>
+    <>
+      {isSpecializationScope ? (
+        <Descriptions
+          bordered
+          column={2}
+          size="small"
+          style={{ marginBottom: 16 }}
+        >
+          <Descriptions.Item label="Career Goal">
+            {specializationCareerGoal?.name ?? '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Specialization">
+            <Space>
+              {specialization?.name ?? '-'}
+              <StatusTag status={specialization?.status} />
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="Description" span={2}>
+            {specialization?.description || '-'}
+          </Descriptions.Item>
+        </Descriptions>
+      ) : null}
+      <QueryState
+        loading={requiredSkills.isLoading}
+        error={requiredSkills.error}
+      >
         <Space style={{ marginBottom: 16 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openRequiredSkillForm()}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openRequiredSkillForm()}
+          >
             Add Skill
           </Button>
           <Button onClick={() => requiredSkills.refetch()}>Refresh</Button>
         </Space>
         <Table<CareerRequiredSkill>
           rowKey="id"
-          dataSource={requiredSkills.data?.data ?? []}
+          dataSource={requiredSkillRows}
           pagination={false}
           columns={[
-            { title: 'Skill', render: (_: unknown, row) => row.skill?.name ?? row.skillId },
-            { title: 'Type', render: (_: unknown, row) => <SkillTypeTag type={row.skill?.type} /> },
+            {
+              title: 'Skill',
+              render: (_: unknown, row) => row.skill?.name ?? row.skillId,
+            },
+            {
+              title: 'Type',
+              render: (_: unknown, row) => (
+                <SkillTypeTag type={row.skill?.type} />
+              ),
+            },
             { title: 'Level', dataIndex: 'requiredLevel' },
-            { title: 'Weight', render: (_: unknown, row) => Number(row.weight) },
+            {
+              title: 'Weight',
+              render: (_: unknown, row) => Number(row.weight),
+            },
             { title: 'Order', dataIndex: 'learningOrder' },
+            {
+              title: 'Phase',
+              render: (_: unknown, row) => <Tag>{row.roadmapPhase ?? '-'}</Tag>,
+            },
+            ...(isSpecializationScope
+              ? [
+                  {
+                    title: 'Scope',
+                    render: (_: unknown, row: CareerRequiredSkill) => {
+                      if (careerLevelLoading) {
+                        return <Tag>Checking career-level</Tag>;
+                      }
+
+                      return careerLevelSkillIds?.has(row.skillId) ? (
+                        <Tag color="gold">
+                          Override career-level requirement
+                        </Tag>
+                      ) : (
+                        <Tag color="purple">Specialization-specific</Tag>
+                      );
+                    },
+                  },
+                ]
+              : []),
             {
               title: 'Actions',
               render: (_: unknown, row) => (
                 <Space>
-                  <Button onClick={() => openRequiredSkillForm(row)}>Edit</Button>
-                  <Button danger onClick={() => remove.mutate(row.id)}>Delete</Button>
+                  <Button onClick={() => openRequiredSkillForm(row)}>
+                    Edit
+                  </Button>
+                  <Button danger onClick={() => remove.mutate(row.id)}>
+                    Delete
+                  </Button>
                 </Space>
               ),
             },
@@ -337,8 +581,31 @@ function RequiredSkillsDrawer({
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
       >
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
-          <Form.Item name="skillId" label="Skill" rules={[{ required: true }]}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => save.mutate(values)}
+        >
+          <Form.Item
+            name="skillId"
+            label="Skill"
+            rules={[
+              { required: true },
+              {
+                validator: (_, value) => {
+                  if (
+                    !value ||
+                    editing?.skillId === value ||
+                    !existingSkillIds.has(value)
+                  ) {
+                    return Promise.resolve();
+                  }
+
+                  return Promise.reject(new Error(duplicateSkillMessage));
+                },
+              },
+            ]}
+          >
             <Select
               disabled={Boolean(editing)}
               loading={careerSpecificSkills.isLoading}
@@ -368,14 +635,275 @@ function RequiredSkillsDrawer({
           <Form.Item name="learningOrder" label="Learning Order">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
+          <Form.Item name="roadmapPhase" label="Roadmap Phase">
+            <Select options={roadmapPhaseOptions} />
+          </Form.Item>
         </Form>
       </Modal>
-    </Drawer>
+    </>
+  );
+}
+
+function SpecializationsTab({
+  careerGoal,
+  open,
+}: {
+  careerGoal: CareerGoal | null;
+  open: boolean;
+}) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<Specialization | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedSpecialization, setSelectedSpecialization] =
+    useState<Specialization | null>(null);
+  const [form] = Form.useForm();
+  const endpoint = careerGoal
+    ? `/admin/career-goals/${careerGoal.id}/specializations`
+    : '';
+  const selectedCareerGoalId =
+    selectedSpecialization?.careerGoalId ?? careerGoal?.id ?? '';
+
+  const specializations = useQuery({
+    queryKey: ['specializations', careerGoal?.id],
+    queryFn: () => getPage<Specialization>(endpoint, { limit: 100 }),
+    enabled: open && Boolean(careerGoal?.id),
+  });
+  const careerLevelRequiredSkills = useQuery({
+    queryKey: ['career-required-skills', 'career-goal', selectedCareerGoalId],
+    queryFn: () =>
+      getPage<CareerRequiredSkill>(
+        `/career-goals/${selectedCareerGoalId}/required-skills`,
+        { limit: 200 },
+      ),
+    enabled: Boolean(selectedSpecialization?.id && selectedCareerGoalId),
+  });
+  const careerLevelSkillIds = new Set(
+    (careerLevelRequiredSkills.data?.data ?? []).map(
+      (requiredSkill) => requiredSkill.skillId,
+    ),
+  );
+
+  const save = useMutation({
+    mutationFn: (values: any) => {
+      if (!careerGoal) {
+        throw new Error('Career goal is required');
+      }
+
+      const payload = {
+        name: values.name,
+        description: values.description,
+        status: values.isActive ? 'ACTIVE' : 'INACTIVE',
+      };
+
+      return editing
+        ? patchData(`/admin/specializations/${editing.id}`, payload)
+        : postData('/admin/specializations', {
+            ...payload,
+            careerGoalId: careerGoal.id,
+          });
+    },
+    onSuccess: () => {
+      message.success('Saved');
+      setModalOpen(false);
+      setEditing(null);
+      form.resetFields();
+      queryClient.invalidateQueries({
+        queryKey: ['specializations', careerGoal?.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+    },
+    onError: (error) => {
+      message.error(getErrorMessage(error));
+    },
+  });
+
+  const deactivate = useMutation({
+    mutationFn: (id: string) => deleteData(`/admin/specializations/${id}`),
+    onSuccess: () => {
+      message.success('Deactivated');
+      queryClient.invalidateQueries({
+        queryKey: ['specializations', careerGoal?.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+    },
+    onError: (error) => {
+      message.error(getErrorMessage(error));
+    },
+  });
+
+  const openSpecializationForm = (record?: Specialization) => {
+    setEditing(record ?? null);
+    form.resetFields();
+    form.setFieldsValue(
+      record
+        ? {
+            name: record.name,
+            description: record.description,
+            isActive: record.status === 'ACTIVE',
+          }
+        : { isActive: true },
+    );
+    setModalOpen(true);
+  };
+
+  return (
+    <>
+      <QueryState
+        loading={specializations.isLoading}
+        error={specializations.error}
+      >
+        <Space style={{ marginBottom: 16 }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openSpecializationForm()}
+          >
+            Create Specialization
+          </Button>
+          <Button onClick={() => specializations.refetch()}>Refresh</Button>
+        </Space>
+        <Table<Specialization>
+          rowKey="id"
+          dataSource={specializations.data?.data ?? []}
+          pagination={false}
+          columns={[
+            { title: 'Name', dataIndex: 'name' },
+            { title: 'Description', dataIndex: 'description', ellipsis: true },
+            {
+              title: 'Active',
+              render: (_: unknown, row) => <StatusTag status={row.status} />,
+            },
+            {
+              title: 'Required Skills',
+              render: (_: unknown, row) => row._count?.requiredSkills ?? 0,
+            },
+            {
+              title: 'Updated',
+              render: (_: unknown, row) =>
+                formatDate(row.updatedAt ?? row.createdAt),
+            },
+            {
+              title: 'Actions',
+              render: (_: unknown, row) => (
+                <Space wrap>
+                  <Button onClick={() => openSpecializationForm(row)}>
+                    Edit
+                  </Button>
+                  <Button
+                    disabled={row.status === 'INACTIVE'}
+                    onClick={() => setSelectedSpecialization(row)}
+                  >
+                    Manage Required Skills
+                  </Button>
+                  <Button
+                    danger
+                    disabled={row.status === 'INACTIVE'}
+                    onClick={() => deactivate.mutate(row.id)}
+                  >
+                    Deactivate
+                  </Button>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </QueryState>
+      <Modal
+        title={editing ? 'Edit Specialization' : 'Create Specialization'}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={save.isPending}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => save.mutate(values)}
+        >
+          <Form.Item
+            name="name"
+            label="Name"
+            rules={[{ required: true, whitespace: true }]}
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item name="description" label="Description">
+            <Input.TextArea rows={4} />
+          </Form.Item>
+          <Form.Item name="isActive" label="Active" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Drawer
+        title={
+          selectedSpecialization
+            ? `Required Skills: ${selectedSpecialization.name}`
+            : undefined
+        }
+        open={Boolean(selectedSpecialization)}
+        onClose={() => setSelectedSpecialization(null)}
+        width={980}
+      >
+        <RequiredSkillsManager
+          enabled={Boolean(selectedSpecialization?.id)}
+          endpoint={
+            selectedSpecialization
+              ? `/admin/specializations/${selectedSpecialization.id}/required-skills`
+              : ''
+          }
+          queryKey={[
+            'specialization-required-skills',
+            selectedSpecialization?.id,
+          ]}
+          invalidateKeys={[
+            ['specialization-required-skills', selectedSpecialization?.id],
+            ['specializations', careerGoal?.id],
+          ]}
+          defaultRoadmapPhase="SPECIALIZATION"
+          scope="specialization"
+          careerGoal={careerGoal}
+          specialization={selectedSpecialization}
+          careerLevelSkillIds={careerLevelSkillIds}
+          careerLevelLoading={careerLevelRequiredSkills.isLoading}
+        />
+      </Drawer>
+    </>
   );
 }
 
 function SkillTypeTag({ type }: { type?: SkillType }) {
   return <Tag color={type === 'COMMON' ? 'blue' : 'green'}>{type ?? '-'}</Tag>;
+}
+
+function StatusTag({ status }: { status?: string }) {
+  return (
+    <Tag color={status === 'ACTIVE' ? 'green' : 'default'}>{status ?? '-'}</Tag>
+  );
+}
+
+function formatDate(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : '-';
+}
+
+function getErrorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'response' in error &&
+    error.response &&
+    typeof error.response === 'object' &&
+    'data' in error.response &&
+    error.response.data &&
+    typeof error.response.data === 'object' &&
+    'message' in error.response.data
+  ) {
+    const message = error.response.data.message;
+    return Array.isArray(message) ? message.join(', ') : String(message);
+  }
+
+  return 'Something went wrong.';
 }
 
 function buildCatalogPayload(kind: CatalogKind, values: any) {

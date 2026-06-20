@@ -5,7 +5,12 @@ export class UpdateProfileDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  careerGoalId?: string;
+  careerGoalId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  specializationId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
