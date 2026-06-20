@@ -1,12 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { basename, extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
-const uploadDir = join(process.cwd(), 'uploads', 'profiles');
+export const UPLOADS_URL_PREFIX = '/uploads';
+export const PROFILE_UPLOADS_URL_PREFIX = `${UPLOADS_URL_PREFIX}/profiles`;
+export const UPLOADS_ROOT_DIR = join(process.cwd(), 'uploads');
+export const PROFILE_UPLOAD_DIR = join(UPLOADS_ROOT_DIR, 'profiles');
 
-if (!existsSync(uploadDir)) {
-  mkdirSync(uploadDir, { recursive: true });
+if (!existsSync(PROFILE_UPLOAD_DIR)) {
+  mkdirSync(PROFILE_UPLOAD_DIR, { recursive: true });
 }
 
 const allowedMimeTypes = new Set([
@@ -20,7 +23,7 @@ const allowedMimeTypes = new Set([
 
 export const profileFileUploadOptions = {
   storage: diskStorage({
-    destination: uploadDir,
+    destination: PROFILE_UPLOAD_DIR,
     filename: (_request, file, callback) => {
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
       callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
@@ -44,5 +47,12 @@ export const profileFileUploadOptions = {
   },
 };
 
-export const buildUploadedFileUrl = (filename: string) =>
-  `/uploads/profiles/${filename}`;
+export const buildUploadedFileUrl = (filename: string) => {
+  const safeFilename = basename(filename);
+
+  if (!safeFilename || safeFilename !== filename || safeFilename.includes('..')) {
+    throw new BadRequestException('Invalid uploaded file name');
+  }
+
+  return `${PROFILE_UPLOADS_URL_PREFIX}/${safeFilename}`;
+};

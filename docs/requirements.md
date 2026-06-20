@@ -117,7 +117,7 @@ Thông tin câu hỏi:
 
 - `skillId`.
 - `questionText`.
-- `questionType`: `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`.
+- `questionType`: `SINGLE_CHOICE`, `TRUE_FALSE`.
 - `level`.
 - `explanation`.
 - `status`: `ACTIVE` hoặc `INACTIVE`.
@@ -128,8 +128,6 @@ Quy tắc validate:
 - Options không được rỗng.
 - `SINGLE_CHOICE` phải có đúng 1 option đúng.
 - `TRUE_FALSE` phải có đúng 2 options và đúng 1 option đúng.
-- `MULTIPLE_CHOICE` phải có ít nhất 1 option đúng.
-
 Xóa câu hỏi là soft delete theo nghiệp vụ: cập nhật `status = INACTIVE`.
 
 ### 4.6. Sinh viên làm assessment

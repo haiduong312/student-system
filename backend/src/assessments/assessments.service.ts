@@ -19,6 +19,13 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 
 const MAX_QUESTIONS_PER_SKILL = 6;
 const LEVEL_PASS_THRESHOLD = 60;
+const MAX_ASSESSMENT_ATTEMPTS = 3;
+const ASSESSMENT_COOLDOWN_MINUTES = 30;
+const ASSESSMENT_TIME_LIMIT_MINUTES = 60;
+const COMPLETED_ASSESSMENT_STATUSES = [
+  AssessmentStatus.SUBMITTED,
+  AssessmentStatus.GRADED,
+] as const;
 
 type QuestionWithOptions = AssessmentQuestion & {
   options: AssessmentOption[];
@@ -72,6 +79,8 @@ export class AssessmentsService {
   async startAssessment(userId: string, _dto: StartAssessmentDto = {}) {
     const profile = await this.getAssessmentProfile(userId);
 
+    await this.assertCanStartAssessment(profile);
+
     return this.generateAssessmentForProfile(profile);
   }
 
@@ -110,6 +119,7 @@ export class AssessmentsService {
       if (assessment.status !== AssessmentStatus.IN_PROGRESS) {
         throw new BadRequestException('Assessment has already been submitted');
       }
+      this.assertAssessmentWithinTimeLimit(assessment.startedAt);
       if (!assessment.items.length) {
         throw new BadRequestException('Assessment has no questions');
       }
@@ -240,7 +250,7 @@ export class AssessmentsService {
             })),
           },
         },
-        select: { id: true, careerGoalId: true },
+        select: { id: true, careerGoalId: true, startedAt: true },
       }),
     );
 
@@ -248,6 +258,16 @@ export class AssessmentsService {
       assessmentId: assessment.id,
       careerGoalId: assessment.careerGoalId,
       specializationId: profile.specializationId,
+      startedAt: assessment.startedAt,
+      expiresAt: this.addMinutes(
+        assessment.startedAt,
+        ASSESSMENT_TIME_LIMIT_MINUTES,
+      ),
+      attemptPolicy: {
+        maxAttempts: MAX_ASSESSMENT_ATTEMPTS,
+        cooldownMinutes: ASSESSMENT_COOLDOWN_MINUTES,
+        timeLimitMinutes: ASSESSMENT_TIME_LIMIT_MINUTES,
+      },
       questions: selectedQuestions.map((selected) =>
         this.toStartQuestionResponse(selected),
       ),
@@ -389,7 +409,9 @@ export class AssessmentsService {
     }
 
     for (let level = 1; level <= requiredLevel; level += 1) {
-      const question = byLevel.get(level)?.find((item) => !selected.has(item.id));
+      const question = this.shuffleQuestions(byLevel.get(level) ?? []).find(
+        (item) => !selected.has(item.id),
+      );
       if (question) {
         selected.set(question.id, question);
       }
@@ -398,7 +420,7 @@ export class AssessmentsService {
       }
     }
 
-    for (const question of questions) {
+    for (const question of this.shuffleQuestions(questions)) {
       if (!selected.has(question.id)) {
         selected.set(question.id, question);
       }
@@ -408,6 +430,20 @@ export class AssessmentsService {
     }
 
     return Array.from(selected.values());
+  }
+
+  private shuffleQuestions(questions: QuestionWithOptions[]) {
+    const shuffled = [...questions];
+
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[swapIndex]] = [
+        shuffled[swapIndex],
+        shuffled[index],
+      ];
+    }
+
+    return shuffled;
   }
 
   private toStartQuestionResponse(selected: SelectedQuestion) {
@@ -592,5 +628,85 @@ export class AssessmentsService {
 
   private round(value: number) {
     return Math.round(value * 100) / 100;
+  }
+
+  private async assertCanStartAssessment(profile: AssessmentProfileContext) {
+    const activeAttempt = await this.prisma.assessment.findFirst({
+      where: {
+        studentId: profile.studentId,
+        careerGoalId: profile.careerGoalId,
+        status: AssessmentStatus.IN_PROGRESS,
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, startedAt: true },
+    });
+
+    if (activeAttempt) {
+      if (!this.isAssessmentExpired(activeAttempt.startedAt)) {
+        throw new BadRequestException('Student already has an assessment in progress');
+      }
+
+      await this.prisma.assessment.update({
+        where: { id: activeAttempt.id },
+        data: { status: AssessmentStatus.CANCELLED },
+      });
+    }
+
+    const completedAttemptCount = await this.prisma.assessment.count({
+      where: {
+        studentId: profile.studentId,
+        careerGoalId: profile.careerGoalId,
+        status: { in: [...COMPLETED_ASSESSMENT_STATUSES] },
+      },
+    });
+    if (completedAttemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+      throw new BadRequestException('Maximum assessment attempts reached');
+    }
+
+    const latestAttempt = await this.prisma.assessment.findFirst({
+      where: {
+        studentId: profile.studentId,
+        careerGoalId: profile.careerGoalId,
+        status: {
+          in: [
+            AssessmentStatus.SUBMITTED,
+            AssessmentStatus.GRADED,
+            AssessmentStatus.CANCELLED,
+          ],
+        },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true, submittedAt: true },
+    });
+
+    if (!latestAttempt) {
+      return;
+    }
+
+    const cooldownBase = latestAttempt.submittedAt ?? latestAttempt.startedAt;
+    const nextAllowedAt = this.addMinutes(
+      cooldownBase,
+      ASSESSMENT_COOLDOWN_MINUTES,
+    );
+
+    if (Date.now() < nextAllowedAt.getTime()) {
+      throw new BadRequestException(
+        `Please wait ${ASSESSMENT_COOLDOWN_MINUTES} minutes before starting another assessment`,
+      );
+    }
+  }
+
+  private assertAssessmentWithinTimeLimit(startedAt: Date) {
+    if (this.isAssessmentExpired(startedAt)) {
+      throw new BadRequestException('Assessment time limit has expired');
+    }
+  }
+
+  private isAssessmentExpired(startedAt: Date) {
+    return Date.now() > this.addMinutes(startedAt, ASSESSMENT_TIME_LIMIT_MINUTES).getTime();
+  }
+
+  private addMinutes(date: Date, minutes: number) {
+    return new Date(date.getTime() + minutes * 60 * 1000);
   }
 }

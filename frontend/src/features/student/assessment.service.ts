@@ -1,7 +1,7 @@
 import { postData } from '@/lib/request';
 import type { SkillType } from '@/types/domain';
 
-export type AssessmentQuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+export type AssessmentQuestionType = 'SINGLE_CHOICE' | 'TRUE_FALSE';
 
 export interface AssessmentStartOption {
   id: string;

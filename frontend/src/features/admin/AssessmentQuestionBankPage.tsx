@@ -30,7 +30,6 @@ import type {
 
 const questionTypeOptions: Array<{ value: QuestionType; label: string }> = [
   { value: 'SINGLE_CHOICE', label: 'SINGLE_CHOICE' },
-  { value: 'MULTIPLE_CHOICE', label: 'MULTIPLE_CHOICE' },
   { value: 'TRUE_FALSE', label: 'TRUE_FALSE' },
 ];
 
@@ -372,10 +371,6 @@ function validateQuestion(values: any) {
       return 'TRUE_FALSE must have exactly one correct answer.';
     }
   }
-  if (values.questionType === 'MULTIPLE_CHOICE' && correctCount < 1) {
-    return 'MULTIPLE_CHOICE must have at least one correct answer.';
-  }
-
   return null;
 }
 

@@ -90,7 +90,6 @@ enum SkillType {
 
 enum QuestionType {
   SINGLE_CHOICE
-  MULTIPLE_CHOICE
   TRUE_FALSE
 }
 

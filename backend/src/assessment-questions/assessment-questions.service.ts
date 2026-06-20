@@ -25,6 +25,14 @@ const SORTABLE_FIELDS = new Set([
   'createdAt',
   'updatedAt',
 ]);
+const VERSIONED_QUESTION_FIELDS = [
+  'skillId',
+  'questionText',
+  'questionType',
+  'level',
+  'explanation',
+  'options',
+] as const;
 
 @Injectable()
 export class AssessmentQuestionsService {
@@ -123,7 +131,7 @@ export class AssessmentQuestionsService {
 
   async update(id: string, dto: UpdateAssessmentQuestionDto, actorUserId?: string) {
     try {
-      const question = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.assessmentQuestion.findUnique({
           where: { id },
           include: { options: { orderBy: { orderIndex: 'asc' } } },
@@ -138,12 +146,23 @@ export class AssessmentQuestionsService {
         const questionType = dto.questionType ?? existing.questionType;
         const optionsToValidate =
           dto.options ??
-          existing.options.map((option) => ({
-            optionText: option.optionText,
-            isCorrect: option.isCorrect,
-            orderIndex: option.orderIndex,
-          }));
-        this.validateOptions(questionType, optionsToValidate);
+          this.toOptionDtos(existing.options);
+        const hasVersionedChanges = this.hasVersionedQuestionChanges(dto);
+
+        if (hasVersionedChanges) {
+          this.validateOptions(questionType, optionsToValidate);
+        }
+
+        const isUsed = await this.isQuestionUsed(tx, id);
+        if (isUsed && hasVersionedChanges) {
+          const newQuestion = await this.createQuestionVersion(tx, existing, dto);
+
+          return {
+            question: newQuestion,
+            versioned: true,
+            previousQuestionId: existing.id,
+          };
+        }
 
         const { options, ...questionData } = dto;
         const question = await tx.assessmentQuestion.update({
@@ -161,25 +180,34 @@ export class AssessmentQuestionsService {
           });
         }
 
-        return tx.assessmentQuestion.findUniqueOrThrow({
+        const updatedQuestion = await tx.assessmentQuestion.findUniqueOrThrow({
           where: { id: question.id },
           include: this.detailInclude(),
         });
+
+        return {
+          question: updatedQuestion,
+          versioned: false,
+          previousQuestionId: undefined,
+        };
       });
       await this.activityLogs.record({
         actorUserId,
-        action: 'ASSESSMENT_QUESTION_UPDATED',
+        action: result.versioned
+          ? 'ASSESSMENT_QUESTION_VERSIONED'
+          : 'ASSESSMENT_QUESTION_UPDATED',
         entityType: 'AssessmentQuestion',
-        entityId: question.id,
+        entityId: result.question.id,
         description: {
-          skillId: question.skillId,
-          questionType: question.questionType,
-          status: question.status,
+          skillId: result.question.skillId,
+          questionType: result.question.questionType,
+          status: result.question.status,
           changedFields: Object.keys(dto),
+          previousQuestionId: result.previousQuestionId,
         },
       });
 
-      return question;
+      return result.question;
     } catch (error) {
       this.handleKnownError(error);
     }
@@ -228,9 +256,6 @@ export class AssessmentQuestionsService {
         throw new BadRequestException('TRUE_FALSE must have exactly one correct option');
       }
     }
-    if (questionType === QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
-      throw new BadRequestException('MULTIPLE_CHOICE must have at least one correct option');
-    }
   }
 
   private toOptionCreateManyInput(options: CreateAssessmentOptionDto[]) {
@@ -259,6 +284,69 @@ export class AssessmentQuestionsService {
       skill: { include: { category: true } },
       options: { orderBy: { orderIndex: 'asc' as const } },
     };
+  }
+
+  private hasVersionedQuestionChanges(dto: UpdateAssessmentQuestionDto) {
+    return VERSIONED_QUESTION_FIELDS.some((field) => dto[field] !== undefined);
+  }
+
+  private async isQuestionUsed(
+    tx: Prisma.TransactionClient,
+    questionId: string,
+  ) {
+    const [itemCount, answerCount] = await Promise.all([
+      tx.assessmentQuestionItem.count({ where: { questionId } }),
+      tx.assessmentAnswer.count({ where: { questionId } }),
+    ]);
+
+    return itemCount + answerCount > 0;
+  }
+
+  private async createQuestionVersion(
+    tx: Prisma.TransactionClient,
+    existing: Prisma.AssessmentQuestionGetPayload<{
+      include: { options: true };
+    }>,
+    dto: UpdateAssessmentQuestionDto,
+  ) {
+    const questionType = dto.questionType ?? existing.questionType;
+    const options = dto.options ?? this.toOptionDtos(existing.options);
+
+    this.validateOptions(questionType, options);
+
+    await tx.assessmentQuestion.update({
+      where: { id: existing.id },
+      data: { status: QuestionStatus.INACTIVE },
+    });
+
+    return tx.assessmentQuestion.create({
+      data: {
+        skillId: dto.skillId ?? existing.skillId,
+        questionText: dto.questionText ?? existing.questionText,
+        questionType,
+        level: dto.level ?? existing.level,
+        explanation: dto.explanation ?? existing.explanation,
+        status: dto.status ?? existing.status,
+        options: {
+          create: this.toOptionCreateManyInput(options),
+        },
+      },
+      include: this.detailInclude(),
+    });
+  }
+
+  private toOptionDtos(
+    options: Array<{
+      optionText: string;
+      isCorrect: boolean;
+      orderIndex: number;
+    }>,
+  ): CreateAssessmentOptionDto[] {
+    return options.map((option) => ({
+      optionText: option.optionText,
+      isCorrect: option.isCorrect,
+      orderIndex: option.orderIndex,
+    }));
   }
 
   private handleKnownError(error: unknown): never {

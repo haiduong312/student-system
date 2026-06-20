@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import {
+  NotificationChannel,
+  NotificationLogStatus,
+  NotificationType,
+  Prisma,
+} from '@prisma/client';
 import {
   buildPaginatedResult,
   getPagination,
@@ -113,6 +118,14 @@ export class NotificationsService {
         notificationType: input.notificationType,
         relatedEntityType: input.relatedEntityType,
         relatedEntityId: input.relatedEntityId,
+        logs: {
+          create: {
+            userId: input.userId,
+            channel: NotificationChannel.IN_APP,
+            status: NotificationLogStatus.SENT,
+            sentAt: new Date(),
+          },
+        },
       },
     });
   }

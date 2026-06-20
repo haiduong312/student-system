@@ -183,7 +183,7 @@ erDiagram
 | `UserRole` | `ADMIN`, `LECTURER`, `STUDENT` |
 | `CatalogStatus` | `ACTIVE`, `INACTIVE` |
 | `SkillType` | `COMMON`, `CAREER_SPECIFIC` |
-| `QuestionType` | `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE` |
+| `QuestionType` | `SINGLE_CHOICE`, `TRUE_FALSE` |
 | `QuestionStatus` | `ACTIVE`, `INACTIVE` |
 | `AssessmentStatus` | `IN_PROGRESS`, `SUBMITTED`, `GRADED`, `CANCELLED` |
 | `VerificationStatus` | `NO_EVIDENCE`, `PENDING`, `VERIFIED`, `REJECTED` |
@@ -277,7 +277,7 @@ Search hiện dùng Prisma `contains` với `mode: 'insensitive'` ở các servi
 Question bank:
 
 - `assessment_questions.skill_id` bắt buộc và dùng `onDelete: Restrict`.
-- `question_type` gồm single choice, multiple choice, true/false.
+- `question_type` gồm single choice và true/false.
 - `level` là số nguyên, API validate tối thiểu 1; UI hiện dùng level 1-3.
 - `DELETE /assessment-questions/:id` chuyển status sang `INACTIVE`.
 - `assessment_options` bị xóa cascade theo question.

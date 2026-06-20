@@ -6,7 +6,7 @@ export type RoadmapPhase =
   | 'SPECIALIZATION'
   | 'PRACTICE_PROJECT'
   | 'PORTFOLIO_PREPARATION';
-export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+export type QuestionType = 'SINGLE_CHOICE' | 'TRUE_FALSE';
 export type QuestionStatus = 'ACTIVE' | 'INACTIVE';
 export type EvidenceStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type VerificationStatus =
