@@ -33,6 +33,8 @@ import {
     CompetencyAnalysisResponseDto,
     RecommendationSummaryDto,
 } from "./dto/competency-analysis-response.dto";
+import { AnalysisDetailOutput } from "./domain/competency-analysis.types";
+import { CompetencyAnalysisEngine } from "./domain/competency-analysis.engine";
 
 type RecommendationSource =
     | "SPECIALIZATION_CAREER_SKILL_TEMPLATE"
@@ -40,11 +42,6 @@ type RecommendationSource =
     | "CATEGORY_SKILL_TEMPLATE"
     | "SKILL_TEMPLATE"
     | "DEFAULT_GENERATED";
-
-const EVIDENCE_COMPLETION_POINTS = 15;
-const VERIFIED_EVIDENCE_WEIGHT = 1;
-const PENDING_EVIDENCE_WEIGHT = 0.3;
-const REJECTED_EVIDENCE_WEIGHT = 0;
 
 interface StudentProfileContext {
     studentId: string;
@@ -91,6 +88,7 @@ export class CompetencyAnalysisService {
         private readonly prisma: PrismaService,
         private readonly studentAccessPolicy: StudentAccessPolicyService,
         private readonly activityLogs: ActivityLogsService,
+        private readonly analysisEngine: CompetencyAnalysisEngine,
     ) {}
 
     analyzeForCurrentStudent(userId: string, dto?: AnalyzeCompetencyDto) {
@@ -134,36 +132,25 @@ export class CompetencyAnalysisService {
             ),
         ]);
 
-        const analyzedSkills = this.calculateSkillAnalysis(
+        const analysis = this.analysisEngine.analyze(
             requiredSkills,
             studentSkills,
-        );
-        const totalWeight = this.round(
-            analyzedSkills.reduce((sum, item) => sum + item.weight, 0),
-        );
-        const totalSkillScore = this.round(
-            analyzedSkills.reduce((sum, item) => sum + item.skillScore, 0),
-        );
-        const matchPercent =
-            totalWeight > 0
-                ? this.round((totalSkillScore / totalWeight) * 100)
-                : 0;
-        const matchLevel = this.resolveMatchLevel(matchPercent);
-        const riskScore = this.calculateRiskScore(
             completionPercent,
-            matchPercent,
-            analyzedSkills,
+        );
+        const analyzedSkills = this.toAnalyzedSkills(
+            requiredSkills,
+            analysis.details,
         );
 
         const result = await this.saveAnalysisWithRecommendations({
             profile,
             analyzedSkills,
-            completionPercent,
-            matchPercent,
-            matchLevel,
-            riskScore,
-            totalWeight,
-            totalSkillScore,
+            completionPercent: analysis.completionPercent,
+            matchPercent: analysis.matchPercent,
+            matchLevel: analysis.matchLevel,
+            riskScore: analysis.riskScore,
+            totalWeight: analysis.totalWeight,
+            totalSkillScore: analysis.totalSkillScore,
             deleteOldNewRecommendations:
                 dto.deleteOldNewRecommendations ?? true,
         });
@@ -365,39 +352,29 @@ export class CompetencyAnalysisService {
         });
     }
 
-    calculateSkillAnalysis(
+    private toAnalyzedSkills(
         requiredSkills: RequiredSkillForAnalysis[],
-        studentSkills: Array<{ skillId: string; currentLevel: number }>,
+        analysisDetails: AnalysisDetailOutput[],
     ): AnalyzedSkill[] {
-        const studentSkillMap = new Map(
-            studentSkills.map((skill) => [skill.skillId, skill.currentLevel]),
+        const detailsBySkillId = new Map(
+            analysisDetails.map((detail) => [detail.skillId, detail]),
         );
 
         return requiredSkills.map((requiredSkill) => {
-            const currentLevel =
-                studentSkillMap.get(requiredSkill.skillId) ?? 0;
-            const skillScore =
-                requiredSkill.requiredLevel <= 0
-                    ? this.round(requiredSkill.weight)
-                    : this.round(
-                          Math.min(
-                              currentLevel / requiredSkill.requiredLevel,
-                              1,
-                          ) * requiredSkill.weight,
-                      );
-            const gap = Math.max(requiredSkill.requiredLevel - currentLevel, 0);
-            const priorityScore = this.round(gap * requiredSkill.weight);
+            const detail = detailsBySkillId.get(requiredSkill.skillId);
+            if (!detail) {
+                throw new BadRequestException(
+                    `Missing analysis detail for skill ${requiredSkill.skillId}`,
+                );
+            }
 
             return {
                 ...requiredSkill,
-                currentLevel,
-                gap,
-                skillScore,
-                priorityScore,
-                status: this.resolveSkillStatus(
-                    currentLevel,
-                    requiredSkill.requiredLevel,
-                ),
+                currentLevel: detail.currentLevel,
+                gap: detail.gap,
+                skillScore: detail.achievedScore,
+                priorityScore: detail.priorityScore,
+                status: detail.status,
             };
         });
     }
@@ -692,50 +669,6 @@ export class CompetencyAnalysisService {
         };
     }
 
-    private resolveSkillStatus(currentLevel: number, requiredLevel: number) {
-        if (currentLevel >= requiredLevel) {
-            return AnalysisSkillStatus.ACHIEVED;
-        }
-        if (currentLevel > 0) {
-            return AnalysisSkillStatus.NEED_IMPROVEMENT;
-        }
-
-        return AnalysisSkillStatus.MISSING;
-    }
-
-    private resolveMatchLevel(matchPercent: number) {
-        if (matchPercent < 40) {
-            return MatchLevel.NOT_MATCHED;
-        }
-        if (matchPercent < 70) {
-            return MatchLevel.DEVELOPING;
-        }
-        if (matchPercent < 85) {
-            return MatchLevel.GOOD_MATCH;
-        }
-
-        return MatchLevel.STRONG_MATCH;
-    }
-
-    private calculateRiskScore(
-        completionPercent: number,
-        matchPercent: number,
-        details: AnalyzedSkill[],
-    ) {
-        let riskScore = 0;
-        if (completionPercent < 50) {
-            riskScore += 25;
-        }
-        if (matchPercent < 40) {
-            riskScore += 25;
-        }
-        if (details.every((detail) => detail.currentLevel <= 0)) {
-            riskScore += 20;
-        }
-
-        return Math.min(riskScore, 100);
-    }
-
     private toSkillLevel(requiredLevel: number) {
         if (requiredLevel <= 0) {
             return SkillLevel.ZERO;
@@ -763,7 +696,7 @@ export class CompetencyAnalysisService {
             certificates,
             activities,
             experiences,
-            evidenceCompletionScore,
+            evidenceStatuses,
         ] = await Promise.all([
             this.prisma.student.findUnique({ where: { id: studentId } }),
             this.prisma.studentSkill.count({ where: { studentId } }),
@@ -771,7 +704,7 @@ export class CompetencyAnalysisService {
             this.prisma.studentCertificate.count({ where: { studentId } }),
             this.prisma.studentActivity.count({ where: { studentId } }),
             this.prisma.studentExperience.count({ where: { studentId } }),
-            this.calculateEvidenceCompletionScore({
+            this.getScopedEvidenceStatuses({
                 studentId,
                 careerGoalId,
                 specializationId,
@@ -779,31 +712,19 @@ export class CompetencyAnalysisService {
             }),
         ]);
 
-        let percent = 0;
-        if (student?.studentCode && student?.major) {
-            percent += 10;
-        }
-        if (careerGoalId) {
-            percent += 15;
-        }
-        if (skills > 0) {
-            percent += 20;
-        }
-        if (projects > 0) {
-            percent += 20;
-        }
-        if (certificates > 0) {
-            percent += 10;
-        }
-        if (activities > 0 || experiences > 0) {
-            percent += 10;
-        }
-        percent += evidenceCompletionScore;
-
-        return this.round(Math.min(percent, 100));
+        return this.analysisEngine.calculateCompletionPercent({
+            hasBasicProfile: Boolean(student?.studentCode && student?.major),
+            hasCareerGoal: Boolean(careerGoalId),
+            skillCount: skills,
+            projectCount: projects,
+            certificateCount: certificates,
+            activityCount: activities,
+            experienceCount: experiences,
+            evidenceStatuses,
+        });
     }
 
-    private async calculateEvidenceCompletionScore(input: {
+    private async getScopedEvidenceStatuses(input: {
         studentId: string;
         careerGoalId?: string | null;
         specializationId?: string | null;
@@ -819,21 +740,15 @@ export class CompetencyAnalysisService {
         });
 
         if (!evidences.length) {
-            return 0;
+            return [];
         }
 
         const scopedEvidences = await this.filterEvidencesByAnalysisScope(
             evidences,
             input,
         );
-        const weightedEvidenceScore = scopedEvidences.reduce(
-            (sum, evidence) => sum + this.getEvidenceStatusWeight(evidence.status),
-            0,
-        );
 
-        return this.round(
-            Math.min(weightedEvidenceScore, 1) * EVIDENCE_COMPLETION_POINTS,
-        );
+        return scopedEvidences.map((evidence) => evidence.status);
     }
 
     private async filterEvidencesByAnalysisScope(
@@ -897,19 +812,6 @@ export class CompetencyAnalysisService {
         });
     }
 
-    private getEvidenceStatusWeight(status: EvidenceStatus) {
-        switch (status) {
-            case EvidenceStatus.VERIFIED:
-                return VERIFIED_EVIDENCE_WEIGHT;
-            case EvidenceStatus.PENDING:
-                return PENDING_EVIDENCE_WEIGHT;
-            case EvidenceStatus.REJECTED:
-                return REJECTED_EVIDENCE_WEIGHT;
-            default:
-                return 0;
-        }
-    }
-
     private async getStudentIdByUserId(userId: string) {
         const student = await this.prisma.student.findUnique({
             where: { userId },
@@ -922,7 +824,4 @@ export class CompetencyAnalysisService {
         return student.id;
     }
 
-    private round(value: number) {
-        return Math.round(value * 100) / 100;
-    }
 }

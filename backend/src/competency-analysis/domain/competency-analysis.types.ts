@@ -1,4 +1,4 @@
-import { AnalysisSkillStatus, MatchLevel } from '@prisma/client';
+import { AnalysisSkillStatus, EvidenceStatus, MatchLevel } from '@prisma/client';
 
 export interface RequiredSkillInput {
   skillId: string;
@@ -32,6 +32,26 @@ export interface CompetencyAnalysisOutput {
   matchPercent: number;
   riskScore: number;
   matchLevel: MatchLevel;
+  totalWeight: number;
+  totalSkillScore: number;
   details: AnalysisDetailOutput[];
   missingSkills: AnalysisDetailOutput[];
+}
+
+export interface CompletionPercentInput {
+  hasBasicProfile: boolean;
+  hasCareerGoal: boolean;
+  skillCount: number;
+  projectCount: number;
+  certificateCount: number;
+  activityCount: number;
+  experienceCount: number;
+  evidenceStatuses: EvidenceStatus[];
+}
+
+export interface OverallCompetencyScoreOutput {
+  totalWeight: number;
+  totalSkillScore: number;
+  matchPercent: number;
+  matchLevel: MatchLevel;
 }
