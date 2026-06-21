@@ -1,10 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CatalogStatus, Prisma } from '@prisma/client';
+import {
+  CatalogStatus,
+  Prisma,
+  ResourceProgressStatus,
+  StudentResourceProgress,
+} from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
   buildPaginatedResult,
@@ -15,6 +21,7 @@ import { CreateLearningResourceDto } from './dto/create-learning-resource.dto';
 import { LearningResourceQueryDto } from './dto/learning-resource-query.dto';
 import { LinkResourceSkillDto } from './dto/link-resource-skill.dto';
 import { UpdateLearningResourceDto } from './dto/update-learning-resource.dto';
+import { UpdateResourceProgressDto } from './dto/update-resource-progress.dto';
 import { UpdateResourceSkillDto } from './dto/update-resource-skill.dto';
 
 const SORTABLE_FIELDS = new Set([
@@ -26,6 +33,22 @@ const SORTABLE_FIELDS = new Set([
   'createdAt',
   'updatedAt',
 ]);
+
+const RESOURCE_PROGRESS_STATUS_TRANSITIONS: Record<
+  ResourceProgressStatus,
+  ResourceProgressStatus[]
+> = {
+  [ResourceProgressStatus.NOT_STARTED]: [
+    ResourceProgressStatus.IN_PROGRESS,
+    ResourceProgressStatus.SKIPPED,
+  ],
+  [ResourceProgressStatus.IN_PROGRESS]: [
+    ResourceProgressStatus.COMPLETED,
+    ResourceProgressStatus.SKIPPED,
+  ],
+  [ResourceProgressStatus.COMPLETED]: [ResourceProgressStatus.IN_PROGRESS],
+  [ResourceProgressStatus.SKIPPED]: [ResourceProgressStatus.IN_PROGRESS],
+};
 
 @Injectable()
 export class LearningResourcesService {
@@ -269,6 +292,64 @@ export class LearningResourcesService {
     return updated;
   }
 
+  async updateMyProgress(
+    userId: string,
+    resourceId: string,
+    dto: UpdateResourceProgressDto,
+  ) {
+    const studentId = await this.getStudentIdByUserId(userId);
+    await this.ensureActiveLearningResource(resourceId);
+    if (dto.recommendationId) {
+      await this.ensureRecommendationContextOwnsResource(
+        studentId,
+        dto.recommendationId,
+        resourceId,
+      );
+    }
+
+    const existing = await this.prisma.studentResourceProgress.findUnique({
+      where: {
+        studentId_resourceId: {
+          studentId,
+          resourceId,
+        },
+      },
+    });
+    const currentStatus =
+      existing?.status ?? ResourceProgressStatus.NOT_STARTED;
+    this.assertValidProgressTransition(currentStatus, dto.status, Boolean(existing));
+
+    const now = new Date();
+    const timestampData = this.getProgressTimestampData(existing, dto.status, now);
+
+    return this.prisma.studentResourceProgress.upsert({
+      where: {
+        studentId_resourceId: {
+          studentId,
+          resourceId,
+        },
+      },
+      create: {
+        studentId,
+        resourceId,
+        recommendationId: dto.recommendationId,
+        status: dto.status,
+        note: dto.note,
+        ...timestampData,
+      },
+      update: {
+        recommendationId: dto.recommendationId,
+        status: dto.status,
+        note: dto.note,
+        ...timestampData,
+      },
+      include: {
+        resource: true,
+        recommendation: true,
+      },
+    });
+  }
+
   private async ensureResourceExists(id: string) {
     const resource = await this.prisma.learningResource.findUnique({
       where: { id },
@@ -279,6 +360,103 @@ export class LearningResourcesService {
     }
 
     return resource;
+  }
+
+  private async ensureActiveLearningResource(id: string) {
+    const resource = await this.prisma.learningResource.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!resource) {
+      throw new NotFoundException('Learning resource not found');
+    }
+    if (resource.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Inactive learning resource cannot be updated');
+    }
+
+    return resource;
+  }
+
+  private async ensureRecommendationContextOwnsResource(
+    studentId: string,
+    recommendationId: string,
+    resourceId: string,
+  ) {
+    const recommendation = await this.prisma.studentRecommendation.findFirst({
+      where: { id: recommendationId, studentId },
+      select: {
+        id: true,
+        resourceLinks: {
+          where: { resourceId },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!recommendation) {
+      throw new ForbiddenException('Recommendation does not belong to current student');
+    }
+    if (!recommendation.resourceLinks.length) {
+      throw new BadRequestException(
+        'Learning resource is not linked to this recommendation',
+      );
+    }
+  }
+
+  private assertValidProgressTransition(
+    currentStatus: ResourceProgressStatus,
+    nextStatus: ResourceProgressStatus,
+    hasExistingProgress: boolean,
+  ) {
+    if (!hasExistingProgress && nextStatus === ResourceProgressStatus.NOT_STARTED) {
+      return;
+    }
+    if (hasExistingProgress && currentStatus === nextStatus) {
+      return;
+    }
+
+    const allowedNextStatuses =
+      RESOURCE_PROGRESS_STATUS_TRANSITIONS[currentStatus] ?? [];
+    if (allowedNextStatuses.includes(nextStatus)) {
+      return;
+    }
+
+    if (nextStatus === ResourceProgressStatus.NOT_STARTED) {
+      throw new BadRequestException(
+        'Resetting resource progress to NOT_STARTED is not allowed',
+      );
+    }
+
+    throw new BadRequestException(
+      `Invalid resource progress status transition: ${currentStatus} -> ${nextStatus}`,
+    );
+  }
+
+  private getProgressTimestampData(
+    existing: StudentResourceProgress | null,
+    status: ResourceProgressStatus,
+    now: Date,
+  ) {
+    switch (status) {
+      case ResourceProgressStatus.IN_PROGRESS:
+        return {
+          startedAt: existing?.startedAt ?? now,
+          lastAccessedAt: now,
+        };
+      case ResourceProgressStatus.COMPLETED:
+        return {
+          startedAt: existing?.startedAt ?? now,
+          completedAt: now,
+          lastAccessedAt: now,
+        };
+      case ResourceProgressStatus.SKIPPED:
+        return {
+          lastAccessedAt: now,
+        };
+      case ResourceProgressStatus.NOT_STARTED:
+      default:
+        return {};
+    }
   }
 
   private async ensureSkillCanBeLinked(skillId: string) {
@@ -398,5 +576,17 @@ export class LearningResourcesService {
     }
 
     throw error;
+  }
+
+  private async getStudentIdByUserId(userId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new ForbiddenException('Current user is not a student');
+    }
+
+    return student.id;
   }
 }

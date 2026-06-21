@@ -1,10 +1,38 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  LearningResourceType,
+  ResourceProgressStatus,
   RoadmapItemStatus,
   RoadmapItemType,
   RoadmapPhase,
   RoadmapStatus,
 } from '@prisma/client';
+
+export class RoadmapItemResourceResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  title: string;
+
+  @ApiProperty({ enum: LearningResourceType })
+  resourceType: LearningResourceType;
+
+  @ApiPropertyOptional({ nullable: true })
+  url: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  provider: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  estimatedDuration: string | null;
+
+  @ApiProperty({ enum: ResourceProgressStatus })
+  progressStatus: ResourceProgressStatus;
+
+  @ApiProperty()
+  orderIndex: number;
+}
 
 export class RoadmapItemResponseDto {
   @ApiProperty()
@@ -42,6 +70,9 @@ export class RoadmapItemResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   deadline: Date | null;
+
+  @ApiProperty({ type: [RoadmapItemResourceResponseDto] })
+  resources: RoadmapItemResourceResponseDto[];
 }
 
 export class RoadmapPhaseResponseDto {

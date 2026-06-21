@@ -8,13 +8,16 @@ import {
   AnalysisSkillStatus,
   CatalogStatus,
   DifficultyLevel,
+  LearningResourceType,
   Prisma,
   RecommendationType,
+  ResourceProgressStatus,
   RoadmapItemStatus,
   RoadmapItemType,
   RoadmapPhase,
   RoadmapStatus,
   SkillLevel,
+  StudentResourceProgress,
   TemplateStatus,
 } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
@@ -64,11 +67,21 @@ type RoadmapDetail = Prisma.DevelopmentRoadmapGetPayload<{
         skill: {
           include: {
             category: true;
+            learningResourceSkills: {
+              include: {
+                resource: true;
+              };
+            };
           };
         };
         recommendation: {
           include: {
             recommendationTemplate: true;
+            resourceLinks: {
+              include: {
+                resource: true;
+              };
+            };
           };
         };
       };
@@ -128,6 +141,16 @@ interface RoadmapItemDraft {
   priorityScore: number;
   recommendationPriority: number;
   skillName: string;
+}
+
+interface RoadmapItemResource {
+  id: string;
+  title: string;
+  resourceType: LearningResourceType;
+  url: string | null;
+  provider: string | null;
+  estimatedDuration: string | null;
+  orderIndex: number;
 }
 
 @Injectable()
@@ -277,8 +300,9 @@ export class RoadmapsService {
         throw new NotFoundException('Roadmap not found');
       }
 
-      return this.toRoadmapResponse(roadmap);
+      return roadmap;
     });
+    const response = await this.toRoadmapResponse(roadmap);
     await this.activityLogs.record({
       actorUserId: userId,
       action: 'ROADMAP_ITEM_STATUS_UPDATED',
@@ -292,7 +316,7 @@ export class RoadmapsService {
       },
     });
 
-    return roadmap;
+    return response;
   }
 
   async updateItemStatus(
@@ -427,26 +451,27 @@ export class RoadmapsService {
         include: this.roadmapDetailInclude(),
       });
 
-      return this.toRoadmapResponse(roadmap);
+      return roadmap;
     });
+    const response = await this.toRoadmapResponse(roadmap);
     await this.activityLogs.record({
       actorUserId,
       action: 'ROADMAP_GENERATED',
       entityType: 'DevelopmentRoadmap',
-      entityId: roadmap.roadmapId,
+      entityId: response.roadmapId,
       description: {
         studentId,
         careerGoalId,
         specializationId: profile.specializationId,
-        version: roadmap.version,
-        itemCount: roadmap.phases.reduce(
+        version: response.version,
+        itemCount: response.phases.reduce(
           (sum, phase) => sum + phase.items.length,
           0,
         ),
       },
     });
 
-    return roadmap;
+    return response;
   }
 
   private async getStudentProfile(studentId: string) {
@@ -816,8 +841,23 @@ export class RoadmapsService {
     };
   }
 
-  private toRoadmapResponse(roadmap: RoadmapDetail): RoadmapResponseDto {
+  private async toRoadmapResponse(roadmap: RoadmapDetail): Promise<RoadmapResponseDto> {
     const sortedItems = this.sortRoadmapResponseItems(roadmap.items);
+    const resourcesByItemId = new Map<string, RoadmapItemResource[]>();
+    const resourceIds = new Set<string>();
+
+    for (const item of sortedItems) {
+      const resources = this.getRoadmapItemResources(item);
+      resourcesByItemId.set(item.id, resources);
+      for (const resource of resources) {
+        resourceIds.add(resource.id);
+      }
+    }
+
+    const progressByResourceId = await this.getResourceProgressByResourceId(
+      roadmap.studentId,
+      Array.from(resourceIds),
+    );
     const phases = Object.values(RoadmapPhase)
       .sort((a, b) => PHASE_ORDER[a] - PHASE_ORDER[b])
       .map<RoadmapPhaseResponseDto>((phase) => ({
@@ -837,6 +877,12 @@ export class RoadmapsService {
             weight: Number(item.weight),
             status: item.status,
             deadline: item.deadline,
+            resources: (resourcesByItemId.get(item.id) ?? []).map((resource) =>
+              this.toRoadmapItemResourceResponse(
+                resource,
+                progressByResourceId.get(resource.id),
+              ),
+            ),
           })),
       }))
       .filter((phase) => phase.items.length > 0);
@@ -851,6 +897,69 @@ export class RoadmapsService {
       status: roadmap.status,
       phases,
     };
+  }
+
+  private getRoadmapItemResources(
+    item: RoadmapDetail['items'][number],
+  ): RoadmapItemResource[] {
+    const recommendationResources = item.recommendation?.resourceLinks
+      .filter((link) => link.resource.status === CatalogStatus.ACTIVE)
+      .map<RoadmapItemResource>((link) => ({
+        id: link.resourceId,
+        title: link.resourceTitle,
+        resourceType: link.resourceType,
+        url: link.resourceUrl,
+        provider: link.provider,
+        estimatedDuration: link.estimatedDuration,
+        orderIndex: link.orderIndex,
+      })) ?? [];
+
+    if (recommendationResources.length > 0) {
+      return recommendationResources;
+    }
+
+    return (
+      item.skill?.learningResourceSkills
+        .filter((link) => link.resource.status === CatalogStatus.ACTIVE)
+        .map<RoadmapItemResource>((link) => ({
+          id: link.resourceId,
+          title: link.resource.title,
+          resourceType: link.resource.resourceType,
+          url: link.resource.url,
+          provider: link.resource.provider,
+          estimatedDuration: link.resource.estimatedDuration,
+          orderIndex: link.orderIndex,
+        })) ?? []
+    );
+  }
+
+  private toRoadmapItemResourceResponse(
+    resource: RoadmapItemResource,
+    progress?: StudentResourceProgress,
+  ) {
+    return {
+      ...resource,
+      progressStatus: progress?.status ?? ResourceProgressStatus.NOT_STARTED,
+    };
+  }
+
+  private async getResourceProgressByResourceId(
+    studentId: string,
+    resourceIds: string[],
+  ) {
+    const uniqueResourceIds = Array.from(new Set(resourceIds));
+    if (!uniqueResourceIds.length) {
+      return new Map<string, StudentResourceProgress>();
+    }
+
+    const progress = await this.prisma.studentResourceProgress.findMany({
+      where: {
+        studentId,
+        resourceId: { in: uniqueResourceIds },
+      },
+    });
+
+    return new Map(progress.map((item) => [item.resourceId, item]));
   }
 
   private sortRoadmapResponseItems(roadmapItems: RoadmapDetail['items']) {
@@ -870,8 +979,33 @@ export class RoadmapsService {
       items: {
         orderBy: [{ orderIndex: 'asc' as const }],
         include: {
-          skill: { include: { category: true } },
-          recommendation: { include: { recommendationTemplate: true } },
+          skill: {
+            include: {
+              category: true,
+              learningResourceSkills: {
+                where: { resource: { status: CatalogStatus.ACTIVE } },
+                orderBy: [
+                  { orderIndex: 'asc' as const },
+                  { relevanceScore: 'desc' as const },
+                  { createdAt: 'asc' as const },
+                ],
+                include: { resource: true },
+              },
+            },
+          },
+          recommendation: {
+            include: {
+              recommendationTemplate: true,
+              resourceLinks: {
+                where: { resource: { status: CatalogStatus.ACTIVE } },
+                orderBy: [
+                  { orderIndex: 'asc' as const },
+                  { createdAt: 'asc' as const },
+                ],
+                include: { resource: true },
+              },
+            },
+          },
         },
       },
     };

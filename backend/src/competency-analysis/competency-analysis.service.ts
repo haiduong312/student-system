@@ -573,6 +573,10 @@ export class CompetencyAnalysisService {
                         status: StudentRecommendationStatus.NEW,
                     },
                 });
+                await this.copyTemplateResourcesToRecommendation(tx, {
+                    templateId: decision.templateId,
+                    recommendationId: recommendation.id,
+                });
 
                 const recommendationSummary: RecommendationSummaryDto = {
                     id: recommendation.id,
@@ -630,6 +634,51 @@ export class CompetencyAnalysisService {
                     (a, b) => b.priorityScore - a.priorityScore,
                 ),
             };
+        });
+    }
+
+    private async copyTemplateResourcesToRecommendation(
+        tx: Prisma.TransactionClient,
+        input: {
+            templateId: string | null;
+            recommendationId: string;
+        },
+    ) {
+        if (!input.templateId) {
+            return;
+        }
+
+        const templateResources = await tx.recommendationTemplateResource.findMany(
+            {
+                where: {
+                    templateId: input.templateId,
+                    resource: { status: CatalogStatus.ACTIVE },
+                },
+                orderBy: [
+                    { orderIndex: "asc" },
+                    { priority: "desc" },
+                    { createdAt: "asc" },
+                ],
+                include: { resource: true },
+            },
+        );
+        if (!templateResources.length) {
+            return;
+        }
+
+        await tx.studentRecommendationResource.createMany({
+            data: templateResources.map((link) => ({
+                recommendationId: input.recommendationId,
+                resourceId: link.resourceId,
+                orderIndex: link.orderIndex,
+                resourceTitle: link.resource.title,
+                resourceDescription: link.resource.description,
+                resourceType: link.resource.resourceType,
+                resourceUrl: link.resource.url,
+                provider: link.resource.provider,
+                estimatedDuration: link.resource.estimatedDuration,
+                difficultyLevel: link.resource.difficultyLevel,
+            })),
         });
     }
 

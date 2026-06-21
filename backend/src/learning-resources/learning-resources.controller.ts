@@ -22,6 +22,7 @@ import { CreateLearningResourceDto } from './dto/create-learning-resource.dto';
 import { LearningResourceQueryDto } from './dto/learning-resource-query.dto';
 import { LinkResourceSkillDto } from './dto/link-resource-skill.dto';
 import { UpdateLearningResourceDto } from './dto/update-learning-resource.dto';
+import { UpdateResourceProgressDto } from './dto/update-resource-progress.dto';
 import { UpdateResourceSkillDto } from './dto/update-resource-skill.dto';
 import { LearningResourcesService } from './learning-resources.service';
 
@@ -53,6 +54,17 @@ export class LearningResourcesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.learningResourcesService.findOne(id);
+  }
+
+  @Roles(UserRole.STUDENT)
+  @ApiOkResponse({ description: 'Current student resource progress updated' })
+  @Patch(':id/progress')
+  updateProgress(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateResourceProgressDto,
+  ) {
+    return this.learningResourcesService.updateMyProgress(user.id, id, dto);
   }
 
   @ApiOkResponse({ description: 'Learning resource updated' })
