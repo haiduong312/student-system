@@ -3,6 +3,7 @@ import {
   AssignmentStatus,
   CatalogStatus,
   DifficultyLevel,
+  LearningResourceType,
   NotificationChannel,
   NotificationLogStatus,
   NotificationType,
@@ -87,6 +88,46 @@ type SeedStudentSkill = {
   skillName: string;
   currentLevel: number;
   description: string;
+};
+
+type SeedLearningResourceTrack = {
+  skillNames: string[];
+  targetLevel: SkillLevel;
+  roadmapPhase: RoadmapPhase;
+  resources: Array<{
+    title: string;
+    description: string;
+    resourceType: LearningResourceType;
+    url: string | null;
+    provider: string | null;
+    difficultyLevel: DifficultyLevel;
+    estimatedDuration: string;
+  }>;
+};
+
+type SeedLearningResource = {
+  title: string;
+  description: string;
+  resourceType: LearningResourceType;
+  url: string | null;
+  provider: string | null;
+  difficultyLevel: DifficultyLevel;
+  estimatedDuration: string;
+  language: string;
+  isFree: boolean;
+  status: CatalogStatus;
+  skillLinks: Array<{
+    skillName: string;
+    targetLevel: SkillLevel;
+    roadmapPhase: RoadmapPhase;
+    relevanceScore: number;
+    orderIndex: number;
+  }>;
+  templateLinks: Array<{
+    skillName: string;
+    orderIndex: number;
+    priority: number;
+  }>;
 };
 
 const careerGoalSeeds = [
@@ -754,6 +795,353 @@ const studentSkillSeeds: SeedStudentSkill[] = [
   { email: 'student.general@example.com', skillName: 'Communication', currentLevel: 1, description: 'Can summarize progress and blockers in class projects.' },
 ];
 
+const learningResourceTrackSeeds: SeedLearningResourceTrack[] = [
+  {
+    skillNames: ['HTML', 'CSS'],
+    targetLevel: SkillLevel.INTERMEDIATE,
+    roadmapPhase: RoadmapPhase.SPECIALIZATION,
+    resources: [
+      {
+        title: 'MDN HTML and CSS Foundations',
+        description: 'Read the core MDN guides for semantic HTML, selectors, layout, and responsive styling.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://developer.mozilla.org/en-US/docs/Learn',
+        provider: 'MDN Web Docs',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '4-6 hours',
+      },
+      {
+        title: 'HTML and CSS Responsive Layout Video',
+        description: 'Watch a guided walkthrough of page structure, CSS layout, and responsive UI patterns.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/html/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '2-3 hours',
+      },
+      {
+        title: 'HTML CSS Landing Page Practice',
+        description: 'Practice building a responsive landing page section with semantic markup and reusable CSS.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '3-4 hours',
+      },
+      {
+        title: 'Responsive Portfolio Page Project',
+        description: 'Create a one-page personal portfolio with navigation, sections, responsive layout, and accessible content.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+  {
+    skillNames: ['JavaScript'],
+    targetLevel: SkillLevel.GOOD,
+    roadmapPhase: RoadmapPhase.SPECIALIZATION,
+    resources: [
+      {
+        title: 'JavaScript Guide by MDN',
+        description: 'Study JavaScript syntax, objects, functions, async behavior, and browser APIs.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide',
+        provider: 'MDN Web Docs',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '6-8 hours',
+      },
+      {
+        title: 'JavaScript Fundamentals Video Course',
+        description: 'Watch a structured JavaScript course covering language basics and small browser interactions.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/javascript/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-6 hours',
+      },
+      {
+        title: 'JavaScript DOM Practice Set',
+        description: 'Complete focused exercises for events, DOM updates, form validation, arrays, and async fetch.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'JavaScript Todo App Project',
+        description: 'Build a todo app with add, edit, filter, persistence, validation, and clear component-like structure.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+  {
+    skillNames: ['TypeScript'],
+    targetLevel: SkillLevel.INTERMEDIATE,
+    roadmapPhase: RoadmapPhase.SPECIALIZATION,
+    resources: [
+      {
+        title: 'TypeScript Handbook Essentials',
+        description: 'Read the TypeScript handbook sections on types, interfaces, narrowing, generics, and configuration.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://www.typescriptlang.org/docs/handbook/intro.html',
+        provider: 'TypeScript',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '5-6 hours',
+      },
+      {
+        title: 'TypeScript Crash Course Video',
+        description: 'Watch a practical TypeScript walkthrough focused on typed functions, objects, and frontend usage.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/typescript/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '2-4 hours',
+      },
+      {
+        title: 'TypeScript Refactor Practice',
+        description: 'Refactor plain JavaScript snippets into typed TypeScript with interfaces and safe return types.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '3-4 hours',
+      },
+      {
+        title: 'Typed API Client Mini Project',
+        description: 'Create a typed API client module with response models, error types, and reusable fetch helpers.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+  {
+    skillNames: ['React'],
+    targetLevel: SkillLevel.GOOD,
+    roadmapPhase: RoadmapPhase.SPECIALIZATION,
+    resources: [
+      {
+        title: 'React Learn Documentation',
+        description: 'Study React components, props, state, effects, events, and rendering from the official learn guide.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://react.dev/learn',
+        provider: 'React',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '6-8 hours',
+      },
+      {
+        title: 'React Hooks and Components Video',
+        description: 'Watch a React course covering component composition, hooks, lists, forms, and API data.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/react/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-6 hours',
+      },
+      {
+        title: 'React Hooks Practice Lab',
+        description: 'Practice state, derived values, effects, controlled inputs, and component extraction.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'React Dashboard Project',
+        description: 'Build a small dashboard with filters, cards, table state, loading states, and API integration.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.ADVANCED,
+        estimatedDuration: '1-2 weeks',
+      },
+    ],
+  },
+  {
+    skillNames: ['Next.js'],
+    targetLevel: SkillLevel.GOOD,
+    roadmapPhase: RoadmapPhase.SPECIALIZATION,
+    resources: [
+      {
+        title: 'Next.js Learn Course',
+        description: 'Work through official Next.js lessons for routing, rendering, data fetching, and deployment basics.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://nextjs.org/learn',
+        provider: 'Next.js',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '6-8 hours',
+      },
+      {
+        title: 'Next.js App Router Video Walkthrough',
+        description: 'Watch a practical walkthrough of App Router pages, layouts, server components, and data fetching.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/nextjs/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '3-5 hours',
+      },
+      {
+        title: 'Next.js Routing Practice',
+        description: 'Practice nested routes, loading states, dynamic params, and server-side data rendering.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'Next.js Blog Project',
+        description: 'Build a small blog or learning journal with routes, markdown-like content, metadata, and deployment notes.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.ADVANCED,
+        estimatedDuration: '1-2 weeks',
+      },
+    ],
+  },
+  {
+    skillNames: ['Git'],
+    targetLevel: SkillLevel.INTERMEDIATE,
+    roadmapPhase: RoadmapPhase.CORE_FOUNDATION,
+    resources: [
+      {
+        title: 'Pro Git Book Core Chapters',
+        description: 'Read the core chapters on repositories, commits, branches, remotes, merging, and collaboration.',
+        resourceType: LearningResourceType.DOCUMENT,
+        url: 'https://git-scm.com/book/en/v2',
+        provider: 'Git SCM',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'Git and GitHub Workflow Video',
+        description: 'Watch a guided workflow for clone, branch, commit, pull request, merge, and conflict handling.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/git/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '2-3 hours',
+      },
+      {
+        title: 'Git Branching Practice Lab',
+        description: 'Practice creating branches, resolving conflicts, rebasing small changes, and reading history.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '3-4 hours',
+      },
+      {
+        title: 'Team Repository Collaboration Project',
+        description: 'Simulate a small team repository with feature branches, issues, pull requests, and review notes.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+  {
+    skillNames: ['SQL'],
+    targetLevel: SkillLevel.INTERMEDIATE,
+    roadmapPhase: RoadmapPhase.CORE_FOUNDATION,
+    resources: [
+      {
+        title: 'SQLBolt Interactive Lessons',
+        description: 'Complete lessons on select, filter, joins, aggregation, grouping, ordering, inserts, and updates.',
+        resourceType: LearningResourceType.ARTICLE,
+        url: 'https://sqlbolt.com/',
+        provider: 'SQLBolt',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '4-6 hours',
+      },
+      {
+        title: 'SQL Joins and Aggregation Video',
+        description: 'Watch a practical SQL lesson focused on joins, group by, aggregate functions, and query reading.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/sql/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '2-3 hours',
+      },
+      {
+        title: 'SQL Query Practice Set',
+        description: 'Solve query exercises involving joins, filters, aggregates, subqueries, and result validation.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'Mini Analytics Database Project',
+        description: 'Design tables and write dashboard-style SQL queries for a small student activity dataset.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+  {
+    skillNames: ['Problem Solving'],
+    targetLevel: SkillLevel.INTERMEDIATE,
+    roadmapPhase: RoadmapPhase.CORE_FOUNDATION,
+    resources: [
+      {
+        title: 'Problem Solving Patterns Article',
+        description: 'Read about decomposition, examples, constraints, edge cases, and step-by-step coding strategies.',
+        resourceType: LearningResourceType.ARTICLE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '2-3 hours',
+      },
+      {
+        title: 'Algorithms Problem Solving Video',
+        description: 'Watch a beginner-friendly explanation of arrays, strings, loops, maps, and basic algorithm patterns.',
+        resourceType: LearningResourceType.VIDEO,
+        url: 'https://www.freecodecamp.org/news/tag/algorithms/',
+        provider: 'freeCodeCamp',
+        difficultyLevel: DifficultyLevel.BEGINNER,
+        estimatedDuration: '3-4 hours',
+      },
+      {
+        title: 'Problem Solving Practice Set',
+        description: 'Solve small exercises using loops, arrays, maps, string handling, and clear written reasoning.',
+        resourceType: LearningResourceType.PRACTICE,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '4-5 hours',
+      },
+      {
+        title: 'Algorithm Notes Mini Project',
+        description: 'Create a small repository of solved problems with explanations, complexity notes, and test cases.',
+        resourceType: LearningResourceType.PROJECT,
+        url: null,
+        provider: 'Student System Demo',
+        difficultyLevel: DifficultyLevel.INTERMEDIATE,
+        estimatedDuration: '1 week',
+      },
+    ],
+  },
+];
+
 const decimal = (value: number) => new Prisma.Decimal(value.toString());
 
 function specializationKey(careerGoalName: string, specializationName: string) {
@@ -1335,6 +1723,139 @@ async function seedCareerRecommendationTemplate(
   }
 }
 
+function buildLearningResourceSeeds(): SeedLearningResource[] {
+  return learningResourceTrackSeeds.flatMap((track) =>
+    track.resources.map((resource, index) => ({
+      ...resource,
+      language: 'en',
+      isFree: true,
+      status: CatalogStatus.ACTIVE,
+      skillLinks: track.skillNames.map((skillName) => ({
+        skillName,
+        targetLevel: track.targetLevel,
+        roadmapPhase: track.roadmapPhase,
+        relevanceScore: 95 - index * 5,
+        orderIndex: index + 1,
+      })),
+      templateLinks: track.skillNames.map((skillName) => ({
+        skillName,
+        orderIndex: index + 1,
+        priority: 4 - index,
+      })),
+    })),
+  );
+}
+
+async function seedLearningResources(
+  skills: Map<string, Awaited<ReturnType<typeof prisma.skill.create>>>,
+) {
+  const seeds = buildLearningResourceSeeds();
+  const resources = new Map<
+    string,
+    Awaited<ReturnType<typeof prisma.learningResource.create>>
+  >();
+
+  for (const seed of seeds) {
+    const existing = await prisma.learningResource.findFirst({
+      where: {
+        title: seed.title,
+        provider: seed.provider,
+      },
+    });
+    const data = {
+      title: seed.title,
+      description: seed.description,
+      resourceType: seed.resourceType,
+      url: seed.url,
+      provider: seed.provider,
+      difficultyLevel: seed.difficultyLevel,
+      estimatedDuration: seed.estimatedDuration,
+      language: seed.language,
+      isFree: seed.isFree,
+      status: seed.status,
+    };
+    const resource = existing
+      ? await prisma.learningResource.update({
+          where: { id: existing.id },
+          data,
+        })
+      : await prisma.learningResource.create({ data });
+
+    resources.set(seed.title, resource);
+
+    for (const link of seed.skillLinks) {
+      const skill = mustGet(skills, link.skillName, 'skill');
+      const existingLink = await prisma.learningResourceSkill.findFirst({
+        where: {
+          resourceId: resource.id,
+          skillId: skill.id,
+          targetLevel: link.targetLevel,
+        },
+      });
+      const linkData = {
+        resourceId: resource.id,
+        skillId: skill.id,
+        targetLevel: link.targetLevel,
+        roadmapPhase: link.roadmapPhase,
+        relevanceScore: link.relevanceScore,
+        orderIndex: link.orderIndex,
+      };
+
+      if (existingLink) {
+        await prisma.learningResourceSkill.update({
+          where: { id: existingLink.id },
+          data: linkData,
+        });
+      } else {
+        await prisma.learningResourceSkill.create({ data: linkData });
+      }
+    }
+  }
+
+  for (const seed of seeds) {
+    const resource = mustGet(resources, seed.title, 'learning resource');
+
+    for (const link of seed.templateLinks) {
+      const skill = mustGet(skills, link.skillName, 'skill');
+      const template = await prisma.recommendationTemplate.findFirst({
+        where: {
+          skillId: skill.id,
+          title: `Practice ${skill.name}`,
+          recommendationType: RecommendationType.PRACTICE,
+          status: TemplateStatus.ACTIVE,
+        },
+      });
+      if (!template) {
+        throw new Error(`Missing active recommendation template for ${skill.name}`);
+      }
+
+      const existingLink = await prisma.recommendationTemplateResource.findFirst({
+        where: {
+          templateId: template.id,
+          resourceId: resource.id,
+        },
+      });
+      const linkData = {
+        templateId: template.id,
+        resourceId: resource.id,
+        orderIndex: link.orderIndex,
+        priority: link.priority,
+        isRequired: link.orderIndex <= 2,
+        note: `Seeded demo resource for ${skill.name}.`,
+      };
+
+      if (existingLink) {
+        await prisma.recommendationTemplateResource.update({
+          where: { id: existingLink.id },
+          data: linkData,
+        });
+      } else {
+        await prisma.recommendationTemplateResource.create({ data: linkData });
+      }
+    }
+  }
+}
+
 async function seedAssessmentQuestions(
   skills: Map<string, Awaited<ReturnType<typeof prisma.skill.create>>>,
 ) {
@@ -1524,10 +2045,26 @@ async function assertSeedHealth() {
     prisma.careerRequiredSkill.count(),
     prisma.studentSkill.count(),
     prisma.recommendationTemplate.count(),
+    prisma.learningResource.count(),
+    prisma.learningResourceSkill.count(),
+    prisma.recommendationTemplateResource.count(),
     prisma.assessmentQuestion.count(),
   ]);
 
-  const [users, students, careerGoals, specializations, skills, requiredSkills, studentSkills, templates, questions] = counts;
+  const [
+    users,
+    students,
+    careerGoals,
+    specializations,
+    skills,
+    requiredSkills,
+    studentSkills,
+    templates,
+    learningResources,
+    learningResourceSkills,
+    templateResources,
+    questions,
+  ] = counts;
   console.log(
     [
       `Seed complete: ${users} users`,
@@ -1538,6 +2075,9 @@ async function assertSeedHealth() {
       `${requiredSkills} required skills`,
       `${studentSkills} student skills`,
       `${templates} recommendation templates`,
+      `${learningResources} learning resources`,
+      `${learningResourceSkills} resource skill links`,
+      `${templateResources} template resource links`,
       `${questions} assessment questions`,
     ].join(', '),
   );
@@ -1572,6 +2112,7 @@ async function main() {
   await seedStudentPortfolioSamples(students);
   await seedAdvisorAssignments(lecturer, students, users);
   await seedRecommendationTemplates(skills);
+  await seedLearningResources(skills);
   await seedAssessmentQuestions(skills);
   await seedNotifications(users);
   await assertSeedHealth();
