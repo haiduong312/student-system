@@ -16,6 +16,7 @@ import { LecturersModule } from './lecturers/lecturers.module';
 import { AdvisorAssignmentsModule } from './advisor-assignments/advisor-assignments.module';
 import { SkillCategoriesModule } from './skill-categories/skill-categories.module';
 import { SkillsModule } from './skills/skills.module';
+import { LearningResourcesModule } from './learning-resources/learning-resources.module';
 import { CareerGoalsModule } from './career-goals/career-goals.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { EvidencesModule } from './evidences/evidences.module';
@@ -46,6 +47,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
     AdvisorAssignmentsModule,
     SkillCategoriesModule,
     SkillsModule,
+    LearningResourcesModule,
     CareerGoalsModule,
     ProfilesModule,
     EvidencesModule,

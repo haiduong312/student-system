@@ -120,6 +120,18 @@ enum RecommendationType {
   PORTFOLIO_TASK
 }
 
+enum LearningResourceType {
+  COURSE
+  VIDEO
+  DOCUMENT
+  ARTICLE
+  BOOK
+  PRACTICE
+  PROJECT
+  CERTIFICATE
+  TOOL
+}
+
 enum DifficultyLevel {
   BEGINNER
   INTERMEDIATE
@@ -145,6 +157,13 @@ enum StudentRecommendationStatus {
   IN_PROGRESS
   DONE
   DISMISSED
+}
+
+enum ResourceProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
 }
 
 enum RoadmapStatus {
@@ -202,25 +221,25 @@ enum ExportType {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String     @id @default(cuid())
-  fullName     String     @map("full_name") @db.VarChar(150)
-  email        String     @unique(map: "users_email_unique") @db.VarChar(191)
-  passwordHash String     @map("password_hash") @db.VarChar(255)
-  refreshTokenHash String? @map("refresh_token_hash") @db.VarChar(255)
-  role         UserRole
-  lastLoginAt  DateTime?  @map("last_login_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  id               String    @id @default(cuid())
+  fullName         String    @map("full_name") @db.VarChar(150)
+  email            String    @unique(map: "users_email_unique") @db.VarChar(191)
+  passwordHash     String    @map("password_hash") @db.VarChar(255)
+  refreshTokenHash String?   @map("refresh_token_hash") @db.VarChar(255)
+  role             UserRole
+  lastLoginAt      DateTime? @map("last_login_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  student                     Student?
-  lecturer                    Lecturer?
-  assignedAdvisorAssignments  AdvisorAssignment[] @relation("AdvisorAssignmentAssignedBy")
-  verifiedStudentSkills       StudentSkill[]       @relation("StudentSkillVerifiedBy")
-  reviewedEvidences           Evidence[]           @relation("EvidenceReviewedBy")
-  notifications               Notification[]
-  notificationLogs            NotificationLog[]
-  activityLogs                ActivityLog[]
-  exportLogs                  ExportLog[]
+  student                    Student?
+  lecturer                   Lecturer?
+  assignedAdvisorAssignments AdvisorAssignment[] @relation("AdvisorAssignmentAssignedBy")
+  verifiedStudentSkills      StudentSkill[]      @relation("StudentSkillVerifiedBy")
+  reviewedEvidences          Evidence[]          @relation("EvidenceReviewedBy")
+  notifications              Notification[]
+  notificationLogs           NotificationLog[]
+  activityLogs               ActivityLog[]
+  exportLogs                 ExportLog[]
 
   @@index([role], map: "users_role_idx")
   @@map("users")
@@ -239,21 +258,22 @@ model Student {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  advisorAssignments    AdvisorAssignment[]
-  profile               StudentProfile?
-  skills                StudentSkill[]
-  projects              StudentProject[]
-  certificates          StudentCertificate[]
-  activities            StudentActivity[]
-  experiences           StudentExperience[]
-  evidences             Evidence[]
-  analysisResults       CompetencyAnalysisResult[]
-  recommendations       StudentRecommendation[]
-  roadmaps              DevelopmentRoadmap[]
-  roadmapProgress       StudentRoadmapProgress[]
-  advisorReviews        AdvisorReview[]
-  assessments           Assessment[]
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  advisorAssignments AdvisorAssignment[]
+  profile            StudentProfile?
+  skills             StudentSkill[]
+  projects           StudentProject[]
+  certificates       StudentCertificate[]
+  activities         StudentActivity[]
+  experiences        StudentExperience[]
+  evidences          Evidence[]
+  analysisResults    CompetencyAnalysisResult[]
+  recommendations    StudentRecommendation[]
+  roadmaps           DevelopmentRoadmap[]
+  roadmapProgress    StudentRoadmapProgress[]
+  resourceProgress   StudentResourceProgress[]
+  advisorReviews     AdvisorReview[]
+  assessments        Assessment[]
 
   @@index([className, major], map: "students_class_major_idx")
   @@index([major, academicYear], map: "students_major_academic_year_idx")
@@ -304,13 +324,13 @@ model AdvisorAssignment {
 // ---------------------------------------------------------------------------
 
 model SkillCategory {
-  id          String        @id @default(cuid())
-  name        String        @unique(map: "skill_categories_name_unique") @db.VarChar(150)
-  description String?       @db.Text
+  id           String        @id @default(cuid())
+  name         String        @unique(map: "skill_categories_name_unique") @db.VarChar(150)
+  description  String?       @db.Text
   roadmapPhase RoadmapPhase? @map("roadmap_phase")
-  status      CatalogStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  status       CatalogStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
 
   skills                  Skill[]
   recommendationTemplates RecommendationTemplate[]
@@ -332,16 +352,17 @@ model Skill {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  category               SkillCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  careerRequiredSkills   CareerRequiredSkill[]
-  studentSkills          StudentSkill[]
-  analysisDetails        CompetencyAnalysisDetail[]
+  category                SkillCategory?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  careerRequiredSkills    CareerRequiredSkill[]
+  studentSkills           StudentSkill[]
+  analysisDetails         CompetencyAnalysisDetail[]
   recommendationTemplates RecommendationTemplate[]
-  studentRecommendations StudentRecommendation[]
-  roadmapItems           RoadmapItem[]
-  assessmentQuestions    AssessmentQuestion[]
-  assessmentItems        AssessmentQuestionItem[]
-  assessmentSkillResults AssessmentSkillResult[]
+  studentRecommendations  StudentRecommendation[]
+  roadmapItems            RoadmapItem[]
+  assessmentQuestions     AssessmentQuestion[]
+  assessmentItems         AssessmentQuestionItem[]
+  assessmentSkillResults  AssessmentSkillResult[]
+  learningResourceSkills  LearningResourceSkill[]
 
   @@unique([categoryId, name], map: "skills_category_name_unique")
   @@index([name], map: "skills_name_idx")
@@ -365,10 +386,10 @@ model AssessmentQuestion {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  skill   Skill              @relation(fields: [skillId], references: [id], onDelete: Restrict)
-  options AssessmentOption[]
+  skill           Skill                    @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  options         AssessmentOption[]
   assessmentItems AssessmentQuestionItem[]
-  answers AssessmentAnswer[]
+  answers         AssessmentAnswer[]
 
   @@index([skillId, status], map: "assessment_questions_skill_status_idx")
   @@index([questionType, status], map: "assessment_questions_type_status_idx")
@@ -407,10 +428,10 @@ model Assessment {
   createdAt    DateTime         @default(now()) @map("created_at")
   updatedAt    DateTime         @updatedAt @map("updated_at")
 
-  student    Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  careerGoal CareerGoal               @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
-  items      AssessmentQuestionItem[]
-  answers    AssessmentAnswer[]
+  student      Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal   CareerGoal               @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
+  items        AssessmentQuestionItem[]
+  answers      AssessmentAnswer[]
   skillResults AssessmentSkillResult[]
 
   @@index([studentId, status, createdAt], map: "assessments_student_status_created_idx")
@@ -487,13 +508,13 @@ model CareerGoal {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  requiredSkills  CareerRequiredSkill[]
-  specializations Specialization[]
-  studentProfiles StudentProfile[]
-  analysisResults CompetencyAnalysisResult[]
+  requiredSkills          CareerRequiredSkill[]
+  specializations         Specialization[]
+  studentProfiles         StudentProfile[]
+  analysisResults         CompetencyAnalysisResult[]
   recommendationTemplates RecommendationTemplate[]
-  roadmaps        DevelopmentRoadmap[]
-  assessments     Assessment[]
+  roadmaps                DevelopmentRoadmap[]
+  assessments             Assessment[]
 
   @@index([status, name], map: "career_goals_status_name_idx")
   @@map("career_goals")
@@ -522,17 +543,17 @@ model Specialization {
 }
 
 model CareerRequiredSkill {
-  id            String   @id @default(cuid())
-  careerGoalId  String   @map("career_goal_id")
-  specializationId String? @map("specialization_id")
-  skillId       String   @map("skill_id")
-  requiredLevel Int      @map("required_level")
-  weight        Decimal  @db.Decimal(6, 2)
-  learningOrder Int      @default(0) @map("learning_order")
-  isRequired    Boolean  @default(true) @map("is_required")
-  roadmapPhase  RoadmapPhase @default(CAREER_TRACK) @map("roadmap_phase")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id               String       @id @default(cuid())
+  careerGoalId     String       @map("career_goal_id")
+  specializationId String?      @map("specialization_id")
+  skillId          String       @map("skill_id")
+  requiredLevel    Int          @map("required_level")
+  weight           Decimal      @db.Decimal(6, 2)
+  learningOrder    Int          @default(0) @map("learning_order")
+  isRequired       Boolean      @default(true) @map("is_required")
+  roadmapPhase     RoadmapPhase @default(CAREER_TRACK) @map("roadmap_phase")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
 
   careerGoal     CareerGoal      @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
   specialization Specialization? @relation(fields: [specializationId], references: [id], onDelete: Cascade)
@@ -767,15 +788,15 @@ model CompetencyAnalysisResult {
 }
 
 model CompetencyAnalysisDetail {
-  id               String               @id @default(cuid())
-  analysisResultId String               @map("analysis_result_id")
-  skillId          String               @map("skill_id")
-  currentLevel     Int                  @map("current_level")
-  requiredLevel    Int                  @map("required_level")
+  id               String              @id @default(cuid())
+  analysisResultId String              @map("analysis_result_id")
+  skillId          String              @map("skill_id")
+  currentLevel     Int                 @map("current_level")
+  requiredLevel    Int                 @map("required_level")
   gap              Int
-  weight           Decimal              @db.Decimal(6, 2)
-  achievedScore    Decimal              @map("achieved_score") @db.Decimal(6, 2)
-  priorityScore    Decimal              @map("priority_score") @db.Decimal(6, 2)
+  weight           Decimal             @db.Decimal(6, 2)
+  achievedScore    Decimal             @map("achieved_score") @db.Decimal(6, 2)
+  priorityScore    Decimal             @map("priority_score") @db.Decimal(6, 2)
   status           AnalysisSkillStatus
 
   analysisResult CompetencyAnalysisResult @relation(fields: [analysisResultId], references: [id], onDelete: Cascade)
@@ -811,11 +832,12 @@ model RecommendationTemplate {
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
-  skill                  Skill?                  @relation(fields: [skillId], references: [id], onDelete: SetNull)
-  skillCategory          SkillCategory?          @relation(fields: [skillCategoryId], references: [id], onDelete: SetNull)
-  careerGoal             CareerGoal?             @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
-  specialization         Specialization?         @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+  skill                  Skill?                           @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  skillCategory          SkillCategory?                   @relation(fields: [skillCategoryId], references: [id], onDelete: SetNull)
+  careerGoal             CareerGoal?                      @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
+  specialization         Specialization?                  @relation(fields: [specializationId], references: [id], onDelete: Cascade)
   studentRecommendations StudentRecommendation[]
+  resourceLinks          RecommendationTemplateResource[]
 
   @@unique([specializationId, careerGoalId, skillCategoryId, skillId, level, recommendationType, roadmapPhase, title], map: "recommendation_templates_scope_unique")
   @@index([skillId], map: "recommendation_templates_skill_idx")
@@ -835,25 +857,27 @@ model RecommendationTemplate {
 }
 
 model StudentRecommendation {
-  id                         String                      @id @default(cuid())
-  studentId                  String                      @map("student_id")
-  analysisResultId           String?                     @map("analysis_result_id")
-  skillId                    String                      @map("skill_id")
-  recommendationTemplateId   String?                     @map("recommendation_template_id")
-  roadmapPhase               RoadmapPhase?               @map("roadmap_phase")
-  title                      String                      @db.VarChar(200)
-  description                String?                     @db.Text
-  reason                     String?                     @db.Text
-  priorityScore              Decimal                     @default(0) @map("priority_score") @db.Decimal(6, 2)
-  status                     StudentRecommendationStatus @default(NEW)
-  createdAt                  DateTime                    @default(now()) @map("created_at")
-  updatedAt                  DateTime                    @updatedAt @map("updated_at")
+  id                       String                      @id @default(cuid())
+  studentId                String                      @map("student_id")
+  analysisResultId         String?                     @map("analysis_result_id")
+  skillId                  String                      @map("skill_id")
+  recommendationTemplateId String?                     @map("recommendation_template_id")
+  roadmapPhase             RoadmapPhase?               @map("roadmap_phase")
+  title                    String                      @db.VarChar(200)
+  description              String?                     @db.Text
+  reason                   String?                     @db.Text
+  priorityScore            Decimal                     @default(0) @map("priority_score") @db.Decimal(6, 2)
+  status                   StudentRecommendationStatus @default(NEW)
+  createdAt                DateTime                    @default(now()) @map("created_at")
+  updatedAt                DateTime                    @updatedAt @map("updated_at")
 
-  student                Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  analysisResult         CompetencyAnalysisResult? @relation(fields: [analysisResultId], references: [id], onDelete: SetNull)
-  skill                  Skill                     @relation(fields: [skillId], references: [id], onDelete: Restrict)
-  recommendationTemplate RecommendationTemplate?   @relation(fields: [recommendationTemplateId], references: [id], onDelete: SetNull)
+  student                Student                         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  analysisResult         CompetencyAnalysisResult?       @relation(fields: [analysisResultId], references: [id], onDelete: SetNull)
+  skill                  Skill                           @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  recommendationTemplate RecommendationTemplate?         @relation(fields: [recommendationTemplateId], references: [id], onDelete: SetNull)
   roadmapItems           RoadmapItem[]
+  resourceLinks          StudentRecommendationResource[]
+  resourceProgress       StudentResourceProgress[]
 
   @@index([studentId, status, createdAt], map: "student_recommendations_student_status_created_idx")
   @@index([analysisResultId], map: "student_recommendations_analysis_result_idx")
@@ -862,26 +886,145 @@ model StudentRecommendation {
   @@map("student_recommendations")
 }
 
+model LearningResource {
+  id                String               @id @default(cuid())
+  title             String               @db.VarChar(200)
+  description       String?              @db.Text
+  resourceType      LearningResourceType @map("resource_type")
+  url               String?              @db.VarChar(500)
+  provider          String?              @db.VarChar(150)
+  difficultyLevel   DifficultyLevel?     @map("difficulty_level")
+  estimatedDuration String?              @map("estimated_duration") @db.VarChar(100)
+  language          String?              @db.VarChar(50)
+  isFree            Boolean              @default(true) @map("is_free")
+  status            CatalogStatus        @default(ACTIVE)
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  skills              LearningResourceSkill[]
+  templateLinks       RecommendationTemplateResource[]
+  recommendationLinks StudentRecommendationResource[]
+  progress            StudentResourceProgress[]
+
+  @@index([resourceType, status], map: "learning_resources_type_status_idx")
+  @@index([status, title], map: "learning_resources_status_title_idx")
+  @@index([provider], map: "learning_resources_provider_idx")
+  @@index([title], map: "learning_resources_title_idx")
+  @@map("learning_resources")
+}
+
+model LearningResourceSkill {
+  id             String        @id @default(cuid())
+  resourceId     String        @map("resource_id")
+  skillId        String        @map("skill_id")
+  targetLevel    SkillLevel?   @map("target_level")
+  roadmapPhase   RoadmapPhase? @map("roadmap_phase")
+  relevanceScore Int           @default(0) @map("relevance_score")
+  orderIndex     Int           @default(0) @map("order_index")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  resource LearningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  skill    Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([resourceId, skillId, targetLevel], map: "learning_resource_skills_resource_skill_level_unique")
+  @@index([resourceId], map: "learning_resource_skills_resource_idx")
+  @@index([skillId], map: "learning_resource_skills_skill_idx")
+  @@index([skillId, targetLevel], map: "learning_resource_skills_skill_level_idx")
+  @@map("learning_resource_skills")
+}
+
+model RecommendationTemplateResource {
+  id         String   @id @default(cuid())
+  templateId String   @map("template_id")
+  resourceId String   @map("resource_id")
+  orderIndex Int      @default(0) @map("order_index")
+  priority   Int      @default(0)
+  isRequired Boolean  @default(false) @map("is_required")
+  note       String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  template RecommendationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  resource LearningResource       @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, resourceId], map: "recommendation_template_resources_template_resource_unique")
+  @@index([templateId], map: "recommendation_template_resources_template_idx")
+  @@index([resourceId], map: "recommendation_template_resources_resource_idx")
+  @@index([templateId, orderIndex], map: "recommendation_template_resources_template_order_idx")
+  @@map("recommendation_template_resources")
+}
+
+model StudentRecommendationResource {
+  id                  String               @id @default(cuid())
+  recommendationId    String               @map("recommendation_id")
+  resourceId          String               @map("resource_id")
+  orderIndex          Int                  @default(0) @map("order_index")
+  resourceTitle       String               @map("resource_title") @db.VarChar(200)
+  resourceDescription String?              @map("resource_description") @db.Text
+  resourceType        LearningResourceType @map("resource_type")
+  resourceUrl         String?              @map("resource_url") @db.VarChar(500)
+  provider            String?              @db.VarChar(150)
+  estimatedDuration   String?              @map("estimated_duration") @db.VarChar(100)
+  difficultyLevel     DifficultyLevel?     @map("difficulty_level")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  recommendation StudentRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  resource       LearningResource      @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+
+  @@unique([recommendationId, resourceId], map: "student_recommendation_resources_recommendation_resource_unique")
+  @@index([recommendationId], map: "student_recommendation_resources_recommendation_idx")
+  @@index([resourceId], map: "student_recommendation_resources_resource_idx")
+  @@index([recommendationId, orderIndex], map: "student_recommendation_resources_recommendation_order_idx")
+  @@map("student_recommendation_resources")
+}
+
+model StudentResourceProgress {
+  id               String                 @id @default(cuid())
+  studentId        String                 @map("student_id")
+  resourceId       String                 @map("resource_id")
+  recommendationId String?                @map("recommendation_id")
+  status           ResourceProgressStatus @default(NOT_STARTED)
+  startedAt        DateTime?              @map("started_at")
+  completedAt      DateTime?              @map("completed_at")
+  lastAccessedAt   DateTime?              @map("last_accessed_at")
+  note             String?                @db.Text
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  student        Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  resource       LearningResource       @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  recommendation StudentRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, resourceId], map: "student_resource_progress_student_resource_unique")
+  @@index([studentId], map: "student_resource_progress_student_idx")
+  @@index([resourceId], map: "student_resource_progress_resource_idx")
+  @@index([recommendationId], map: "student_resource_progress_recommendation_idx")
+  @@index([studentId, status], map: "student_resource_progress_student_status_idx")
+  @@map("student_resource_progress")
+}
+
 // ---------------------------------------------------------------------------
 // Roadmap Module
 // ---------------------------------------------------------------------------
 
 model DevelopmentRoadmap {
-  id              String        @id @default(cuid())
-  studentId       String        @map("student_id")
-  careerGoalId    String        @map("career_goal_id")
-  specializationId String?      @map("specialization_id")
-  version         Int           @default(1)
-  title           String        @db.VarChar(200)
-  description     String?       @db.Text
-  progressPercent Decimal       @default(0) @map("progress_percent") @db.Decimal(5, 2)
-  status          RoadmapStatus @default(ACTIVE)
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id               String        @id @default(cuid())
+  studentId        String        @map("student_id")
+  careerGoalId     String        @map("career_goal_id")
+  specializationId String?       @map("specialization_id")
+  version          Int           @default(1)
+  title            String        @db.VarChar(200)
+  description      String?       @db.Text
+  progressPercent  Decimal       @default(0) @map("progress_percent") @db.Decimal(5, 2)
+  status           RoadmapStatus @default(ACTIVE)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  student        Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  careerGoal     CareerGoal            @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
-  specialization Specialization?        @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+  student        Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal     CareerGoal               @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
+  specialization Specialization?          @relation(fields: [specializationId], references: [id], onDelete: SetNull)
   items          RoadmapItem[]
   progress       StudentRoadmapProgress[]
 
@@ -895,24 +1038,24 @@ model DevelopmentRoadmap {
 }
 
 model RoadmapItem {
-  id          String            @id @default(cuid())
-  roadmapId   String            @map("roadmap_id")
-  skillId     String?           @map("skill_id")
-  recommendationId String?      @map("recommendation_id")
-  title       String            @db.VarChar(200)
-  description String?           @db.Text
-  itemType    RoadmapItemType   @map("item_type")
-  roadmapPhase RoadmapPhase     @default(CAREER_TRACK) @map("roadmap_phase")
-  orderIndex  Int               @default(0) @map("order_index")
-  weight      Decimal           @default(1) @db.Decimal(6, 2)
-  deadline    DateTime?         @db.Date
-  status      RoadmapItemStatus @default(TODO)
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
+  id               String            @id @default(cuid())
+  roadmapId        String            @map("roadmap_id")
+  skillId          String?           @map("skill_id")
+  recommendationId String?           @map("recommendation_id")
+  title            String            @db.VarChar(200)
+  description      String?           @db.Text
+  itemType         RoadmapItemType   @map("item_type")
+  roadmapPhase     RoadmapPhase      @default(CAREER_TRACK) @map("roadmap_phase")
+  orderIndex       Int               @default(0) @map("order_index")
+  weight           Decimal           @default(1) @db.Decimal(6, 2)
+  deadline         DateTime?         @db.Date
+  status           RoadmapItemStatus @default(TODO)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
-  roadmap        DevelopmentRoadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
-  skill          Skill?                  @relation(fields: [skillId], references: [id], onDelete: SetNull)
-  recommendation StudentRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+  roadmap        DevelopmentRoadmap       @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  skill          Skill?                   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  recommendation StudentRecommendation?   @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
   progress       StudentRoadmapProgress[]
 
   @@index([roadmapId, orderIndex], map: "roadmap_items_roadmap_order_idx")
@@ -949,15 +1092,15 @@ model StudentRoadmapProgress {
 // ---------------------------------------------------------------------------
 
 model Notification {
-  id                String                 @id @default(cuid())
-  userId            String                 @map("user_id")
-  title             String                 @db.VarChar(200)
-  content           String                 @db.Text
-  notificationType  NotificationType       @map("notification_type")
-  relatedEntityType String?                @map("related_entity_type") @db.VarChar(100)
-  relatedEntityId   String?                @map("related_entity_id")
-  isRead            Boolean                @default(false) @map("is_read")
-  createdAt         DateTime               @default(now()) @map("created_at")
+  id                String           @id @default(cuid())
+  userId            String           @map("user_id")
+  title             String           @db.VarChar(200)
+  content           String           @db.Text
+  notificationType  NotificationType @map("notification_type")
+  relatedEntityType String?          @map("related_entity_type") @db.VarChar(100)
+  relatedEntityId   String?          @map("related_entity_id")
+  isRead            Boolean          @default(false) @map("is_read")
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   user User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs NotificationLog[]

@@ -5,6 +5,7 @@ import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interfa
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateRecommendationTemplateDto } from './dto/create-recommendation-template.dto';
+import { LinkRecommendationTemplateResourceDto } from './dto/link-recommendation-template-resource.dto';
 import { RecommendationTemplateQueryDto } from './dto/recommendation-template-query.dto';
 import { UpdateRecommendationTemplateDto } from './dto/update-recommendation-template.dto';
 import { RecommendationTemplatesService } from './recommendation-templates.service';
@@ -33,10 +34,26 @@ export class RecommendationTemplatesController {
     return this.recommendationTemplatesService.findAll(query);
   }
 
+  @ApiOkResponse({ description: 'Recommendation template linked resources' })
+  @Get(':id/resources')
+  findResources(@Param('id') id: string) {
+    return this.recommendationTemplatesService.findResources(id);
+  }
+
   @ApiOkResponse({ description: 'Recommendation template detail' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.recommendationTemplatesService.findOne(id);
+  }
+
+  @ApiCreatedResponse({ description: 'Learning resource linked to template' })
+  @Post(':id/resources')
+  linkResource(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: LinkRecommendationTemplateResourceDto,
+  ) {
+    return this.recommendationTemplatesService.linkResource(id, dto, user.id);
   }
 
   @ApiOkResponse({ description: 'Recommendation template updated' })
@@ -53,5 +70,19 @@ export class RecommendationTemplatesController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.recommendationTemplatesService.remove(id, user.id);
+  }
+
+  @ApiOkResponse({ description: 'Learning resource unlinked from template' })
+  @Delete(':id/resources/:resourceId')
+  unlinkResource(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('resourceId') resourceId: string,
+  ) {
+    return this.recommendationTemplatesService.unlinkResource(
+      id,
+      resourceId,
+      user.id,
+    );
   }
 }

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TemplateStatus } from '@prisma/client';
+import { CatalogStatus, Prisma, TemplateStatus } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
   buildPaginatedResult,
@@ -12,6 +12,7 @@ import {
 } from '../common/pagination/pagination.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRecommendationTemplateDto } from './dto/create-recommendation-template.dto';
+import { LinkRecommendationTemplateResourceDto } from './dto/link-recommendation-template-resource.dto';
 import { RecommendationTemplateQueryDto } from './dto/recommendation-template-query.dto';
 import { UpdateRecommendationTemplateDto } from './dto/update-recommendation-template.dto';
 
@@ -172,6 +173,84 @@ export class RecommendationTemplatesService {
     return { deactivated: true, template };
   }
 
+  async findResources(id: string) {
+    await this.ensureExists(id);
+
+    return this.prisma.recommendationTemplateResource.findMany({
+      where: { templateId: id },
+      orderBy: this.resourceLinkOrderBy(),
+      include: { resource: true },
+    });
+  }
+
+  async linkResource(
+    id: string,
+    dto: LinkRecommendationTemplateResourceDto,
+    actorUserId?: string,
+  ) {
+    await this.ensureExists(id);
+    await this.ensureActiveResourceExists(dto.resourceId);
+    await this.ensureTemplateResourceLinkDoesNotExist(id, dto.resourceId);
+
+    try {
+      const link = await this.prisma.recommendationTemplateResource.create({
+        data: {
+          templateId: id,
+          resourceId: dto.resourceId,
+          orderIndex: dto.orderIndex,
+          priority: dto.priority,
+        },
+        include: {
+          template: true,
+          resource: true,
+        },
+      });
+      await this.activityLogs.record({
+        actorUserId,
+        action: 'RECOMMENDATION_TEMPLATE_RESOURCE_LINKED',
+        entityType: 'RecommendationTemplateResource',
+        entityId: link.id,
+        description: {
+          templateId: id,
+          resourceId: dto.resourceId,
+          orderIndex: link.orderIndex,
+          priority: link.priority,
+        },
+      });
+
+      return link;
+    } catch (error) {
+      this.handleKnownError(error);
+    }
+  }
+
+  async unlinkResource(
+    id: string,
+    resourceId: string,
+    actorUserId?: string,
+  ) {
+    await this.ensureExists(id);
+
+    const result = await this.prisma.recommendationTemplateResource.deleteMany({
+      where: { templateId: id, resourceId },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Recommendation template resource link not found');
+    }
+    await this.activityLogs.record({
+      actorUserId,
+      action: 'RECOMMENDATION_TEMPLATE_RESOURCE_UNLINKED',
+      entityType: 'RecommendationTemplateResource',
+      description: {
+        templateId: id,
+        resourceId,
+        deletedLinks: result.count,
+      },
+    });
+
+    return { unlinked: true, deletedLinks: result.count };
+  }
+
   private async ensureReferencesValid(
     dto: Partial<CreateRecommendationTemplateDto>,
   ) {
@@ -252,13 +331,72 @@ export class RecommendationTemplatesService {
     return exists;
   }
 
+  private async ensureActiveResourceExists(resourceId: string) {
+    const resource = await this.prisma.learningResource.findUnique({
+      where: { id: resourceId },
+      select: { id: true, status: true },
+    });
+    if (!resource) {
+      throw new NotFoundException('Learning resource not found');
+    }
+    if (resource.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Inactive learning resource cannot be linked');
+    }
+
+    return resource;
+  }
+
+  private async ensureTemplateResourceLinkDoesNotExist(
+    templateId: string,
+    resourceId: string,
+  ) {
+    const existing = await this.prisma.recommendationTemplateResource.findUnique({
+      where: {
+        templateId_resourceId: {
+          templateId,
+          resourceId,
+        },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'Learning resource is already linked to recommendation template',
+      );
+    }
+  }
+
   private detailInclude() {
     return {
       skill: true,
       skillCategory: true,
       careerGoal: true,
       specialization: true,
+      resourceLinks: {
+        orderBy: this.resourceLinkOrderBy(),
+        include: {
+          resource: {
+            include: {
+              skills: {
+                orderBy: [
+                  { orderIndex: 'asc' as const },
+                  { createdAt: 'asc' as const },
+                ],
+                include: { skill: true },
+              },
+            },
+          },
+        },
+      },
     };
+  }
+
+  private resourceLinkOrderBy() {
+    return [
+      { orderIndex: 'asc' as const },
+      { priority: 'desc' as const },
+      { createdAt: 'asc' as const },
+    ];
   }
 
   private handleKnownError(error: unknown): never {
