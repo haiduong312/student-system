@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { UsersService } from '../users/users.service';
@@ -31,6 +32,16 @@ export class AuthService {
         description: { email: dto.email, reason: 'USER_NOT_FOUND' },
       });
       throw new UnauthorizedException('Invalid email or password');
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      await this.activityLogs.record({
+        actorUserId: user.id,
+        action: 'LOGIN_FAILED',
+        entityType: 'User',
+        entityId: user.id,
+        description: { email: user.email, reason: 'USER_INACTIVE' },
+      });
+      throw new ForbiddenException('User account is inactive');
     }
 
     const passwordMatched = await bcrypt.compare(dto.password, user.passwordHash);
@@ -81,6 +92,10 @@ export class AuthService {
     if (!user?.refreshTokenHash) {
       throw new ForbiddenException('Refresh token is not available');
     }
+    if (user.status !== UserStatus.ACTIVE) {
+      await this.usersService.clearRefreshTokenHash(user.id);
+      throw new ForbiddenException('User account is inactive');
+    }
 
     const refreshTokenMatched = await bcrypt.compare(
       refreshToken,
@@ -117,6 +132,9 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid authentication token');
     }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('User account is inactive');
+    }
 
     return user;
   }
@@ -147,6 +165,9 @@ export class AuthService {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('Invalid authentication token');
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('User account is inactive');
     }
 
     return {

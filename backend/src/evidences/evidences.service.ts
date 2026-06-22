@@ -10,10 +10,10 @@ import {
   EvidenceStatus,
   Prisma,
   UserRole,
-  VerificationStatus,
 } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
+import { EvidenceVerificationService } from '../common/evidence-verification/evidence-verification.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -49,6 +49,7 @@ export class EvidencesService {
     private readonly prisma: PrismaService,
     private readonly studentAccessPolicy: StudentAccessPolicyService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly evidenceVerification: EvidenceVerificationService,
   ) {}
 
   async upload(userId: string, dto: CreateEvidenceDto, file?: any) {
@@ -77,11 +78,10 @@ export class EvidencesService {
         include: EVIDENCE_INCLUDE,
       });
 
-      await this.updateRelatedEntityStatus(
-        tx,
+      await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
         dto.relatedEntityType,
         dto.relatedEntityId,
-        VerificationStatus.PENDING,
+        { client: tx },
       );
 
       return evidence;
@@ -160,13 +160,14 @@ export class EvidencesService {
         },
       );
 
-      await this.updateRelatedEntityStatus(
-        tx,
+      await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
         evidence.relatedEntityType,
         evidence.relatedEntityId,
-        VerificationStatus.VERIFIED,
-        user.id,
-        dto.currentLevel,
+        {
+          client: tx,
+          reviewedById: user.id,
+          currentLevel: dto.currentLevel,
+        },
       );
 
       return updated;
@@ -206,11 +207,10 @@ export class EvidencesService {
         },
       );
 
-      await this.updateRelatedEntityStatus(
-        tx,
+      await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
         evidence.relatedEntityType,
         evidence.relatedEntityId,
-        VerificationStatus.REJECTED,
+        { client: tx },
       );
 
       return updated;
@@ -463,49 +463,4 @@ export class EvidencesService {
     }
   }
 
-  private updateRelatedEntityStatus(
-    tx: Prisma.TransactionClient,
-    entityType: EvidenceEntityType,
-    entityId: string,
-    status: VerificationStatus,
-    reviewedById?: string,
-    currentLevel?: number,
-  ) {
-    switch (entityType) {
-      case EvidenceEntityType.SKILL:
-        return tx.studentSkill.update({
-          where: { id: entityId },
-          data: {
-            evidenceStatus: status,
-            verifiedById: status === VerificationStatus.VERIFIED ? reviewedById : null,
-            verifiedAt: status === VerificationStatus.VERIFIED ? new Date() : null,
-            ...(status === VerificationStatus.VERIFIED && currentLevel !== undefined
-              ? { currentLevel }
-              : {}),
-          },
-        });
-      case EvidenceEntityType.PROJECT:
-        return tx.studentProject.update({
-          where: { id: entityId },
-          data: { verificationStatus: status },
-        });
-      case EvidenceEntityType.CERTIFICATE:
-        return tx.studentCertificate.update({
-          where: { id: entityId },
-          data: { verificationStatus: status },
-        });
-      case EvidenceEntityType.ACTIVITY:
-        return tx.studentActivity.update({
-          where: { id: entityId },
-          data: { verificationStatus: status },
-        });
-      case EvidenceEntityType.EXPERIENCE:
-        return tx.studentExperience.update({
-          where: { id: entityId },
-          data: { verificationStatus: status },
-        });
-      case EvidenceEntityType.ROADMAP_ITEM:
-        return Promise.resolve();
-    }
-  }
 }

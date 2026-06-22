@@ -12,6 +12,7 @@ import {
   Prisma,
   VerificationStatus,
 } from '@prisma/client';
+import { EvidenceVerificationService } from '../common/evidence-verification/evidence-verification.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -34,6 +35,7 @@ import { CreateStudentProjectDto, UpdateStudentProjectDto } from './dto/student-
 import { CreateStudentSkillDto, UpdateStudentSkillDto } from './dto/student-skill.dto';
 
 type EvidenceResource = 'skills' | 'projects' | 'certificates' | 'activities' | 'experiences';
+type ImportantField = string;
 type ProfileMutableData = {
   careerGoalId?: string | null;
   specializationId?: string | null;
@@ -55,9 +57,36 @@ const PROFILE_INCLUDE = {
   },
 };
 
+const IMPORTANT_FIELDS: Record<EvidenceResource, ImportantField[]> = {
+  skills: ['description'],
+  projects: [
+    'title',
+    'description',
+    'roleInProject',
+    'technologies',
+    'githubUrl',
+    'demoUrl',
+    'startDate',
+    'endDate',
+  ],
+  certificates: [
+    'certificateName',
+    'issuer',
+    'issueDate',
+    'expirationDate',
+    'credentialId',
+    'credentialUrl',
+  ],
+  activities: ['title', 'organization', 'role', 'description', 'startDate', 'endDate'],
+  experiences: ['companyName', 'position', 'description', 'startDate', 'endDate'],
+};
+
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly evidenceVerification: EvidenceVerificationService,
+  ) {}
 
   async getMyProfile(userId: string) {
     const studentId = await this.getStudentIdByUserId(userId);
@@ -177,13 +206,23 @@ export class ProfilesService {
 
   async updateSkill(userId: string, id: string, dto: UpdateStudentSkillDto) {
     const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureOwnsSkill(studentId, id);
+    const existing = await this.getOwnedSkill(studentId, id);
 
     try {
-      return await this.prisma.studentSkill.update({
-        where: { id },
-        data: { description: dto.description },
-        include: { skill: { include: { category: true } } },
+      return await this.prisma.$transaction(async (tx) => {
+        await this.resetVerificationOnImportantChange(
+          tx,
+          'skills',
+          id,
+          existing,
+          dto,
+        );
+
+        return tx.studentSkill.update({
+          where: { id },
+          data: { description: dto.description },
+          include: { skill: { include: { category: true } } },
+        });
       });
     } catch (error) {
       this.handleKnownError(error, 'Skill already exists in student profile');
@@ -193,7 +232,10 @@ export class ProfilesService {
   async deleteSkill(userId: string, id: string) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsSkill(studentId, id);
-    await this.prisma.studentSkill.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoEvidenceBeforeDelete(tx, 'skills', id);
+      await tx.studentSkill.delete({ where: { id } });
+    });
     return { deleted: true };
   }
 
@@ -229,6 +271,7 @@ export class ProfilesService {
 
   async createProject(userId: string, dto: CreateStudentProjectDto) {
     const studentId = await this.getStudentIdByUserId(userId);
+    this.validateStartEndDates(dto);
     return this.prisma.studentProject.create({ data: { ...dto, studentId } });
   }
 
@@ -246,14 +289,29 @@ export class ProfilesService {
 
   async updateProject(userId: string, id: string, dto: UpdateStudentProjectDto) {
     const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureOwnsEntity('projects', studentId, id);
-    return this.prisma.studentProject.update({ where: { id }, data: dto });
+    const existing = await this.getOwnedProject(studentId, id);
+    this.validateStartEndDates(dto, existing);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.resetVerificationOnImportantChange(
+        tx,
+        'projects',
+        id,
+        existing,
+        dto,
+      );
+
+      return tx.studentProject.update({ where: { id }, data: dto });
+    });
   }
 
   async deleteProject(userId: string, id: string) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsEntity('projects', studentId, id);
-    await this.prisma.studentProject.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoEvidenceBeforeDelete(tx, 'projects', id);
+      await tx.studentProject.delete({ where: { id } });
+    });
     return { deleted: true };
   }
 
@@ -288,6 +346,7 @@ export class ProfilesService {
 
   async createCertificate(userId: string, dto: CreateStudentCertificateDto) {
     const studentId = await this.getStudentIdByUserId(userId);
+    this.validateIssueExpirationDates(dto);
     return this.prisma.studentCertificate.create({ data: { ...dto, studentId } });
   }
 
@@ -305,14 +364,29 @@ export class ProfilesService {
 
   async updateCertificate(userId: string, id: string, dto: UpdateStudentCertificateDto) {
     const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureOwnsEntity('certificates', studentId, id);
-    return this.prisma.studentCertificate.update({ where: { id }, data: dto });
+    const existing = await this.getOwnedCertificate(studentId, id);
+    this.validateIssueExpirationDates(dto, existing);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.resetVerificationOnImportantChange(
+        tx,
+        'certificates',
+        id,
+        existing,
+        dto,
+      );
+
+      return tx.studentCertificate.update({ where: { id }, data: dto });
+    });
   }
 
   async deleteCertificate(userId: string, id: string) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsEntity('certificates', studentId, id);
-    await this.prisma.studentCertificate.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoEvidenceBeforeDelete(tx, 'certificates', id);
+      await tx.studentCertificate.delete({ where: { id } });
+    });
     return { deleted: true };
   }
 
@@ -348,6 +422,7 @@ export class ProfilesService {
 
   async createActivity(userId: string, dto: CreateStudentActivityDto) {
     const studentId = await this.getStudentIdByUserId(userId);
+    this.validateStartEndDates(dto);
     return this.prisma.studentActivity.create({ data: { ...dto, studentId } });
   }
 
@@ -365,14 +440,29 @@ export class ProfilesService {
 
   async updateActivity(userId: string, id: string, dto: UpdateStudentActivityDto) {
     const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureOwnsEntity('activities', studentId, id);
-    return this.prisma.studentActivity.update({ where: { id }, data: dto });
+    const existing = await this.getOwnedActivity(studentId, id);
+    this.validateStartEndDates(dto, existing);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.resetVerificationOnImportantChange(
+        tx,
+        'activities',
+        id,
+        existing,
+        dto,
+      );
+
+      return tx.studentActivity.update({ where: { id }, data: dto });
+    });
   }
 
   async deleteActivity(userId: string, id: string) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsEntity('activities', studentId, id);
-    await this.prisma.studentActivity.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoEvidenceBeforeDelete(tx, 'activities', id);
+      await tx.studentActivity.delete({ where: { id } });
+    });
     return { deleted: true };
   }
 
@@ -407,6 +497,7 @@ export class ProfilesService {
 
   async createExperience(userId: string, dto: CreateStudentExperienceDto) {
     const studentId = await this.getStudentIdByUserId(userId);
+    this.validateStartEndDates(dto);
     return this.prisma.studentExperience.create({ data: { ...dto, studentId } });
   }
 
@@ -424,14 +515,29 @@ export class ProfilesService {
 
   async updateExperience(userId: string, id: string, dto: UpdateStudentExperienceDto) {
     const studentId = await this.getStudentIdByUserId(userId);
-    await this.ensureOwnsEntity('experiences', studentId, id);
-    return this.prisma.studentExperience.update({ where: { id }, data: dto });
+    const existing = await this.getOwnedExperience(studentId, id);
+    this.validateStartEndDates(dto, existing);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.resetVerificationOnImportantChange(
+        tx,
+        'experiences',
+        id,
+        existing,
+        dto,
+      );
+
+      return tx.studentExperience.update({ where: { id }, data: dto });
+    });
   }
 
   async deleteExperience(userId: string, id: string) {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsEntity('experiences', studentId, id);
-    await this.prisma.studentExperience.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoEvidenceBeforeDelete(tx, 'experiences', id);
+      await tx.studentExperience.delete({ where: { id } });
+    });
     return { deleted: true };
   }
 
@@ -461,7 +567,10 @@ export class ProfilesService {
       },
     });
 
-    await this.markEvidencePending(resource, entityId);
+    await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
+      this.toEvidenceEntityType(resource),
+      entityId,
+    );
     return evidence;
   }
 

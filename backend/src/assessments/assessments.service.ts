@@ -150,20 +150,7 @@ export class AssessmentsService {
       });
 
       for (const result of skillGrades) {
-        await tx.studentSkill.upsert({
-          where: {
-            studentId_skillId: {
-              studentId,
-              skillId: result.skillId,
-            },
-          },
-          update: { currentLevel: result.calculatedLevel },
-          create: {
-            studentId,
-            skillId: result.skillId,
-            currentLevel: result.calculatedLevel,
-          },
-        });
+        await this.applyBestAssessmentSkillLevel(tx, studentId, result);
       }
 
       await tx.assessment.update({
@@ -273,6 +260,40 @@ export class AssessmentsService {
       ),
       warnings,
     };
+  }
+
+  private async applyBestAssessmentSkillLevel(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    result: SkillGrade,
+  ) {
+    const existingSkill = await tx.studentSkill.findUnique({
+      where: {
+        studentId_skillId: {
+          studentId,
+          skillId: result.skillId,
+        },
+      },
+      select: { id: true, currentLevel: true },
+    });
+
+    if (!existingSkill) {
+      await tx.studentSkill.create({
+        data: {
+          studentId,
+          skillId: result.skillId,
+          currentLevel: result.calculatedLevel,
+        },
+      });
+      return;
+    }
+
+    if (result.calculatedLevel > existingSkill.currentLevel) {
+      await tx.studentSkill.update({
+        where: { id: existingSkill.id },
+        data: { currentLevel: result.calculatedLevel },
+      });
+    }
   }
 
   private async getStudentIdByUserId(userId: string) {
