@@ -206,7 +206,7 @@ export class SpecializationsService {
     const specialization = await this.ensureActiveSpecializationExists(specializationId);
     const data = this.normalizeRequiredSkillCreateData(dto);
 
-    await this.ensureSkillExists(data.skillId);
+    await this.ensureActiveSkillExists(data.skillId);
     await this.ensureRequiredSkillNotConfigured(specializationId, data.skillId);
 
     try {
@@ -233,7 +233,7 @@ export class SpecializationsService {
     const data = this.normalizeRequiredSkillUpdateData(dto);
 
     if (data.skillId) {
-      await this.ensureSkillExists(data.skillId);
+      await this.ensureActiveSkillExists(data.skillId);
       await this.ensureRequiredSkillNotConfigured(
         specializationId,
         data.skillId,
@@ -462,13 +462,16 @@ export class SpecializationsService {
     return specialization;
   }
 
-  private async ensureSkillExists(id: string) {
-    const exists = await this.prisma.skill.findUnique({
+  private async ensureActiveSkillExists(id: string) {
+    const skill = await this.prisma.skill.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (!exists) {
+    if (!skill) {
       throw new NotFoundException('Skill not found');
+    }
+    if (skill.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Skill is not active');
     }
   }
 

@@ -10,7 +10,6 @@ import {
   EvidenceEntityType,
   EvidenceStatus,
   Prisma,
-  VerificationStatus,
 } from '@prisma/client';
 import { EvidenceVerificationService } from '../common/evidence-verification/evidence-verification.service';
 import {
@@ -555,23 +554,28 @@ export class ProfilesService {
     const studentId = await this.getStudentIdByUserId(userId);
     await this.ensureOwnsEntity(resource, studentId, entityId);
 
-    const evidence = await this.prisma.evidence.create({
-      data: {
-        studentId,
-        relatedEntityType: this.toEvidenceEntityType(resource),
-        relatedEntityId: entityId,
-        fileUrl: file ? buildUploadedFileUrl(file.filename) : undefined,
-        evidenceUrl: dto.evidenceUrl,
-        note: dto.note,
-        status: EvidenceStatus.PENDING,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const relatedEntityType = this.toEvidenceEntityType(resource);
+      const evidence = await tx.evidence.create({
+        data: {
+          studentId,
+          relatedEntityType,
+          relatedEntityId: entityId,
+          fileUrl: file ? buildUploadedFileUrl(file.filename) : undefined,
+          evidenceUrl: dto.evidenceUrl,
+          note: dto.note,
+          status: EvidenceStatus.PENDING,
+        },
+      });
 
-    await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
-      this.toEvidenceEntityType(resource),
-      entityId,
-    );
-    return evidence;
+      await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
+        relatedEntityType,
+        entityId,
+        { client: tx },
+      );
+
+      return evidence;
+    });
   }
 
   private async getStudentIdByUserId(userId: string) {
@@ -763,10 +767,7 @@ export class ProfilesService {
   }
 
   private async ensureOwnsSkill(studentId: string, id: string) {
-    const entity = await this.prisma.studentSkill.findFirst({
-      where: { id, studentId },
-      select: { id: true },
-    });
+    const entity = await this.getOwnedSkill(studentId, id);
     if (!entity) {
       throw new NotFoundException('Student skill not found');
     }
@@ -795,34 +796,281 @@ export class ProfilesService {
     }
   }
 
-  private markEvidencePending(resource: EvidenceResource, id: string) {
-    switch (resource) {
-      case 'skills':
-        return this.prisma.studentSkill.update({
-          where: { id },
-          data: { evidenceStatus: VerificationStatus.PENDING },
-        });
-      case 'projects':
-        return this.prisma.studentProject.update({
-          where: { id },
-          data: { verificationStatus: VerificationStatus.PENDING },
-        });
-      case 'certificates':
-        return this.prisma.studentCertificate.update({
-          where: { id },
-          data: { verificationStatus: VerificationStatus.PENDING },
-        });
-      case 'activities':
-        return this.prisma.studentActivity.update({
-          where: { id },
-          data: { verificationStatus: VerificationStatus.PENDING },
-        });
-      case 'experiences':
-        return this.prisma.studentExperience.update({
-          where: { id },
-          data: { verificationStatus: VerificationStatus.PENDING },
-        });
+  private async getOwnedSkill(studentId: string, id: string) {
+    const skill = await this.prisma.studentSkill.findFirst({
+      where: { id, studentId },
+      select: {
+        id: true,
+        description: true,
+        evidenceStatus: true,
+      },
+    });
+    if (!skill) {
+      throw new NotFoundException('Student skill not found');
     }
+
+    return skill;
+  }
+
+  private async getOwnedProject(studentId: string, id: string) {
+    const project = await this.prisma.studentProject.findFirst({
+      where: { id, studentId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        roleInProject: true,
+        technologies: true,
+        githubUrl: true,
+        demoUrl: true,
+        startDate: true,
+        endDate: true,
+        verificationStatus: true,
+      },
+    });
+    if (!project) {
+      throw new NotFoundException('Student project not found');
+    }
+
+    return project;
+  }
+
+  private async getOwnedCertificate(studentId: string, id: string) {
+    const certificate = await this.prisma.studentCertificate.findFirst({
+      where: { id, studentId },
+      select: {
+        id: true,
+        certificateName: true,
+        issuer: true,
+        issueDate: true,
+        expirationDate: true,
+        credentialId: true,
+        credentialUrl: true,
+        verificationStatus: true,
+      },
+    });
+    if (!certificate) {
+      throw new NotFoundException('Student certificate not found');
+    }
+
+    return certificate;
+  }
+
+  private async getOwnedActivity(studentId: string, id: string) {
+    const activity = await this.prisma.studentActivity.findFirst({
+      where: { id, studentId },
+      select: {
+        id: true,
+        title: true,
+        organization: true,
+        role: true,
+        description: true,
+        startDate: true,
+        endDate: true,
+        verificationStatus: true,
+      },
+    });
+    if (!activity) {
+      throw new NotFoundException('Student activity not found');
+    }
+
+    return activity;
+  }
+
+  private async getOwnedExperience(studentId: string, id: string) {
+    const experience = await this.prisma.studentExperience.findFirst({
+      where: { id, studentId },
+      select: {
+        id: true,
+        companyName: true,
+        position: true,
+        description: true,
+        startDate: true,
+        endDate: true,
+        verificationStatus: true,
+      },
+    });
+    if (!experience) {
+      throw new NotFoundException('Student experience not found');
+    }
+
+    return experience;
+  }
+
+  private async resetVerificationOnImportantChange(
+    tx: Prisma.TransactionClient,
+    resource: EvidenceResource,
+    id: string,
+    oldData: object,
+    newData: object,
+  ) {
+    if (!this.hasImportantFieldChanged(resource, oldData, newData)) {
+      return false;
+    }
+
+    const entityType = this.toEvidenceEntityType(resource);
+    const evidenceCount = await tx.evidence.count({
+      where: {
+        relatedEntityType: entityType,
+        relatedEntityId: id,
+      },
+    });
+
+    if (evidenceCount > 0) {
+      await tx.evidence.updateMany({
+        where: {
+          relatedEntityType: entityType,
+          relatedEntityId: id,
+        },
+        data: {
+          status: EvidenceStatus.PENDING,
+          reviewedById: null,
+          reviewedAt: null,
+          reviewerNote: null,
+        },
+      });
+    }
+
+    await this.evidenceVerification.updateResourceVerificationStatusFromEvidence(
+      entityType,
+      id,
+      { client: tx },
+    );
+
+    return true;
+  }
+
+  private hasImportantFieldChanged(
+    resource: EvidenceResource,
+    oldData: object,
+    newData: object,
+  ) {
+    return IMPORTANT_FIELDS[resource].some((field) => {
+      if (!Object.prototype.hasOwnProperty.call(newData, field)) {
+        return false;
+      }
+
+      return (
+        this.normalizeComparableValue(field, this.getObjectField(oldData, field)) !==
+        this.normalizeComparableValue(field, this.getObjectField(newData, field))
+      );
+    });
+  }
+
+  private getObjectField(value: object, field: string) {
+    return (value as Record<string, unknown>)[field];
+  }
+
+  private normalizeComparableValue(field: string, value: unknown) {
+    if (value instanceof Date) {
+      return this.isDateField(field) ? this.toDateKey(value) : value.toISOString();
+    }
+    if (this.isDateField(field) && typeof value === 'string') {
+      return this.toDateKey(value);
+    }
+    if (Array.isArray(value)) {
+      return JSON.stringify(value);
+    }
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+
+    return value;
+  }
+
+  private async ensureNoEvidenceBeforeDelete(
+    tx: Prisma.TransactionClient,
+    resource: EvidenceResource,
+    id: string,
+  ) {
+    const evidenceCount = await tx.evidence.count({
+      where: {
+        relatedEntityType: this.toEvidenceEntityType(resource),
+        relatedEntityId: id,
+      },
+    });
+    if (evidenceCount > 0) {
+      throw new BadRequestException(
+        'Cannot delete this profile resource because it already has evidence. Archive/soft delete requires a schema migration.',
+      );
+    }
+  }
+
+  private validateStartEndDates(
+    dto: {
+      startDate?: string | null;
+      endDate?: string | null;
+    },
+    existing?: {
+      startDate: Date | null;
+      endDate: Date | null;
+    },
+  ) {
+    const startDate = this.hasOwn(dto, 'startDate') ? dto.startDate : existing?.startDate;
+    const endDate = this.hasOwn(dto, 'endDate') ? dto.endDate : existing?.endDate;
+
+    this.validateDateOrder(
+      startDate,
+      endDate,
+      'endDate must be greater than or equal to startDate',
+    );
+  }
+
+  private validateIssueExpirationDates(
+    dto: {
+      issueDate?: string | null;
+      expirationDate?: string | null;
+    },
+    existing?: {
+      issueDate: Date | null;
+      expirationDate: Date | null;
+    },
+  ) {
+    const issueDate = this.hasOwn(dto, 'issueDate') ? dto.issueDate : existing?.issueDate;
+    const expirationDate = this.hasOwn(dto, 'expirationDate')
+      ? dto.expirationDate
+      : existing?.expirationDate;
+
+    this.validateDateOrder(
+      issueDate,
+      expirationDate,
+      'expirationDate must be greater than or equal to issueDate',
+    );
+  }
+
+  private validateDateOrder(
+    start: string | Date | null | undefined,
+    end: string | Date | null | undefined,
+    message: string,
+  ) {
+    if (!start || !end) {
+      return;
+    }
+
+    if (this.toDateTime(end) < this.toDateTime(start)) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private toDateTime(value: string | Date) {
+    if (value instanceof Date) {
+      return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+    }
+
+    const date = new Date(value);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+
+  private toDateKey(value: string | Date) {
+    const date = value instanceof Date ? value : new Date(value);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private isDateField(field: string) {
+    return ['startDate', 'endDate', 'issueDate', 'expirationDate'].includes(field);
   }
 
   private toEvidenceEntityType(resource: EvidenceResource) {

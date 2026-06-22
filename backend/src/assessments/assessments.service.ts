@@ -11,6 +11,7 @@ import {
   CatalogStatus,
   Prisma,
   QuestionStatus,
+  QuestionType,
   SkillType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +23,8 @@ const LEVEL_PASS_THRESHOLD = 60;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
 const ASSESSMENT_COOLDOWN_MINUTES = 30;
 const ASSESSMENT_TIME_LIMIT_MINUTES = 60;
+const MIN_QUESTIONS_PER_REQUIRED_SKILL = 1;
+const DISABLED_QUESTION_TYPES = new Set<string>(['MULTIPLE_CHOICE']);
 const COMPLETED_ASSESSMENT_STATUSES = [
   AssessmentStatus.SUBMITTED,
   AssessmentStatus.GRADED,
@@ -180,9 +183,27 @@ export class AssessmentsService {
 
     const selectedQuestions: SelectedQuestion[] = [];
     const warnings: Array<{ skillId: string; skillName: string; message: string }> = [];
+    const missingCoverage: Array<{
+      skillId: string;
+      skillName: string;
+      requiredLevel: number;
+      activeQuestionCount: number;
+      minimumQuestionCount: number;
+    }> = [];
 
     for (const requiredSkill of requiredSkills) {
       const candidates = await this.getCandidateQuestions(requiredSkill);
+      if (candidates.length < MIN_QUESTIONS_PER_REQUIRED_SKILL) {
+        missingCoverage.push({
+          skillId: requiredSkill.skillId,
+          skillName: requiredSkill.skillName,
+          requiredLevel: requiredSkill.requiredLevel,
+          activeQuestionCount: candidates.length,
+          minimumQuestionCount: MIN_QUESTIONS_PER_REQUIRED_SKILL,
+        });
+        continue;
+      }
+
       const desiredCount = Math.min(
         MAX_QUESTIONS_PER_SKILL,
         Math.max(requiredSkill.requiredLevel * 2, requiredSkill.requiredLevel),
@@ -193,14 +214,6 @@ export class AssessmentsService {
         desiredCount,
       );
 
-      if (!selectedForSkill.length) {
-        warnings.push({
-          skillId: requiredSkill.skillId,
-          skillName: requiredSkill.skillName,
-          message: 'No active questions found for this skill.',
-        });
-        continue;
-      }
       if (selectedForSkill.length < desiredCount) {
         warnings.push({
           skillId: requiredSkill.skillId,
@@ -215,6 +228,10 @@ export class AssessmentsService {
           skill: requiredSkill,
         })),
       );
+    }
+
+    if (missingCoverage.length) {
+      this.throwMissingCoverageError(missingCoverage);
     }
 
     if (!selectedQuestions.length) {
@@ -402,8 +419,8 @@ export class AssessmentsService {
     });
   }
 
-  private getCandidateQuestions(requiredSkill: RequiredSkillForAssessment) {
-    return this.prisma.assessmentQuestion.findMany({
+  private async getCandidateQuestions(requiredSkill: RequiredSkillForAssessment) {
+    const questions = await this.prisma.assessmentQuestion.findMany({
       where: {
         skillId: requiredSkill.skillId,
         skill: { status: CatalogStatus.ACTIVE },
@@ -413,6 +430,8 @@ export class AssessmentsService {
       orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
       include: { options: { orderBy: { orderIndex: 'asc' } } },
     });
+
+    return questions.filter((question) => this.isEligibleQuestion(question));
   }
 
   private selectQuestionsForSkill(
@@ -465,6 +484,49 @@ export class AssessmentsService {
     }
 
     return shuffled;
+  }
+
+  private isEligibleQuestion(question: QuestionWithOptions) {
+    if (DISABLED_QUESTION_TYPES.has(String(question.questionType))) {
+      return false;
+    }
+
+    const correctOptionCount = question.options.filter((option) => option.isCorrect).length;
+    if (correctOptionCount !== 1) {
+      return false;
+    }
+
+    if (question.questionType === QuestionType.TRUE_FALSE) {
+      return question.options.length === 2;
+    }
+
+    if (question.questionType === QuestionType.SINGLE_CHOICE) {
+      return question.options.length >= 2;
+    }
+
+    return false;
+  }
+
+  private throwMissingCoverageError(
+    missingCoverage: Array<{
+      skillId: string;
+      skillName: string;
+      requiredLevel: number;
+      activeQuestionCount: number;
+      minimumQuestionCount: number;
+    }>,
+  ): never {
+    const firstMissingSkill = missingCoverage[0];
+    const missingSkillList = missingCoverage
+      .map(
+        (skill) =>
+          `${skill.skillName} (${skill.skillId}, requiredLevel=${skill.requiredLevel}, activeQuestions=${skill.activeQuestionCount})`,
+      )
+      .join('; ');
+
+    throw new BadRequestException(
+      `Assessment cannot be started because required skill ${firstMissingSkill.skillName} has no active questions. Missing coverage: ${missingSkillList}`,
+    );
   }
 
   private toStartQuestionResponse(selected: SelectedQuestion) {

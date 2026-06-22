@@ -20,7 +20,6 @@ export class CareerGoalsController {
   constructor(private readonly careerGoalsService: CareerGoalsService) {}
 
   @ApiCreatedResponse({ description: 'Career goal created' })
-  @Roles(UserRole.ADMIN, UserRole.LECTURER)
   @Post()
   create(
     @CurrentUser() user: AuthenticatedUser,

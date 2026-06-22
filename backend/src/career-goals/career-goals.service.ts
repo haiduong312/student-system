@@ -182,7 +182,7 @@ export class CareerGoalsService {
     dto: CreateCareerRequiredSkillDto,
   ) {
     await this.ensureCareerGoalExists(careerGoalId);
-    await this.ensureSkillExists(dto.skillId);
+    await this.ensureActiveSkillExists(dto.skillId);
     await this.ensureRequiredSkillNotConfigured(careerGoalId, dto.skillId);
 
     try {
@@ -254,7 +254,7 @@ export class CareerGoalsService {
   ) {
     await this.ensureRequiredSkillExists(careerGoalId, requiredSkillId);
     if (dto.skillId) {
-      await this.ensureSkillExists(dto.skillId);
+      await this.ensureActiveSkillExists(dto.skillId);
       await this.ensureRequiredSkillNotConfigured(
         careerGoalId,
         dto.skillId,
@@ -295,13 +295,16 @@ export class CareerGoalsService {
     }
   }
 
-  private async ensureSkillExists(id: string) {
-    const exists = await this.prisma.skill.findUnique({
+  private async ensureActiveSkillExists(id: string) {
+    const skill = await this.prisma.skill.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (!exists) {
+    if (!skill) {
       throw new NotFoundException('Skill not found');
+    }
+    if (skill.status !== CatalogStatus.ACTIVE) {
+      throw new BadRequestException('Skill is not active');
     }
   }
 
@@ -350,7 +353,7 @@ export class CareerGoalsService {
       orderBy: [{ createdAt: 'asc' }, { name: 'asc' }],
     });
     if (!commonSkills.length) {
-      throw new BadRequestException('No common skills configured');
+      return;
     }
 
     const existingRequiredSkills = await tx.careerRequiredSkill.findMany({
