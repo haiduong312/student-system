@@ -24,7 +24,6 @@ const MAX_ASSESSMENT_ATTEMPTS = 3;
 const ASSESSMENT_COOLDOWN_MINUTES = 30;
 const ASSESSMENT_TIME_LIMIT_MINUTES = 60;
 const MIN_QUESTIONS_PER_REQUIRED_SKILL = 1;
-const DISABLED_QUESTION_TYPES = new Set<string>(['MULTIPLE_CHOICE']);
 const COMPLETED_ASSESSMENT_STATUSES = [
   AssessmentStatus.SUBMITTED,
   AssessmentStatus.GRADED,
@@ -487,10 +486,6 @@ export class AssessmentsService {
   }
 
   private isEligibleQuestion(question: QuestionWithOptions) {
-    if (DISABLED_QUESTION_TYPES.has(String(question.questionType))) {
-      return false;
-    }
-
     const correctOptionCount = question.options.filter((option) => option.isCorrect).length;
     if (correctOptionCount !== 1) {
       return false;
