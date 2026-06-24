@@ -19,7 +19,10 @@ import {
   getPagination,
 } from '../common/pagination/pagination.util';
 import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
-import { buildUploadedFileUrl } from '../common/upload/file-upload.options';
+import {
+  buildPrivateUploadedFileUrlFromStoredUrl,
+  buildUploadedFileUrl,
+} from '../common/upload/file-upload.options';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
 import { EvidenceQueryDto } from './dto/evidence-query.dto';
@@ -84,7 +87,7 @@ export class EvidencesService {
         { client: tx },
       );
 
-      return evidence;
+      return this.withPrivateFileUrl(evidence);
     });
   }
 
@@ -129,7 +132,7 @@ export class EvidencesService {
       evidence.studentId,
       'You do not have permission to access this evidence',
     );
-    return evidence;
+    return this.withPrivateFileUrl(evidence);
   }
 
   async verify(user: AuthenticatedUser, id: string, dto: VerifyEvidenceDto = {}) {
@@ -184,7 +187,7 @@ export class EvidencesService {
       },
     });
 
-    return updated;
+    return this.withPrivateFileUrl(updated);
   }
 
   async reject(user: AuthenticatedUser, id: string, dto: RejectEvidenceDto) {
@@ -228,7 +231,7 @@ export class EvidencesService {
       },
     });
 
-    return updated;
+    return this.withPrivateFileUrl(updated);
   }
 
   private async findMany(
@@ -300,7 +303,19 @@ export class EvidencesService {
       this.prisma.evidence.count({ where }),
     ]);
 
-    return buildPaginatedResult(data, total, page, limit);
+    return buildPaginatedResult(
+      data.map((evidence) => this.withPrivateFileUrl(evidence)),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  private withPrivateFileUrl<T extends { fileUrl?: string | null }>(evidence: T): T {
+    return {
+      ...evidence,
+      fileUrl: buildPrivateUploadedFileUrlFromStoredUrl(evidence.fileUrl),
+    };
   }
 
   private async getEvidenceForReview(

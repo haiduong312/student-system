@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { EvidenceStatus, NotificationType, RoadmapItemStatus } from '@prisma/client';
+import {
+  EvidenceStatus,
+  NotificationType,
+  RoadmapItemStatus,
+  RoadmapStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOTIFICATION_BATCH_SIZE } from '../domain/notification-window';
 import { NotificationsService } from '../notifications.service';
@@ -138,6 +143,7 @@ export class NotificationSchedulerService {
         where: {
           deadline: { lt: today },
           status: { in: [RoadmapItemStatus.TODO, RoadmapItemStatus.IN_PROGRESS] },
+          roadmap: { status: RoadmapStatus.ACTIVE },
         },
         take: NOTIFICATION_BATCH_SIZE,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

@@ -6,10 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AssessmentStatus,
   CatalogStatus,
   EvidenceEntityType,
   EvidenceStatus,
   Prisma,
+  RoadmapStatus,
+  StudentRecommendationStatus,
 } from '@prisma/client';
 import { EvidenceVerificationService } from '../common/evidence-verification/evidence-verification.service';
 import {
@@ -42,6 +45,14 @@ type ProfileMutableData = {
   githubUrl?: string | null;
   linkedinUrl?: string | null;
   portfolioUrl?: string | null;
+};
+type ProfileUpdateContext = {
+  data: ProfileMutableData;
+  previousCareerGoalId: string | null;
+  previousSpecializationId: string | null;
+  nextCareerGoalId: string | null;
+  nextSpecializationId: string | null;
+  contextChanged: boolean;
 };
 
 const PROFILE_INCLUDE = {
@@ -109,13 +120,32 @@ export class ProfilesService {
 
   async updateProfile(studentId: string, dto: UpdateProfileDto) {
     await this.ensureStudentExists(studentId);
-    const data = await this.buildProfileUpdateData(studentId, dto);
+    const context = await this.buildProfileUpdateContext(studentId, dto);
 
-    return this.prisma.studentProfile.upsert({
-      where: { studentId },
-      create: { studentId, ...data, lastUpdatedAt: new Date() },
-      update: { ...data, lastUpdatedAt: new Date() },
-      include: PROFILE_INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.studentProfile.upsert({
+        where: { studentId },
+        create: { studentId, ...context.data, lastUpdatedAt: new Date() },
+        update: {
+          ...context.data,
+          ...(context.contextChanged
+            ? {
+                completionPercent: 0,
+                matchPercent: 0,
+                riskScore: 0,
+                lastAnalyzedAt: null,
+              }
+            : {}),
+          lastUpdatedAt: new Date(),
+        },
+        include: PROFILE_INCLUDE,
+      });
+
+      if (context.contextChanged) {
+        await this.invalidateProfileContext(tx, studentId, context);
+      }
+
+      return profile;
     });
   }
 
@@ -613,7 +643,10 @@ export class ProfilesService {
     }
   }
 
-  private async buildProfileUpdateData(studentId: string, dto: UpdateProfileDto) {
+  private async buildProfileUpdateContext(
+    studentId: string,
+    dto: UpdateProfileDto,
+  ): Promise<ProfileUpdateContext> {
     const existingProfile = await this.prisma.studentProfile.findUnique({
       where: { studentId },
       select: { careerGoalId: true, specializationId: true },
@@ -650,7 +683,111 @@ export class ProfilesService {
     this.copyProfileField(data, dto, 'linkedinUrl');
     this.copyProfileField(data, dto, 'portfolioUrl');
 
-    return data;
+    const nextSpecializationId = this.hasOwn(data, 'specializationId')
+      ? data.specializationId ?? null
+      : existingProfile?.specializationId ?? null;
+    const previousCareerGoalId = existingProfile?.careerGoalId ?? null;
+    const previousSpecializationId = existingProfile?.specializationId ?? null;
+    const contextChanged = Boolean(
+      existingProfile &&
+        (previousCareerGoalId !== nextCareerGoalId ||
+          previousSpecializationId !== nextSpecializationId),
+    );
+
+    return {
+      data,
+      previousCareerGoalId,
+      previousSpecializationId,
+      nextCareerGoalId,
+      nextSpecializationId,
+      contextChanged,
+    };
+  }
+
+  private async invalidateProfileContext(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    context: ProfileUpdateContext,
+  ) {
+    await this.archiveStaleRoadmaps(tx, studentId, context);
+    await this.cancelInProgressAssessments(tx, studentId);
+    await this.dismissStaleRecommendations(tx, studentId, context);
+  }
+
+  private archiveStaleRoadmaps(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    context: ProfileUpdateContext,
+  ) {
+    const where: Prisma.DevelopmentRoadmapWhereInput = {
+      studentId,
+      status: RoadmapStatus.ACTIVE,
+      ...(context.nextCareerGoalId
+        ? {
+            NOT: {
+              careerGoalId: context.nextCareerGoalId,
+              specializationId: context.nextSpecializationId,
+            },
+          }
+        : {}),
+    };
+
+    return tx.developmentRoadmap.updateMany({
+      where,
+      data: { status: RoadmapStatus.ARCHIVED },
+    });
+  }
+
+  private cancelInProgressAssessments(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+  ) {
+    return tx.assessment.updateMany({
+      where: {
+        studentId,
+        status: AssessmentStatus.IN_PROGRESS,
+      },
+      data: { status: AssessmentStatus.CANCELLED },
+    });
+  }
+
+  private async dismissStaleRecommendations(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    context: ProfileUpdateContext,
+  ) {
+    const staleAnalysisResults = await tx.competencyAnalysisResult.findMany({
+      where: {
+        studentId,
+        ...(context.nextCareerGoalId
+          ? {
+              NOT: {
+                careerGoalId: context.nextCareerGoalId,
+                specializationId: context.nextSpecializationId,
+              },
+            }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (!staleAnalysisResults.length) {
+      return { count: 0 };
+    }
+
+    return tx.studentRecommendation.updateMany({
+      where: {
+        studentId,
+        analysisResultId: { in: staleAnalysisResults.map((result) => result.id) },
+        status: {
+          in: [
+            StudentRecommendationStatus.NEW,
+            StudentRecommendationStatus.SAVED,
+            StudentRecommendationStatus.IN_PROGRESS,
+          ],
+        },
+      },
+      data: { status: StudentRecommendationStatus.DISMISSED },
+    });
   }
 
   private async resolveRequestedSpecializationId(

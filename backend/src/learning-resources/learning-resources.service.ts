@@ -9,7 +9,10 @@ import {
   CatalogStatus,
   Prisma,
   ResourceProgressStatus,
+  RoadmapItemStatus,
+  RoadmapStatus,
   StudentResourceProgress,
+  StudentRecommendationStatus,
 } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
@@ -49,6 +52,17 @@ const RESOURCE_PROGRESS_STATUS_TRANSITIONS: Record<
   [ResourceProgressStatus.COMPLETED]: [ResourceProgressStatus.IN_PROGRESS],
   [ResourceProgressStatus.SKIPPED]: [ResourceProgressStatus.IN_PROGRESS],
 };
+
+const COMPLETABLE_RECOMMENDATION_STATUSES: StudentRecommendationStatus[] = [
+  StudentRecommendationStatus.NEW,
+  StudentRecommendationStatus.SAVED,
+  StudentRecommendationStatus.IN_PROGRESS,
+];
+
+const ROADMAP_ITEM_STATUSES_COMPLETED_BY_RECOMMENDATION: RoadmapItemStatus[] = [
+  RoadmapItemStatus.TODO,
+  RoadmapItemStatus.IN_PROGRESS,
+];
 
 @Injectable()
 export class LearningResourcesService {
@@ -321,31 +335,173 @@ export class LearningResourcesService {
 
     const now = new Date();
     const timestampData = this.getProgressTimestampData(existing, dto.status, now);
+    const recommendationId = dto.recommendationId ?? existing?.recommendationId ?? null;
 
-    return this.prisma.studentResourceProgress.upsert({
-      where: {
-        studentId_resourceId: {
+    return this.prisma.$transaction(async (tx) => {
+      const progress = await tx.studentResourceProgress.upsert({
+        where: {
+          studentId_resourceId: {
+            studentId,
+            resourceId,
+          },
+        },
+        create: {
           studentId,
           resourceId,
+          recommendationId: dto.recommendationId,
+          status: dto.status,
+          note: dto.note,
+          ...timestampData,
+        },
+        update: {
+          recommendationId: dto.recommendationId,
+          status: dto.status,
+          note: dto.note,
+          ...timestampData,
+        },
+        include: {
+          resource: true,
+          recommendation: true,
+        },
+      });
+
+      if (recommendationId && dto.status === ResourceProgressStatus.COMPLETED) {
+        await this.syncRecommendationCompletionFromResources(
+          tx,
+          studentId,
+          recommendationId,
+        );
+      }
+
+      return progress;
+    });
+  }
+
+  private async syncRecommendationCompletionFromResources(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    recommendationId: string,
+  ) {
+    const recommendation = await tx.studentRecommendation.findFirst({
+      where: { id: recommendationId, studentId },
+      select: {
+        id: true,
+        status: true,
+        resourceLinks: {
+          select: { resourceId: true },
         },
       },
-      create: {
+    });
+    if (!recommendation?.resourceLinks.length) {
+      return;
+    }
+
+    const resourceIds = Array.from(
+      new Set(recommendation.resourceLinks.map((link) => link.resourceId)),
+    );
+    const completedResourceCount = await tx.studentResourceProgress.count({
+      where: {
         studentId,
-        resourceId,
-        recommendationId: dto.recommendationId,
-        status: dto.status,
-        note: dto.note,
-        ...timestampData,
+        resourceId: { in: resourceIds },
+        status: ResourceProgressStatus.COMPLETED,
       },
-      update: {
-        recommendationId: dto.recommendationId,
-        status: dto.status,
-        note: dto.note,
-        ...timestampData,
+    });
+    if (completedResourceCount !== resourceIds.length) {
+      return;
+    }
+
+    const updatedRecommendation = await tx.studentRecommendation.updateMany({
+      where: {
+        id: recommendationId,
+        studentId,
+        status: { in: COMPLETABLE_RECOMMENDATION_STATUSES },
       },
-      include: {
-        resource: true,
-        recommendation: true,
+      data: { status: StudentRecommendationStatus.DONE },
+    });
+
+    if (
+      updatedRecommendation.count > 0 ||
+      recommendation.status === StudentRecommendationStatus.DONE
+    ) {
+      await this.completeActiveRoadmapItemsForRecommendation(
+        tx,
+        studentId,
+        recommendationId,
+      );
+    }
+  }
+
+  private async completeActiveRoadmapItemsForRecommendation(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    recommendationId: string,
+  ) {
+    const roadmapItems = await tx.roadmapItem.findMany({
+      where: {
+        recommendationId,
+        status: { in: ROADMAP_ITEM_STATUSES_COMPLETED_BY_RECOMMENDATION },
+        roadmap: {
+          studentId,
+          status: RoadmapStatus.ACTIVE,
+        },
+      },
+      select: { id: true, roadmapId: true },
+    });
+    if (!roadmapItems.length) {
+      return;
+    }
+
+    await tx.roadmapItem.updateMany({
+      where: { id: { in: roadmapItems.map((item) => item.id) } },
+      data: { status: RoadmapItemStatus.DONE },
+    });
+    await tx.studentRoadmapProgress.createMany({
+      data: roadmapItems.map((item) => ({
+        studentId,
+        roadmapId: item.roadmapId,
+        roadmapItemId: item.id,
+        status: RoadmapItemStatus.DONE,
+        note: 'Completed automatically after all recommendation resources were completed',
+      })),
+    });
+
+    const roadmapIds = Array.from(new Set(roadmapItems.map((item) => item.roadmapId)));
+    for (const roadmapId of roadmapIds) {
+      await this.recalculateRoadmapProgress(tx, roadmapId);
+    }
+  }
+
+  private async recalculateRoadmapProgress(
+    tx: Prisma.TransactionClient,
+    roadmapId: string,
+  ) {
+    const items = await tx.roadmapItem.findMany({
+      where: { roadmapId },
+      select: { status: true, weight: true },
+    });
+    const validItems = items.filter((item) => item.status !== RoadmapItemStatus.CANCELLED);
+    const totalWeight = validItems.reduce((sum, item) => sum + Number(item.weight), 0);
+    if (totalWeight <= 0) {
+      await tx.developmentRoadmap.update({
+        where: { id: roadmapId },
+        data: {
+          progressPercent: 0,
+          status: RoadmapStatus.ACTIVE,
+        },
+      });
+      return;
+    }
+
+    const completedWeight = validItems
+      .filter((item) => item.status === RoadmapItemStatus.DONE)
+      .reduce((sum, item) => sum + Number(item.weight), 0);
+    const progressPercent = this.round((completedWeight / totalWeight) * 100);
+
+    await tx.developmentRoadmap.update({
+      where: { id: roadmapId },
+      data: {
+        progressPercent,
+        status: progressPercent >= 100 ? RoadmapStatus.COMPLETED : RoadmapStatus.ACTIVE,
       },
     });
   }
@@ -588,5 +744,9 @@ export class LearningResourcesService {
     }
 
     return student.id;
+  }
+
+  private round(value: number) {
+    return Math.round(value * 100) / 100;
   }
 }

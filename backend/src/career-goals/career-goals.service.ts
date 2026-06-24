@@ -353,7 +353,9 @@ export class CareerGoalsService {
       orderBy: [{ createdAt: 'asc' }, { name: 'asc' }],
     });
     if (!commonSkills.length) {
-      return;
+      throw new BadRequestException(
+        'Cannot create career goal because no active common skills are configured',
+      );
     }
 
     const existingRequiredSkills = await tx.careerRequiredSkill.findMany({

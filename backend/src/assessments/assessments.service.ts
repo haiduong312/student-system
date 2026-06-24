@@ -23,7 +23,6 @@ const LEVEL_PASS_THRESHOLD = 60;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
 const ASSESSMENT_COOLDOWN_MINUTES = 30;
 const ASSESSMENT_TIME_LIMIT_MINUTES = 60;
-const MIN_QUESTIONS_PER_REQUIRED_SKILL = 1;
 const COMPLETED_ASSESSMENT_STATUSES = [
   AssessmentStatus.SUBMITTED,
   AssessmentStatus.GRADED,
@@ -187,18 +186,22 @@ export class AssessmentsService {
       skillName: string;
       requiredLevel: number;
       activeQuestionCount: number;
-      minimumQuestionCount: number;
+      missingLevels: number[];
     }> = [];
 
     for (const requiredSkill of requiredSkills) {
       const candidates = await this.getCandidateQuestions(requiredSkill);
-      if (candidates.length < MIN_QUESTIONS_PER_REQUIRED_SKILL) {
+      const missingLevels = this.getMissingQuestionLevels(
+        candidates,
+        requiredSkill.requiredLevel,
+      );
+      if (missingLevels.length) {
         missingCoverage.push({
           skillId: requiredSkill.skillId,
           skillName: requiredSkill.skillName,
           requiredLevel: requiredSkill.requiredLevel,
           activeQuestionCount: candidates.length,
-          minimumQuestionCount: MIN_QUESTIONS_PER_REQUIRED_SKILL,
+          missingLevels,
         });
         continue;
       }
@@ -508,20 +511,36 @@ export class AssessmentsService {
       skillName: string;
       requiredLevel: number;
       activeQuestionCount: number;
-      minimumQuestionCount: number;
+      missingLevels: number[];
     }>,
   ): never {
     const firstMissingSkill = missingCoverage[0];
     const missingSkillList = missingCoverage
       .map(
         (skill) =>
-          `${skill.skillName} (${skill.skillId}, requiredLevel=${skill.requiredLevel}, activeQuestions=${skill.activeQuestionCount})`,
+          `${skill.skillName} (${skill.skillId}, requiredLevel=${skill.requiredLevel}, missingLevels=${skill.missingLevels.join(', ')}, activeQuestions=${skill.activeQuestionCount})`,
       )
       .join('; ');
 
     throw new BadRequestException(
-      `Assessment cannot be started because required skill ${firstMissingSkill.skillName} has no active questions. Missing coverage: ${missingSkillList}`,
+      `Assessment cannot be started because required skill ${firstMissingSkill.skillName} is missing active questions for level(s): ${firstMissingSkill.missingLevels.join(', ')}. Missing coverage: ${missingSkillList}`,
     );
+  }
+
+  private getMissingQuestionLevels(
+    questions: QuestionWithOptions[],
+    requiredLevel: number,
+  ) {
+    const availableLevels = new Set(questions.map((question) => question.level));
+    const missingLevels: number[] = [];
+
+    for (let level = 1; level <= requiredLevel; level += 1) {
+      if (!availableLevels.has(level)) {
+        missingLevels.push(level);
+      }
+    }
+
+    return missingLevels;
   }
 
   private toStartQuestionResponse(selected: SelectedQuestion) {

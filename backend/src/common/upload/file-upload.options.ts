@@ -4,7 +4,8 @@ import { basename, extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 export const UPLOADS_URL_PREFIX = '/uploads';
-export const PROFILE_UPLOADS_URL_PREFIX = `${UPLOADS_URL_PREFIX}/profiles`;
+export const PROFILE_UPLOADS_URL_PREFIX = '/api/uploads/profiles';
+export const LEGACY_PROFILE_UPLOADS_URL_PREFIX = `${UPLOADS_URL_PREFIX}/profiles`;
 export const UPLOADS_ROOT_DIR = join(process.cwd(), 'uploads');
 export const PROFILE_UPLOAD_DIR = join(UPLOADS_ROOT_DIR, 'profiles');
 
@@ -55,4 +56,15 @@ export const buildUploadedFileUrl = (filename: string) => {
   }
 
   return `${PROFILE_UPLOADS_URL_PREFIX}/${safeFilename}`;
+};
+
+export const buildPrivateUploadedFileUrlFromStoredUrl = (
+  fileUrl: string | null | undefined,
+) => {
+  if (!fileUrl) {
+    return fileUrl;
+  }
+
+  const filename = basename(fileUrl);
+  return buildUploadedFileUrl(filename);
 };

@@ -11,6 +11,7 @@ import {
   buildPaginatedResult,
   getPagination,
 } from '../common/pagination/pagination.util';
+import { buildPrivateUploadedFileUrlFromStoredUrl } from '../common/upload/file-upload.options';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -30,11 +31,12 @@ export class UsersService {
     const orderBy = this.buildUserOrderBy(query);
 
     if (!paginated) {
-      return this.prisma.user.findMany({
+      const users = await this.prisma.user.findMany({
         where,
         orderBy,
         select: this.userListSelect(),
       });
+      return users.map((user) => this.withPrivateStudentAvatarUrl(user));
     }
 
     const { page, limit, skip, take } = getPagination(query ?? new UserQueryDto());
@@ -49,7 +51,12 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return buildPaginatedResult(data, total, page, limit);
+    return buildPaginatedResult(
+      data.map((user) => this.withPrivateStudentAvatarUrl(user)),
+      total,
+      page,
+      limit,
+    );
   }
 
   findByEmail(email: string) {
@@ -64,8 +71,8 @@ export class UsersService {
     });
   }
 
-  findProfileById(id: string) {
-    return this.prisma.user.findUnique({
+  async findProfileById(id: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         ...this.safeUserSelect(),
@@ -92,6 +99,7 @@ export class UsersService {
         },
       },
     });
+    return user ? this.withPrivateStudentAvatarUrl(user) : null;
   }
 
   async findOneForAdmin(id: string) {
@@ -103,7 +111,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return this.withPrivateStudentAvatarUrl(user);
   }
 
   async update(id: string, dto: UpdateUserDto, actorUserId?: string) {
@@ -173,7 +181,7 @@ export class UsersService {
         description: { changedFields: Object.keys(dto) },
       });
 
-      return user;
+      return this.withPrivateStudentAvatarUrl(user);
     } catch (error) {
       this.handleKnownError(error, 'Email already exists');
     }
@@ -407,6 +415,22 @@ export class UsersService {
           phone: true,
           academicTitle: true,
         },
+      },
+    };
+  }
+
+  private withPrivateStudentAvatarUrl<
+    T extends { student?: { avatarUrl?: string | null } | null },
+  >(user: T): T {
+    if (!user.student) {
+      return user;
+    }
+
+    return {
+      ...user,
+      student: {
+        ...user.student,
+        avatarUrl: buildPrivateUploadedFileUrlFromStoredUrl(user.student.avatarUrl),
       },
     };
   }

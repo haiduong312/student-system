@@ -29,6 +29,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AssessmentQuestionsModule } from './assessment-questions/assessment-questions.module';
 import { AssessmentsModule } from './assessments/assessments.module';
+import { PrivateUploadsModule } from './common/upload/private-uploads.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
     DashboardModule,
     AssessmentQuestionsModule,
     AssessmentsModule,
+    PrivateUploadsModule,
   ],
   controllers: [AppController],
   providers: [

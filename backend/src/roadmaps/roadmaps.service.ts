@@ -17,6 +17,7 @@ import {
   RoadmapPhase,
   RoadmapStatus,
   SkillLevel,
+  StudentRecommendationStatus,
   StudentResourceProgress,
   TemplateStatus,
 } from '@prisma/client';
@@ -57,6 +58,12 @@ const ROADMAP_ITEM_STATUS_TRANSITIONS: Record<
   [RoadmapItemStatus.DONE]: [RoadmapItemStatus.IN_PROGRESS],
   [RoadmapItemStatus.CANCELLED]: [],
 };
+
+const ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES: StudentRecommendationStatus[] = [
+  StudentRecommendationStatus.NEW,
+  StudentRecommendationStatus.SAVED,
+  StudentRecommendationStatus.IN_PROGRESS,
+];
 
 type RoadmapDetail = Prisma.DevelopmentRoadmapGetPayload<{
   include: {
@@ -254,9 +261,19 @@ export class RoadmapsService {
       throw new BadRequestException('Archived or cancelled roadmap items cannot be updated');
     }
     if (item.status === dto.status) {
-      const roadmap = await this.prisma.developmentRoadmap.findUnique({
-        where: { id: item.roadmapId },
-        include: this.roadmapDetailInclude(),
+      const roadmap = await this.prisma.$transaction(async (tx) => {
+        if (dto.status === RoadmapItemStatus.DONE && item.recommendationId) {
+          await this.completeRecommendationForRoadmapItem(
+            tx,
+            studentId,
+            item.recommendationId,
+          );
+        }
+
+        return tx.developmentRoadmap.findUnique({
+          where: { id: item.roadmapId },
+          include: this.roadmapDetailInclude(),
+        });
       });
       if (!roadmap) {
         throw new NotFoundException('Roadmap not found');
@@ -282,6 +299,14 @@ export class RoadmapsService {
           note: dto.note,
         },
       });
+
+      if (dto.status === RoadmapItemStatus.DONE && item.recommendationId) {
+        await this.completeRecommendationForRoadmapItem(
+          tx,
+          studentId,
+          item.recommendationId,
+        );
+      }
 
       const progress = await this.calculateRoadmapProgress(tx, item.roadmapId);
       await tx.developmentRoadmap.update({
@@ -325,6 +350,21 @@ export class RoadmapsService {
     dto: UpdateRoadmapItemStatusDto,
   ) {
     return this.updateRoadmapItemStatus(userId, itemId, dto);
+  }
+
+  private completeRecommendationForRoadmapItem(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    recommendationId: string,
+  ) {
+    return tx.studentRecommendation.updateMany({
+      where: {
+        id: recommendationId,
+        studentId,
+        status: { in: ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES },
+      },
+      data: { status: StudentRecommendationStatus.DONE },
+    });
   }
 
   private assertValidRoadmapItemStatusTransition(
@@ -549,6 +589,7 @@ export class RoadmapsService {
         studentId,
         analysisResultId,
         skillId: { in: skillIds },
+        status: { in: ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES },
         skill: { status: CatalogStatus.ACTIVE },
         OR: [
           { recommendationTemplateId: null },

@@ -22,6 +22,7 @@ import {
   getPagination,
 } from '../common/pagination/pagination.util';
 import { StudentAccessPolicyService } from '../common/student-access/student-access-policy.service';
+import { buildPrivateUploadedFileUrlFromStoredUrl } from '../common/upload/file-upload.options';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -74,7 +75,12 @@ export class StudentsService {
       this.prisma.student.count({ where }),
     ]);
 
-    return buildPaginatedResult(data, total, page, limit);
+    return buildPaginatedResult(
+      data.map((student) => this.withPrivateAvatarUrl(student)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async create(dto: CreateStudentDto, actorUserId?: string) {
@@ -92,7 +98,7 @@ export class StudentsService {
       throw new NotFoundException('Student not found');
     }
 
-    return student;
+    return this.withPrivateAvatarUrl(student);
   }
 
   async update(id: string, dto: UpdateStudentDto, actorUserId?: string) {
@@ -143,7 +149,7 @@ export class StudentsService {
         description: { changedFields: Object.keys(dto) },
       });
 
-      return student;
+      return this.withPrivateAvatarUrl(student);
     } catch (error) {
       this.handleKnownError(error, 'Student email or code already exists');
     }
@@ -320,7 +326,7 @@ export class StudentsService {
         },
       });
 
-      return student;
+      return this.withPrivateAvatarUrl(student);
     } catch (error) {
       this.handleKnownError(error, 'Student email or code already exists');
     }
@@ -609,6 +615,13 @@ export class StudentsService {
           specialization: true,
         },
       },
+    };
+  }
+
+  private withPrivateAvatarUrl<T extends { avatarUrl?: string | null }>(student: T): T {
+    return {
+      ...student,
+      avatarUrl: buildPrivateUploadedFileUrlFromStoredUrl(student.avatarUrl),
     };
   }
 

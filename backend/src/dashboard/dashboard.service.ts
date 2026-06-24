@@ -21,31 +21,40 @@ export class DashboardService {
       throw new ForbiddenException('Current user is not a student');
     }
 
-    const [profile, latestAnalysis, activeRoadmap] = await Promise.all([
-      this.prisma.studentProfile.findUnique({
-        where: { studentId: student.id },
-        include: { careerGoal: true },
-      }),
-      this.prisma.competencyAnalysisResult.findFirst({
-        where: { studentId: student.id },
-        orderBy: { analyzedAt: 'desc' },
-        include: {
-          details: {
-            where: { status: { in: [AnalysisSkillStatus.MISSING, AnalysisSkillStatus.NEED_IMPROVEMENT] } },
-            orderBy: { priorityScore: 'desc' },
-            take: 10,
-            include: { skill: { include: { category: true } } },
-          },
-        },
-      }),
-      this.prisma.developmentRoadmap.findFirst({
-        where: { studentId: student.id, status: RoadmapStatus.ACTIVE },
-        orderBy: { createdAt: 'desc' },
-        include: {
-          _count: { select: { items: true } },
-        },
-      }),
-    ]);
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { studentId: student.id },
+      include: { careerGoal: true },
+    });
+    const currentScopeWhere = profile?.careerGoalId
+      ? {
+          studentId: student.id,
+          careerGoalId: profile.careerGoalId,
+          specializationId: profile.specializationId,
+        }
+      : null;
+    const [latestAnalysis, activeRoadmap] = currentScopeWhere
+      ? await Promise.all([
+          this.prisma.competencyAnalysisResult.findFirst({
+            where: currentScopeWhere,
+            orderBy: { analyzedAt: 'desc' },
+            include: {
+              details: {
+                where: { status: { in: [AnalysisSkillStatus.MISSING, AnalysisSkillStatus.NEED_IMPROVEMENT] } },
+                orderBy: { priorityScore: 'desc' },
+                take: 10,
+                include: { skill: { include: { category: true } } },
+              },
+            },
+          }),
+          this.prisma.developmentRoadmap.findFirst({
+            where: { ...currentScopeWhere, status: RoadmapStatus.ACTIVE },
+            orderBy: { createdAt: 'desc' },
+            include: {
+              _count: { select: { items: true } },
+            },
+          }),
+        ])
+      : [null, null];
 
     return {
       completionPercent: Number(profile?.completionPercent ?? 0),

@@ -33,11 +33,11 @@ export class EvidenceVerificationService {
     const pending = byStatus.get(EvidenceStatus.PENDING) ?? 0;
     const rejected = byStatus.get(EvidenceStatus.REJECTED) ?? 0;
 
-    if (verified > 0) {
-      return VerificationStatus.VERIFIED;
-    }
     if (pending > 0) {
       return VerificationStatus.PENDING;
+    }
+    if (verified > 0) {
+      return VerificationStatus.VERIFIED;
     }
     if (rejected > 0) {
       return VerificationStatus.REJECTED;
