@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CatalogStatus, Prisma, RoadmapPhase } from '@prisma/client';
+import { CatalogContextInvalidationService } from '../common/catalog-invalidation/catalog-context-invalidation.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -33,7 +34,10 @@ const REQUIRED_SKILL_SORTABLE_FIELDS = new Set([
 
 @Injectable()
 export class SpecializationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalogInvalidation: CatalogContextInvalidationService,
+  ) {}
 
   async create(dto: CreateSpecializationDto) {
     const data = this.normalizeCreateData(dto);
@@ -133,16 +137,30 @@ export class SpecializationsService {
   async update(id: string, dto: UpdateSpecializationDto) {
     const specialization = await this.ensureExists(id);
     const data = this.normalizeUpdateData(dto);
+    const shouldInvalidate =
+      data.status === CatalogStatus.INACTIVE &&
+      specialization.status !== CatalogStatus.INACTIVE;
 
     if (data.name) {
       await this.ensureNameAvailable(specialization.careerGoalId, data.name, id);
     }
 
     try {
-      return await this.prisma.specialization.update({
-        where: { id },
-        data,
-        include: this.specializationInclude(),
+      return await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.specialization.update({
+          where: { id },
+          data,
+          include: this.specializationInclude(),
+        });
+
+        if (shouldInvalidate) {
+          await this.catalogInvalidation.invalidateCareerContext(tx, {
+            careerGoalId: specialization.careerGoalId,
+            specializationId: id,
+          });
+        }
+
+        return updated;
       });
     } catch (error) {
       this.handleKnownError(error);
@@ -150,12 +168,23 @@ export class SpecializationsService {
   }
 
   async deactivate(id: string) {
-    await this.ensureExists(id);
+    const existing = await this.ensureExists(id);
 
-    const specialization = await this.prisma.specialization.update({
-      where: { id },
-      data: { status: CatalogStatus.INACTIVE },
-      include: this.specializationInclude(),
+    const specialization = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.specialization.update({
+        where: { id },
+        data: { status: CatalogStatus.INACTIVE },
+        include: this.specializationInclude(),
+      });
+
+      if (existing.status !== CatalogStatus.INACTIVE) {
+        await this.catalogInvalidation.invalidateCareerContext(tx, {
+          careerGoalId: existing.careerGoalId,
+          specializationId: id,
+        });
+      }
+
+      return updated;
     });
 
     return { deactivated: true, specialization };
@@ -210,13 +239,21 @@ export class SpecializationsService {
     await this.ensureRequiredSkillNotConfigured(specializationId, data.skillId);
 
     try {
-      return await this.prisma.careerRequiredSkill.create({
-        data: {
-          ...data,
+      return await this.prisma.$transaction(async (tx) => {
+        const requiredSkill = await tx.careerRequiredSkill.create({
+          data: {
+            ...data,
+            careerGoalId: specialization.careerGoalId,
+            specializationId,
+          },
+          include: this.requiredSkillInclude(),
+        });
+        await this.catalogInvalidation.invalidateCareerRequiredSkillChange(tx, {
           careerGoalId: specialization.careerGoalId,
           specializationId,
-        },
-        include: this.requiredSkillInclude(),
+        });
+
+        return requiredSkill;
       });
     } catch (error) {
       this.handleRequiredSkillError(error);
@@ -228,8 +265,11 @@ export class SpecializationsService {
     requiredSkillId: string,
     dto: UpdateCareerRequiredSkillDto,
   ) {
-    await this.ensureActiveSpecializationExists(specializationId);
-    await this.ensureRequiredSkillExists(specializationId, requiredSkillId);
+    const specialization = await this.ensureActiveSpecializationExists(specializationId);
+    const existing = await this.ensureRequiredSkillExists(
+      specializationId,
+      requiredSkillId,
+    );
     const data = this.normalizeRequiredSkillUpdateData(dto);
 
     if (data.skillId) {
@@ -242,10 +282,18 @@ export class SpecializationsService {
     }
 
     try {
-      return await this.prisma.careerRequiredSkill.update({
-        where: { id: requiredSkillId },
-        data,
-        include: this.requiredSkillInclude(),
+      return await this.prisma.$transaction(async (tx) => {
+        const requiredSkill = await tx.careerRequiredSkill.update({
+          where: { id: requiredSkillId },
+          data,
+          include: this.requiredSkillInclude(),
+        });
+        await this.catalogInvalidation.invalidateCareerRequiredSkillChange(tx, {
+          careerGoalId: existing.careerGoalId ?? specialization.careerGoalId,
+          specializationId,
+        });
+
+        return requiredSkill;
       });
     } catch (error) {
       this.handleRequiredSkillError(error);
@@ -253,10 +301,19 @@ export class SpecializationsService {
   }
 
   async removeRequiredSkill(specializationId: string, requiredSkillId: string) {
-    await this.ensureActiveSpecializationExists(specializationId);
-    await this.ensureRequiredSkillExists(specializationId, requiredSkillId);
+    const specialization = await this.ensureActiveSpecializationExists(specializationId);
+    const existing = await this.ensureRequiredSkillExists(
+      specializationId,
+      requiredSkillId,
+    );
 
-    await this.prisma.careerRequiredSkill.delete({ where: { id: requiredSkillId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.careerRequiredSkill.delete({ where: { id: requiredSkillId } });
+      await this.catalogInvalidation.invalidateCareerRequiredSkillChange(tx, {
+        careerGoalId: existing.careerGoalId ?? specialization.careerGoalId,
+        specializationId,
+      });
+    });
     return { deleted: true };
   }
 
@@ -438,7 +495,7 @@ export class SpecializationsService {
   private async ensureExists(id: string) {
     const specialization = await this.prisma.specialization.findUnique({
       where: { id },
-      select: { id: true, careerGoalId: true },
+      select: { id: true, careerGoalId: true, status: true },
     });
     if (!specialization) {
       throw new NotFoundException('Specialization not found');
@@ -482,11 +539,13 @@ export class SpecializationsService {
         specializationId,
         specialization: { status: CatalogStatus.ACTIVE },
       },
-      select: { id: true },
+      select: { id: true, careerGoalId: true },
     });
     if (!exists) {
       throw new NotFoundException('Specialization required skill not found');
     }
+
+    return exists;
   }
 
   private async ensureRequiredSkillNotConfigured(

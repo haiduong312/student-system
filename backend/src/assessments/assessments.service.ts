@@ -90,7 +90,7 @@ export class AssessmentsService {
     assessmentId: string,
     dto: SubmitAssessmentDto,
   ): Promise<any> {
-    const studentId = await this.getStudentIdByUserId(userId);
+    const profile = await this.getAssessmentProfile(userId);
     this.assertNoDuplicateAnswers(dto);
 
     return this.prisma.$transaction(async (tx) => {
@@ -114,9 +114,10 @@ export class AssessmentsService {
       if (!assessment) {
         throw new NotFoundException('Assessment not found');
       }
-      if (assessment.studentId !== studentId) {
+      if (assessment.studentId !== profile.studentId) {
         throw new ForbiddenException('Assessment does not belong to current student');
       }
+      this.assertAssessmentMatchesCurrentProfile(assessment, profile);
       if (assessment.status !== AssessmentStatus.IN_PROGRESS) {
         throw new BadRequestException('Assessment has already been submitted');
       }
@@ -151,7 +152,7 @@ export class AssessmentsService {
       });
 
       for (const result of skillGrades) {
-        await this.applyBestAssessmentSkillLevel(tx, studentId, result);
+        await this.applyBestAssessmentSkillLevel(tx, profile.studentId, result);
       }
 
       await tx.assessment.update({
@@ -247,6 +248,7 @@ export class AssessmentsService {
         data: {
           studentId: profile.studentId,
           careerGoalId: profile.careerGoalId,
+          specializationId: profile.specializationId,
           status: AssessmentStatus.IN_PROGRESS,
           items: {
             create: selectedQuestions.map((selected, index) => ({
@@ -256,14 +258,14 @@ export class AssessmentsService {
             })),
           },
         },
-        select: { id: true, careerGoalId: true, startedAt: true },
+        select: { id: true, careerGoalId: true, specializationId: true, startedAt: true },
       }),
     );
 
     return {
       assessmentId: assessment.id,
       careerGoalId: assessment.careerGoalId,
-      specializationId: profile.specializationId,
+      specializationId: assessment.specializationId,
       startedAt: assessment.startedAt,
       expiresAt: this.addMinutes(
         assessment.startedAt,
@@ -325,6 +327,35 @@ export class AssessmentsService {
     }
 
     return student.id;
+  }
+
+  private buildAssessmentScopeWhere(
+    profile: AssessmentProfileContext,
+  ): Prisma.AssessmentWhereInput {
+    return {
+      studentId: profile.studentId,
+      careerGoalId: profile.careerGoalId,
+      specializationId: profile.specializationId,
+    };
+  }
+
+  private assertAssessmentMatchesCurrentProfile(
+    assessment: {
+      careerGoalId: string;
+      specializationId: string | null;
+    },
+    profile: AssessmentProfileContext,
+  ) {
+    if (
+      assessment.careerGoalId === profile.careerGoalId &&
+      (assessment.specializationId ?? null) === profile.specializationId
+    ) {
+      return;
+    }
+
+    throw new BadRequestException(
+      'Assessment does not match the current career goal or specialization',
+    );
   }
 
   private async getAssessmentProfile(
@@ -730,8 +761,7 @@ export class AssessmentsService {
   private async assertCanStartAssessment(profile: AssessmentProfileContext) {
     const activeAttempt = await this.prisma.assessment.findFirst({
       where: {
-        studentId: profile.studentId,
-        careerGoalId: profile.careerGoalId,
+        ...this.buildAssessmentScopeWhere(profile),
         status: AssessmentStatus.IN_PROGRESS,
       },
       orderBy: { startedAt: 'desc' },
@@ -751,8 +781,7 @@ export class AssessmentsService {
 
     const completedAttemptCount = await this.prisma.assessment.count({
       where: {
-        studentId: profile.studentId,
-        careerGoalId: profile.careerGoalId,
+        ...this.buildAssessmentScopeWhere(profile),
         status: { in: [...COMPLETED_ASSESSMENT_STATUSES] },
       },
     });
@@ -762,8 +791,7 @@ export class AssessmentsService {
 
     const latestAttempt = await this.prisma.assessment.findFirst({
       where: {
-        studentId: profile.studentId,
-        careerGoalId: profile.careerGoalId,
+        ...this.buildAssessmentScopeWhere(profile),
         status: {
           in: [
             AssessmentStatus.SUBMITTED,

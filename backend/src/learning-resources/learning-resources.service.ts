@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   CatalogStatus,
   Prisma,
   ResourceProgressStatus,
@@ -383,7 +384,14 @@ export class LearningResourcesService {
     recommendationId: string,
   ) {
     const recommendation = await tx.studentRecommendation.findFirst({
-      where: { id: recommendationId, studentId },
+      where: {
+        id: recommendationId,
+        studentId,
+        OR: [
+          { analysisResultId: null },
+          { analysisResult: { status: AnalysisResultStatus.CURRENT } },
+        ],
+      },
       select: {
         id: true,
         status: true,
@@ -539,7 +547,14 @@ export class LearningResourcesService {
     resourceId: string,
   ) {
     const recommendation = await this.prisma.studentRecommendation.findFirst({
-      where: { id: recommendationId, studentId },
+      where: {
+        id: recommendationId,
+        studentId,
+        OR: [
+          { analysisResultId: null },
+          { analysisResult: { status: AnalysisResultStatus.CURRENT } },
+        ],
+      },
       select: {
         id: true,
         resourceLinks: {

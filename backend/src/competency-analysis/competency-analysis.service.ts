@@ -5,6 +5,7 @@ import {
     NotFoundException,
 } from "@nestjs/common";
 import {
+    AnalysisResultStatus,
     AnalysisSkillStatus,
     CatalogStatus,
     EvidenceEntityType,
@@ -491,11 +492,22 @@ export class CompetencyAnalysisService {
         deleteOldNewRecommendations: boolean;
     }): Promise<CompetencyAnalysisResponseDto> {
         return this.prisma.$transaction(async (tx) => {
+            await tx.competencyAnalysisResult.updateMany({
+                where: {
+                    studentId: input.profile.studentId,
+                    careerGoalId: input.profile.careerGoalId,
+                    specializationId: input.profile.specializationId,
+                    status: AnalysisResultStatus.CURRENT,
+                },
+                data: { status: AnalysisResultStatus.OBSOLETE },
+            });
+
             const analysisResult = await tx.competencyAnalysisResult.create({
                 data: {
                     studentId: input.profile.studentId,
                     careerGoalId: input.profile.careerGoalId,
                     specializationId: input.profile.specializationId,
+                    status: AnalysisResultStatus.CURRENT,
                     completionPercent: input.completionPercent,
                     matchPercent: input.matchPercent,
                     riskScore: input.riskScore,

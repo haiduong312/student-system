@@ -32,7 +32,8 @@ export type StudentRecommendationStatus =
   | 'SAVED'
   | 'IN_PROGRESS'
   | 'DONE'
-  | 'DISMISSED';
+  | 'DISMISSED'
+  | 'OBSOLETE';
 
 export interface Paginated<T> {
   success: true;

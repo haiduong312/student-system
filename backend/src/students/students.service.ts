@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   AssignmentStatus,
   CatalogStatus,
   Prisma,
@@ -46,6 +47,12 @@ type StudentProfileUpsertData = {
   githubUrl?: string | null;
   linkedinUrl?: string | null;
   portfolioUrl?: string | null;
+};
+type StudentProfileUpsertContext = {
+  data: StudentProfileUpsertData;
+  nextCareerGoalId: string | null;
+  nextSpecializationId: string | null;
+  contextChanged: boolean;
 };
 type ImportValidationResult =
   | { valid: true; record: ImportStudentRecordDto }
@@ -105,7 +112,7 @@ export class StudentsService {
     await this.ensureExists(id);
     const userData: Prisma.UserUpdateInput = {};
     const studentData = this.buildStudentUpdateData(dto);
-    const profileData = await this.buildProfileUpsertData(id, dto);
+    const profileContext = await this.buildProfileUpsertData(id, dto);
 
     if (dto.email !== undefined) {
       userData.email = dto.email;
@@ -127,12 +134,15 @@ export class StudentsService {
         if (Object.keys(studentData).length > 0) {
           await tx.student.update({ where: { id }, data: studentData });
         }
-        if (profileData) {
+        if (profileContext) {
           await tx.studentProfile.upsert({
             where: { studentId: id },
-            create: { studentId: id, ...profileData, lastUpdatedAt: new Date() },
-            update: { ...profileData, lastUpdatedAt: new Date() },
+            create: { studentId: id, ...profileContext.data, lastUpdatedAt: new Date() },
+            update: { ...profileContext.data, lastUpdatedAt: new Date() },
           });
+          if (profileContext.contextChanged) {
+            await this.markStaleAnalysesObsolete(tx, id, profileContext);
+          }
         }
 
         return tx.student.findUniqueOrThrow({
@@ -272,7 +282,7 @@ export class StudentsService {
     actorUserId?: string,
     passwordProvided = true,
   ) {
-    const profileData = this.hasProfileFields(dto)
+    const profileContext = this.hasProfileFields(dto)
       ? await this.buildProfileUpsertData(undefined, dto)
       : null;
     const passwordHash = await this.usersService.hashPassword(password);
@@ -301,9 +311,9 @@ export class StudentsService {
           include: this.detailInclude(),
         });
 
-        if (profileData) {
+        if (profileContext) {
           await tx.studentProfile.create({
-            data: { studentId: student.id, ...profileData, lastUpdatedAt: new Date() },
+            data: { studentId: student.id, ...profileContext.data, lastUpdatedAt: new Date() },
           });
         }
 
@@ -412,7 +422,7 @@ export class StudentsService {
   private async buildProfileUpsertData(
     studentId: string | undefined,
     dto: StudentProfileFields,
-  ): Promise<StudentProfileUpsertData | null> {
+  ): Promise<StudentProfileUpsertContext | null> {
     const profileFields: Array<keyof StudentProfileFields> = [
       'careerGoalId',
       'specializationId',
@@ -462,7 +472,46 @@ export class StudentsService {
     this.copyField(data, dto, 'linkedinUrl');
     this.copyField(data, dto, 'portfolioUrl');
 
-    return data;
+    const nextSpecializationId = Object.prototype.hasOwnProperty.call(data, 'specializationId')
+      ? data.specializationId ?? null
+      : existingProfile?.specializationId ?? null;
+    const contextChanged = Boolean(
+      studentId &&
+        existingProfile &&
+        (existingProfile.careerGoalId !== nextCareerGoalId ||
+          existingProfile.specializationId !== nextSpecializationId),
+    );
+
+    return {
+      data,
+      nextCareerGoalId,
+      nextSpecializationId,
+      contextChanged,
+    };
+  }
+
+  private markStaleAnalysesObsolete(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    context: StudentProfileUpsertContext,
+  ) {
+    const where: Prisma.CompetencyAnalysisResultWhereInput = {
+      studentId,
+      status: AnalysisResultStatus.CURRENT,
+      ...(context.nextCareerGoalId
+        ? {
+            NOT: {
+              careerGoalId: context.nextCareerGoalId,
+              specializationId: context.nextSpecializationId,
+            },
+          }
+        : {}),
+    };
+
+    return tx.competencyAnalysisResult.updateMany({
+      where,
+      data: { status: AnalysisResultStatus.OBSOLETE },
+    });
   }
 
   private async resolveRequestedSpecialization(

@@ -1,0 +1,1 @@
+ALTER TYPE "StudentRecommendationStatus" ADD VALUE IF NOT EXISTS 'OBSOLETE';

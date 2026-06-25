@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   AnalysisSkillStatus,
   AssignmentStatus,
   EvidenceStatus,
@@ -35,7 +36,10 @@ export class DashboardService {
     const [latestAnalysis, activeRoadmap] = currentScopeWhere
       ? await Promise.all([
           this.prisma.competencyAnalysisResult.findFirst({
-            where: currentScopeWhere,
+            where: {
+              ...currentScopeWhere,
+              status: AnalysisResultStatus.CURRENT,
+            },
             orderBy: { analyzedAt: 'desc' },
             include: {
               details: {
@@ -184,6 +188,7 @@ export class DashboardService {
     const latestAnalysisIds = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT DISTINCT ON (student_id) id
       FROM competency_analysis_results
+      WHERE status = 'CURRENT'
       ORDER BY student_id, analyzed_at DESC
     `;
 

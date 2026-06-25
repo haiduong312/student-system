@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CatalogContextInvalidationModule } from '../common/catalog-invalidation/catalog-context-invalidation.module';
 import { CareerGoalsController } from './career-goals.controller';
 import { CareerGoalsService } from './career-goals.service';
 import {
@@ -8,6 +9,7 @@ import {
 import { SpecializationsService } from './specializations.service';
 
 @Module({
+  imports: [CatalogContextInvalidationModule],
   controllers: [
     CareerGoalsController,
     AdminSpecializationsController,

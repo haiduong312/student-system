@@ -116,6 +116,11 @@ enum AnalysisSkillStatus {
   NEED_IMPROVEMENT
 }
 
+enum AnalysisResultStatus {
+  CURRENT
+  OBSOLETE
+}
+
 enum RecommendationType {
   COURSE
   PROJECT
@@ -162,6 +167,7 @@ enum StudentRecommendationStatus {
   IN_PROGRESS
   DONE
   DISMISSED
+  OBSOLETE
 }
 
 enum ResourceProgressStatus {
@@ -427,23 +433,27 @@ model AssessmentOption {
 // ---------------------------------------------------------------------------
 
 model Assessment {
-  id           String           @id @default(cuid())
-  studentId    String           @map("student_id")
-  careerGoalId String           @map("career_goal_id")
-  status       AssessmentStatus @default(IN_PROGRESS)
-  startedAt    DateTime         @default(now()) @map("started_at")
-  submittedAt  DateTime?        @map("submitted_at")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
+  id               String           @id @default(cuid())
+  studentId        String           @map("student_id")
+  careerGoalId     String           @map("career_goal_id")
+  specializationId String?          @map("specialization_id")
+  status           AssessmentStatus @default(IN_PROGRESS)
+  startedAt        DateTime         @default(now()) @map("started_at")
+  submittedAt      DateTime?        @map("submitted_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  student      Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  careerGoal   CareerGoal               @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
-  items        AssessmentQuestionItem[]
-  answers      AssessmentAnswer[]
-  skillResults AssessmentSkillResult[]
+  student        Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careerGoal     CareerGoal               @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
+  specialization Specialization?          @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+  items          AssessmentQuestionItem[]
+  answers        AssessmentAnswer[]
+  skillResults   AssessmentSkillResult[]
 
   @@index([studentId, status, createdAt], map: "assessments_student_status_created_idx")
+  @@index([studentId, careerGoalId, specializationId, status, createdAt], map: "assessments_scope_status_created_idx")
   @@index([careerGoalId, status], map: "assessments_career_goal_status_idx")
+  @@index([specializationId, status], map: "assessments_specialization_status_idx")
   @@map("assessments")
 }
 
@@ -543,6 +553,7 @@ model Specialization {
   analysisResults         CompetencyAnalysisResult[]
   recommendationTemplates RecommendationTemplate[]
   roadmaps                DevelopmentRoadmap[]
+  assessments             Assessment[]
 
   @@unique([careerGoalId, name], map: "specializations_career_goal_name_unique")
   @@index([careerGoalId, status], map: "specializations_career_goal_status_idx")
@@ -771,15 +782,16 @@ model AdvisorReview {
 // ---------------------------------------------------------------------------
 
 model CompetencyAnalysisResult {
-  id                String     @id @default(cuid())
-  studentId         String     @map("student_id")
-  careerGoalId      String     @map("career_goal_id")
-  specializationId  String?    @map("specialization_id")
-  completionPercent Decimal    @map("completion_percent") @db.Decimal(5, 2)
-  matchPercent      Decimal    @map("match_percent") @db.Decimal(5, 2)
-  riskScore         Int        @map("risk_score")
-  matchLevel        MatchLevel @map("match_level")
-  analyzedAt        DateTime   @default(now()) @map("analyzed_at")
+  id                String               @id @default(cuid())
+  studentId         String               @map("student_id")
+  careerGoalId      String               @map("career_goal_id")
+  specializationId  String?              @map("specialization_id")
+  completionPercent Decimal              @map("completion_percent") @db.Decimal(5, 2)
+  matchPercent      Decimal              @map("match_percent") @db.Decimal(5, 2)
+  riskScore         Int                  @map("risk_score")
+  matchLevel        MatchLevel           @map("match_level")
+  status            AnalysisResultStatus @default(CURRENT)
+  analyzedAt        DateTime             @default(now()) @map("analyzed_at")
 
   student         Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
   careerGoal      CareerGoal                 @relation(fields: [careerGoalId], references: [id], onDelete: Restrict)
@@ -788,8 +800,10 @@ model CompetencyAnalysisResult {
   recommendations StudentRecommendation[]
 
   @@index([studentId, analyzedAt], map: "analysis_results_student_analyzed_at_idx")
+  @@index([studentId, careerGoalId, specializationId, status, analyzedAt], map: "analysis_results_scope_status_analyzed_idx")
   @@index([careerGoalId, matchLevel], map: "analysis_results_goal_match_level_idx")
   @@index([specializationId, matchLevel], map: "analysis_results_specialization_match_idx")
+  @@index([status, analyzedAt], map: "analysis_results_status_analyzed_idx")
   @@index([matchPercent], map: "analysis_results_match_percent_idx")
   @@index([riskScore], map: "analysis_results_risk_score_idx")
   @@map("competency_analysis_results")

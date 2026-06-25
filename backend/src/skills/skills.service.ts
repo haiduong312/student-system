@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CatalogStatus, Prisma } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { CatalogContextInvalidationService } from '../common/catalog-invalidation/catalog-context-invalidation.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -25,6 +26,7 @@ export class SkillsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly catalogInvalidation: CatalogContextInvalidationService,
   ) {}
 
   async create(dto: CreateSkillDto, actorUserId?: string) {
@@ -114,16 +116,27 @@ export class SkillsService {
   }
 
   async update(id: string, dto: UpdateSkillDto, actorUserId?: string) {
-    await this.ensureExists(id);
+    const existing = await this.ensureExists(id);
     if (dto.categoryId) {
       await this.ensureCategoryExists(dto.categoryId);
     }
+    const shouldInvalidate =
+      dto.status === CatalogStatus.INACTIVE &&
+      existing.status !== CatalogStatus.INACTIVE;
 
     try {
-      const skill = await this.prisma.skill.update({
-        where: { id },
-        data: dto,
-        include: this.detailInclude(),
+      const skill = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.skill.update({
+          where: { id },
+          data: dto,
+          include: this.detailInclude(),
+        });
+
+        if (shouldInvalidate) {
+          await this.catalogInvalidation.invalidateSkillCatalogChange(tx, id);
+        }
+
+        return updated;
       });
       await this.activityLogs.record({
         actorUserId,
@@ -163,11 +176,13 @@ export class SkillsService {
   private async ensureExists(id: string) {
     const exists = await this.prisma.skill.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!exists) {
       throw new NotFoundException('Skill not found');
     }
+
+    return exists;
   }
 
   private async ensureCategoryExists(categoryId: string) {

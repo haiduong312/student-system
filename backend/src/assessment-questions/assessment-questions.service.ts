@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, QuestionStatus, QuestionType } from '@prisma/client';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { CatalogContextInvalidationService } from '../common/catalog-invalidation/catalog-context-invalidation.service';
 import {
   buildPaginatedResult,
   getPagination,
@@ -39,6 +40,7 @@ export class AssessmentQuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly catalogInvalidation: CatalogContextInvalidationService,
   ) {}
 
   async create(dto: CreateAssessmentQuestionDto, actorUserId?: string) {
@@ -148,6 +150,9 @@ export class AssessmentQuestionsService {
           dto.options ??
           this.toOptionDtos(existing.options);
         const hasVersionedChanges = this.hasVersionedQuestionChanges(dto);
+        const shouldCancelInProgressAssessments =
+          dto.status === QuestionStatus.INACTIVE &&
+          existing.status !== QuestionStatus.INACTIVE;
 
         if (hasVersionedChanges) {
           this.validateOptions(questionType, optionsToValidate);
@@ -156,6 +161,10 @@ export class AssessmentQuestionsService {
         const isUsed = await this.isQuestionUsed(tx, id);
         if (isUsed && hasVersionedChanges) {
           const newQuestion = await this.createQuestionVersion(tx, existing, dto);
+          await this.catalogInvalidation.cancelInProgressAssessmentsUsingQuestion(
+            tx,
+            existing.id,
+          );
 
           return {
             question: newQuestion,
@@ -178,6 +187,13 @@ export class AssessmentQuestionsService {
               questionId: id,
             })),
           });
+        }
+
+        if (shouldCancelInProgressAssessments) {
+          await this.catalogInvalidation.cancelInProgressAssessmentsUsingQuestion(
+            tx,
+            id,
+          );
         }
 
         const updatedQuestion = await tx.assessmentQuestion.findUniqueOrThrow({
@@ -216,10 +232,18 @@ export class AssessmentQuestionsService {
   async remove(id: string, actorUserId?: string) {
     await this.findOne(id);
 
-    const question = await this.prisma.assessmentQuestion.update({
-      where: { id },
-      data: { status: QuestionStatus.INACTIVE },
-      include: this.detailInclude(),
+    const question = await this.prisma.$transaction(async (tx) => {
+      const question = await tx.assessmentQuestion.update({
+        where: { id },
+        data: { status: QuestionStatus.INACTIVE },
+        include: this.detailInclude(),
+      });
+      await this.catalogInvalidation.cancelInProgressAssessmentsUsingQuestion(
+        tx,
+        id,
+      );
+
+      return question;
     });
     await this.activityLogs.record({
       actorUserId,

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   CatalogStatus,
   Prisma,
   ResourceProgressStatus,
@@ -39,7 +40,21 @@ const RECOMMENDATION_STATUS_TRANSITIONS: Record<
   ],
   [StudentRecommendationStatus.DONE]: [],
   [StudentRecommendationStatus.DISMISSED]: [],
+  [StudentRecommendationStatus.OBSOLETE]: [],
 };
+
+const DEFAULT_CURRENT_RECOMMENDATION_STATUSES = [
+  StudentRecommendationStatus.NEW,
+  StudentRecommendationStatus.SAVED,
+  StudentRecommendationStatus.IN_PROGRESS,
+  StudentRecommendationStatus.DONE,
+];
+
+interface StudentRecommendationContext {
+  studentId: string;
+  careerGoalId: string | null;
+  specializationId: string | null;
+}
 
 type StudentRecommendationWithResources = Prisma.StudentRecommendationGetPayload<{
   include: ReturnType<RecommendationsService['detailInclude']>;
@@ -50,31 +65,42 @@ export class RecommendationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findMine(userId: string, query: RecommendationQueryDto) {
-    const studentId = await this.getStudentIdByUserId(userId);
+    const context = await this.getStudentRecommendationContext(userId);
     const { page, limit, skip, take } = getPagination(query);
+    const currentContextFilter = this.buildCurrentContextFilter(context);
+    if (!currentContextFilter) {
+      return buildPaginatedResult([], 0, page, limit);
+    }
+
+    const andFilters: Prisma.StudentRecommendationWhereInput[] = [
+      {
+        OR: [
+          { recommendationTemplateId: null },
+          { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+        ],
+      },
+      currentContextFilter,
+    ];
+
+    if (query.search) {
+      andFilters.push({
+        OR: [
+          { title: { contains: query.search, mode: 'insensitive' } },
+          { description: { contains: query.search, mode: 'insensitive' } },
+          { reason: { contains: query.search, mode: 'insensitive' } },
+          { skill: { name: { contains: query.search, mode: 'insensitive' } } },
+        ],
+      });
+    }
+
     const where: Prisma.StudentRecommendationWhereInput = {
-      studentId,
+      studentId: context.studentId,
       skill: { status: CatalogStatus.ACTIVE },
-      OR: [
-        { recommendationTemplateId: null },
-        { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
-      ],
-      ...(query.status ? { status: query.status } : {}),
+      AND: andFilters,
+      ...(query.status
+        ? { status: query.status }
+        : { status: { in: DEFAULT_CURRENT_RECOMMENDATION_STATUSES } }),
       ...(query.skillId ? { skillId: query.skillId } : {}),
-      ...(query.search
-        ? {
-            AND: [
-              {
-                OR: [
-                  { title: { contains: query.search, mode: 'insensitive' } },
-                  { description: { contains: query.search, mode: 'insensitive' } },
-                  { reason: { contains: query.search, mode: 'insensitive' } },
-                  { skill: { name: { contains: query.search, mode: 'insensitive' } } },
-                ],
-              },
-            ],
-          }
-        : {}),
     };
     const sortBy = ['createdAt', 'updatedAt', 'priorityScore', 'status'].includes(
       query.sortBy ?? '',
@@ -93,7 +119,7 @@ export class RecommendationsService {
       this.prisma.studentRecommendation.count({ where }),
     ]);
     const progressByResourceId = await this.getProgressByResourceId(
-      studentId,
+      context.studentId,
       data.flatMap((recommendation) =>
         recommendation.resourceLinks.map((resource) => resource.resourceId),
       ),
@@ -114,15 +140,25 @@ export class RecommendationsService {
     id: string,
     dto: UpdateRecommendationStatusDto,
   ) {
-    const studentId = await this.getStudentIdByUserId(userId);
+    const context = await this.getStudentRecommendationContext(userId);
+    const currentContextFilter = this.buildCurrentContextFilter(context);
+    if (!currentContextFilter) {
+      throw new NotFoundException('Recommendation not found');
+    }
+
     const recommendation = await this.prisma.studentRecommendation.findFirst({
       where: {
         id,
-        studentId,
+        studentId: context.studentId,
         skill: { status: CatalogStatus.ACTIVE },
-        OR: [
-          { recommendationTemplateId: null },
-          { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+        AND: [
+          {
+            OR: [
+              { recommendationTemplateId: null },
+              { recommendationTemplate: { status: TemplateStatus.ACTIVE } },
+            ],
+          },
+          currentContextFilter,
         ],
       },
       include: this.detailInclude(),
@@ -132,7 +168,7 @@ export class RecommendationsService {
     }
     if (recommendation.status === dto.status) {
       const progressByResourceId = await this.getProgressByResourceId(
-        studentId,
+        context.studentId,
         recommendation.resourceLinks.map((resource) => resource.resourceId),
       );
       return this.toRecommendationResponse(recommendation, progressByResourceId);
@@ -146,7 +182,7 @@ export class RecommendationsService {
       include: this.detailInclude(),
     });
     const progressByResourceId = await this.getProgressByResourceId(
-      studentId,
+      context.studentId,
       updated.resourceLinks.map((resource) => resource.resourceId),
     );
 
@@ -243,7 +279,8 @@ export class RecommendationsService {
 
     if (
       currentStatus === StudentRecommendationStatus.DONE ||
-      currentStatus === StudentRecommendationStatus.DISMISSED
+      currentStatus === StudentRecommendationStatus.DISMISSED ||
+      currentStatus === StudentRecommendationStatus.OBSOLETE
     ) {
       throw new BadRequestException(
         `Recommendation in ${currentStatus} status cannot be changed`,
@@ -255,15 +292,63 @@ export class RecommendationsService {
     );
   }
 
-  private async getStudentIdByUserId(userId: string) {
+  private buildCurrentContextFilter(
+    context: StudentRecommendationContext,
+  ): Prisma.StudentRecommendationWhereInput | null {
+    if (!context.careerGoalId) {
+      return null;
+    }
+
+    return {
+      OR: [
+        {
+          analysisResult: {
+            studentId: context.studentId,
+            careerGoalId: context.careerGoalId,
+            specializationId: context.specializationId,
+            status: AnalysisResultStatus.CURRENT,
+          },
+        },
+        {
+          analysisResultId: null,
+          recommendationTemplate: {
+            status: TemplateStatus.ACTIVE,
+            careerGoalId: context.careerGoalId,
+            OR: context.specializationId
+              ? [
+                  { specializationId: context.specializationId },
+                  { specializationId: null },
+                ]
+              : [{ specializationId: null }],
+          },
+        },
+      ],
+    };
+  }
+
+  private async getStudentRecommendationContext(
+    userId: string,
+  ): Promise<StudentRecommendationContext> {
     const student = await this.prisma.student.findUnique({
       where: { userId },
-      select: { id: true },
+      select: {
+        id: true,
+        profile: {
+          select: {
+            careerGoalId: true,
+            specializationId: true,
+          },
+        },
+      },
     });
     if (!student) {
       throw new ForbiddenException('Current user is not a student');
     }
 
-    return student.id;
+    return {
+      studentId: student.id,
+      careerGoalId: student.profile?.careerGoalId ?? null,
+      specializationId: student.profile?.specializationId ?? null,
+    };
   }
 }

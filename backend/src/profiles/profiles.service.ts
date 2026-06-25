@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   AssessmentStatus,
   CatalogStatus,
   EvidenceEntityType,
@@ -710,7 +711,8 @@ export class ProfilesService {
     context: ProfileUpdateContext,
   ) {
     await this.archiveStaleRoadmaps(tx, studentId, context);
-    await this.cancelInProgressAssessments(tx, studentId);
+    await this.cancelStaleInProgressAssessments(tx, studentId, context);
+    await this.markStaleAnalysesObsolete(tx, studentId, context);
     await this.dismissStaleRecommendations(tx, studentId, context);
   }
 
@@ -738,15 +740,26 @@ export class ProfilesService {
     });
   }
 
-  private cancelInProgressAssessments(
+  private cancelStaleInProgressAssessments(
     tx: Prisma.TransactionClient,
     studentId: string,
+    context: ProfileUpdateContext,
   ) {
+    const where: Prisma.AssessmentWhereInput = {
+      studentId,
+      status: AssessmentStatus.IN_PROGRESS,
+      ...(context.nextCareerGoalId
+        ? {
+            NOT: {
+              careerGoalId: context.nextCareerGoalId,
+              specializationId: context.nextSpecializationId,
+            },
+          }
+        : {}),
+    };
+
     return tx.assessment.updateMany({
-      where: {
-        studentId,
-        status: AssessmentStatus.IN_PROGRESS,
-      },
+      where,
       data: { status: AssessmentStatus.CANCELLED },
     });
   }
@@ -787,6 +800,30 @@ export class ProfilesService {
         },
       },
       data: { status: StudentRecommendationStatus.DISMISSED },
+    });
+  }
+
+  private markStaleAnalysesObsolete(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    context: ProfileUpdateContext,
+  ) {
+    const where: Prisma.CompetencyAnalysisResultWhereInput = {
+      studentId,
+      status: AnalysisResultStatus.CURRENT,
+      ...(context.nextCareerGoalId
+        ? {
+            NOT: {
+              careerGoalId: context.nextCareerGoalId,
+              specializationId: context.nextSpecializationId,
+            },
+          }
+        : {}),
+    };
+
+    return tx.competencyAnalysisResult.updateMany({
+      where,
+      data: { status: AnalysisResultStatus.OBSOLETE },
     });
   }
 

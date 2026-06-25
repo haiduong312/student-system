@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AnalysisResultStatus,
   AnalysisSkillStatus,
   CatalogStatus,
   DifficultyLevel,
@@ -547,7 +548,12 @@ export class RoadmapsService {
     specializationId: string | null,
   ): Promise<LatestAnalysis> {
     const analysis = await this.prisma.competencyAnalysisResult.findFirst({
-      where: { studentId, careerGoalId, specializationId },
+      where: {
+        studentId,
+        careerGoalId,
+        specializationId,
+        status: AnalysisResultStatus.CURRENT,
+      },
       orderBy: { analyzedAt: 'desc' },
       include: {
         careerGoal: true,
