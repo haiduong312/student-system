@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StudentAccessPolicyService } from '../student-access/student-access-policy.service';
 import {
   LEGACY_PROFILE_UPLOADS_URL_PREFIX,
+  normalizeUploadedFilename,
   PROFILE_UPLOAD_DIR,
   PROFILE_UPLOADS_URL_PREFIX,
 } from './file-upload.options';
@@ -75,19 +76,11 @@ export class PrivateUploadsService {
   }
 
   normalizeProfileUploadFilename(filename: string) {
-    const safeFilename = basename(filename);
-
-    if (
-      !safeFilename ||
-      safeFilename !== filename ||
-      safeFilename.includes('..') ||
-      safeFilename.includes('\0') ||
-      /[/\\]/.test(safeFilename)
-    ) {
+    try {
+      return normalizeUploadedFilename(filename);
+    } catch {
       throw new BadRequestException('Invalid upload path');
     }
-
-    return safeFilename;
   }
 
   private async getProfileUploadFile(filename: string): Promise<PrivateUploadFile> {

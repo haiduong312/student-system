@@ -50,7 +50,7 @@ const RESOURCE_PROGRESS_STATUS_TRANSITIONS: Record<
     ResourceProgressStatus.COMPLETED,
     ResourceProgressStatus.SKIPPED,
   ],
-  [ResourceProgressStatus.COMPLETED]: [ResourceProgressStatus.IN_PROGRESS],
+  [ResourceProgressStatus.COMPLETED]: [],
   [ResourceProgressStatus.SKIPPED]: [ResourceProgressStatus.IN_PROGRESS],
 };
 
@@ -584,6 +584,12 @@ export class LearningResourcesService {
     }
     if (hasExistingProgress && currentStatus === nextStatus) {
       return;
+    }
+
+    if (currentStatus === ResourceProgressStatus.COMPLETED) {
+      throw new BadRequestException(
+        'Completed resource progress cannot be moved back to an incomplete status',
+      );
     }
 
     const allowedNextStatuses =

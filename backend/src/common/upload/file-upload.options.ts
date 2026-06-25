@@ -22,6 +22,40 @@ const allowedMimeTypes = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
 
+const allowedExtensions = new Set([
+  '.pdf',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.doc',
+  '.docx',
+]);
+
+export const normalizeUploadedFilename = (filename: string) => {
+  let decodedFilename: string;
+
+  try {
+    decodedFilename = decodeURIComponent(filename);
+  } catch {
+    throw new BadRequestException('Invalid uploaded file name');
+  }
+
+  const safeFilename = basename(decodedFilename);
+
+  if (
+    !safeFilename ||
+    safeFilename !== decodedFilename ||
+    safeFilename.includes('..') ||
+    safeFilename.includes('\0') ||
+    /[/\\]/.test(safeFilename)
+  ) {
+    throw new BadRequestException('Invalid uploaded file name');
+  }
+
+  return safeFilename;
+};
+
 export const profileFileUploadOptions = {
   storage: diskStorage({
     destination: PROFILE_UPLOAD_DIR,
@@ -44,16 +78,22 @@ export const profileFileUploadOptions = {
       return;
     }
 
+    if (!allowedExtensions.has(extname(file.originalname).toLowerCase())) {
+      callback(
+        new BadRequestException(
+          'Invalid file extension. Allowed extensions: PDF, DOC, DOCX, JPG, PNG, WEBP',
+        ),
+        false,
+      );
+      return;
+    }
+
     callback(null, true);
   },
 };
 
 export const buildUploadedFileUrl = (filename: string) => {
-  const safeFilename = basename(filename);
-
-  if (!safeFilename || safeFilename !== filename || safeFilename.includes('..')) {
-    throw new BadRequestException('Invalid uploaded file name');
-  }
+  const safeFilename = normalizeUploadedFilename(filename);
 
   return `${PROFILE_UPLOADS_URL_PREFIX}/${safeFilename}`;
 };

@@ -157,4 +157,238 @@ describe('CatalogContextInvalidationService', () => {
       status: RoadmapStatus.ACTIVE,
     });
   });
+
+  it('invalidates only the affected goal and specialization scope when required skills change', async () => {
+    const service = new CatalogContextInvalidationService();
+    const analyses = [
+      {
+        id: 'analysis-a',
+        careerGoalId: 'goal-a',
+        specializationId: 'spec-a',
+        status: AnalysisResultStatus.CURRENT,
+      },
+      {
+        id: 'analysis-b',
+        careerGoalId: 'goal-b',
+        specializationId: 'spec-b',
+        status: AnalysisResultStatus.CURRENT,
+      },
+    ];
+    const recommendations: any[] = [
+      {
+        id: 'recommendation-a',
+        analysisResultId: 'analysis-a',
+        status: StudentRecommendationStatus.IN_PROGRESS,
+      },
+      {
+        id: 'recommendation-b',
+        analysisResultId: 'analysis-b',
+        status: StudentRecommendationStatus.IN_PROGRESS,
+      },
+      {
+        id: 'template-recommendation-a',
+        analysisResultId: null,
+        status: StudentRecommendationStatus.SAVED,
+        studentProfile: {
+          careerGoalId: 'goal-a',
+          specializationId: 'spec-a',
+        },
+        template: {
+          careerGoalId: 'goal-a',
+          specializationId: 'spec-a',
+          status: TemplateStatus.ACTIVE,
+        },
+      },
+      {
+        id: 'template-recommendation-b',
+        analysisResultId: null,
+        status: StudentRecommendationStatus.SAVED,
+        studentProfile: {
+          careerGoalId: 'goal-b',
+          specializationId: 'spec-b',
+        },
+        template: {
+          careerGoalId: 'goal-b',
+          specializationId: 'spec-b',
+          status: TemplateStatus.ACTIVE,
+        },
+      },
+    ];
+    const roadmaps = [
+      {
+        id: 'roadmap-a',
+        careerGoalId: 'goal-a',
+        specializationId: 'spec-a',
+        status: RoadmapStatus.ACTIVE,
+      },
+      {
+        id: 'roadmap-b',
+        careerGoalId: 'goal-b',
+        specializationId: 'spec-b',
+        status: RoadmapStatus.ACTIVE,
+      },
+    ];
+    const assessments = [
+      {
+        id: 'assessment-a',
+        careerGoalId: 'goal-a',
+        specializationId: 'spec-a',
+        status: AssessmentStatus.IN_PROGRESS,
+      },
+      {
+        id: 'assessment-b',
+        careerGoalId: 'goal-b',
+        specializationId: 'spec-b',
+        status: AssessmentStatus.IN_PROGRESS,
+      },
+    ];
+    const profiles: any[] = [
+      {
+        id: 'profile-a',
+        careerGoalId: 'goal-a',
+        specializationId: 'spec-a',
+        matchPercent: 88,
+        riskScore: 12,
+        lastAnalyzedAt: new Date('2026-06-25T08:00:00.000Z'),
+      },
+      {
+        id: 'profile-b',
+        careerGoalId: 'goal-b',
+        specializationId: 'spec-b',
+        matchPercent: 77,
+        riskScore: 20,
+        lastAnalyzedAt: new Date('2026-06-25T08:30:00.000Z'),
+      },
+    ];
+    const matchesScope = (record: any, where: any) =>
+      record.careerGoalId === where.careerGoalId &&
+      (!('specializationId' in where) ||
+        record.specializationId === where.specializationId);
+    const tx = {
+      competencyAnalysisResult: {
+        findMany: async ({ where }: any) =>
+          analyses
+            .filter(
+              (analysis) =>
+                matchesScope(analysis, where) &&
+                analysis.status === where.status,
+            )
+            .map((analysis) => ({ id: analysis.id })),
+        updateMany: async ({ where, data }: any) => {
+          let count = 0;
+          for (const analysis of analyses) {
+            if (
+              where.id.in.includes(analysis.id) &&
+              analysis.status === where.status
+            ) {
+              analysis.status = data.status;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+      studentRecommendation: {
+        updateMany: async ({ where, data }: any) => {
+          let count = 0;
+          for (const recommendation of recommendations) {
+            const matchesAnalysis =
+              where.analysisResultId?.in?.includes(recommendation.analysisResultId);
+            const matchesTemplate =
+              where.analysisResultId === null &&
+              recommendation.analysisResultId === null &&
+              recommendation.studentProfile?.careerGoalId ===
+                where.student.profile.careerGoalId &&
+              recommendation.studentProfile?.specializationId ===
+                where.student.profile.specializationId &&
+              recommendation.template?.careerGoalId ===
+                where.recommendationTemplate.careerGoalId &&
+              recommendation.template?.status ===
+                where.recommendationTemplate.status &&
+              where.recommendationTemplate.OR.some((scope: any) =>
+                scope.specializationId === null
+                  ? recommendation.template?.specializationId === null
+                  : recommendation.template?.specializationId ===
+                    scope.specializationId,
+              );
+
+            if (
+              (matchesAnalysis || matchesTemplate) &&
+              where.status.in.includes(recommendation.status)
+            ) {
+              recommendation.status = data.status;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+      developmentRoadmap: {
+        updateMany: async ({ where, data }: any) => {
+          let count = 0;
+          for (const roadmap of roadmaps) {
+            if (
+              matchesScope(roadmap, where) &&
+              roadmap.status === where.status
+            ) {
+              roadmap.status = data.status;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+      assessment: {
+        updateMany: async ({ where, data }: any) => {
+          let count = 0;
+          for (const assessment of assessments) {
+            if (
+              matchesScope(assessment, where) &&
+              assessment.status === where.status
+            ) {
+              assessment.status = data.status;
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+      studentProfile: {
+        updateMany: async ({ where, data }: any) => {
+          let count = 0;
+          for (const profile of profiles) {
+            if (matchesScope(profile, where)) {
+              Object.assign(profile, data);
+              count += 1;
+            }
+          }
+          return { count };
+        },
+      },
+    };
+
+    const result = await service.invalidateCareerRequiredSkillChange(tx as any, {
+      careerGoalId: 'goal-a',
+      specializationId: 'spec-a',
+    });
+
+    assert.equal(result.analyses, 1);
+    assert.equal(result.recommendations, 2);
+    assert.equal(result.roadmaps, 1);
+    assert.equal(result.assessments, 1);
+    assert.equal(result.profiles, 1);
+    assert.equal(analyses[0].status, AnalysisResultStatus.OBSOLETE);
+    assert.equal(analyses[1].status, AnalysisResultStatus.CURRENT);
+    assert.equal(recommendations[0].status, StudentRecommendationStatus.OBSOLETE);
+    assert.equal(recommendations[1].status, StudentRecommendationStatus.IN_PROGRESS);
+    assert.equal(recommendations[2].status, StudentRecommendationStatus.OBSOLETE);
+    assert.equal(recommendations[3].status, StudentRecommendationStatus.SAVED);
+    assert.equal(roadmaps[0].status, RoadmapStatus.ARCHIVED);
+    assert.equal(roadmaps[1].status, RoadmapStatus.ACTIVE);
+    assert.equal(assessments[0].status, AssessmentStatus.CANCELLED);
+    assert.equal(assessments[1].status, AssessmentStatus.IN_PROGRESS);
+    assert.equal(profiles[0].matchPercent, 0);
+    assert.equal(profiles[0].lastAnalyzedAt, null);
+    assert.equal(profiles[1].matchPercent, 77);
+  });
 });

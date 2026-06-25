@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import {
   AnalysisResultStatus,
   AnalysisSkillStatus,
@@ -147,6 +148,48 @@ describe('CompetencyAnalysisService result lifecycle', () => {
     assert.equal(store[1].status, AnalysisResultStatus.CURRENT);
   });
 
+  it('leaves only one CURRENT analysis for the same student goal specialization scope', async () => {
+    const store: AnalysisRecord[] = [
+      {
+        id: 'analysis-old-1',
+        studentId: 'student-1',
+        careerGoalId: 'goal-1',
+        specializationId: 'backend-1',
+        status: AnalysisResultStatus.CURRENT,
+      },
+      {
+        id: 'analysis-old-2',
+        studentId: 'student-1',
+        careerGoalId: 'goal-1',
+        specializationId: 'backend-1',
+        status: AnalysisResultStatus.CURRENT,
+      },
+      {
+        id: 'analysis-other-specialization',
+        studentId: 'student-1',
+        careerGoalId: 'goal-1',
+        specializationId: 'frontend-1',
+        status: AnalysisResultStatus.CURRENT,
+      },
+    ];
+    const service = createServiceWithAnalysisStore(store);
+
+    await (service as any).saveAnalysisWithRecommendations(saveInput);
+
+    const sameScopeCurrent = store.filter(
+      (item) =>
+        item.studentId === 'student-1' &&
+        item.careerGoalId === 'goal-1' &&
+        item.specializationId === 'backend-1' &&
+        item.status === AnalysisResultStatus.CURRENT,
+    );
+    assert.equal(sameScopeCurrent.length, 1);
+    assert.equal(sameScopeCurrent[0].id, 'analysis-4');
+    assert.equal(store[0].status, AnalysisResultStatus.OBSOLETE);
+    assert.equal(store[1].status, AnalysisResultStatus.OBSOLETE);
+    assert.equal(store[2].status, AnalysisResultStatus.CURRENT);
+  });
+
   it('rolls back obsolete marking if creating the new analysis fails', async () => {
     const store: AnalysisRecord[] = [
       {
@@ -173,5 +216,51 @@ describe('CompetencyAnalysisService result lifecycle', () => {
         status: AnalysisResultStatus.CURRENT,
       },
     ]);
+  });
+});
+
+describe('CompetencyAnalysisService ownership', () => {
+  it('does not return another student analysis result', async () => {
+    let checkedStudentId: string | undefined;
+    const service = new CompetencyAnalysisService(
+      {
+        competencyAnalysisResult: {
+          findUnique: async ({ where }: any) =>
+            where.id === 'analysis-student-2'
+              ? {
+                  id: 'analysis-student-2',
+                  studentId: 'student-2',
+                  careerGoal: {},
+                  specialization: null,
+                  details: [],
+                  recommendations: [],
+                }
+              : null,
+        },
+      } as any,
+      {
+        assertCanAccessStudent: async (_user: any, studentId: string) => {
+          checkedStudentId = studentId;
+          throw new ForbiddenException('You do not have permission to access this student');
+        },
+      } as any,
+      { record: async () => undefined } as any,
+      {} as any,
+    );
+
+    await assert.rejects(
+      () =>
+        service.getResult(
+          {
+            id: 'user-1',
+            email: 'user-1@example.edu',
+            fullName: 'Student 1',
+            role: 'STUDENT' as any,
+          },
+          'analysis-student-2',
+        ),
+      ForbiddenException,
+    );
+    assert.equal(checkedStudentId, 'student-2');
   });
 });
