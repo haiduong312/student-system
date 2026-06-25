@@ -1,5 +1,6 @@
 export type CatalogStatus = 'ACTIVE' | 'INACTIVE';
 export type SkillType = 'COMMON' | 'CAREER_SPECIFIC';
+export const SKILL_TYPES = ['COMMON', 'CAREER_SPECIFIC'] as const satisfies readonly SkillType[];
 export type RoadmapPhase =
   | 'CORE_FOUNDATION'
   | 'CAREER_TRACK'
@@ -21,6 +22,31 @@ export type ProjectStatus =
   | 'CANCELLED';
 export type RoadmapItemStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
 export type RoadmapStatus = 'ACTIVE' | 'ARCHIVED' | 'COMPLETED' | 'CANCELLED';
+export type MatchLevel = 'NOT_MATCHED' | 'DEVELOPING' | 'GOOD_MATCH' | 'STRONG_MATCH';
+export type AnalysisResultStatus = 'CURRENT' | 'OBSOLETE';
+export type AnalysisSkillStatus = 'ACHIEVED' | 'MISSING' | 'NEED_IMPROVEMENT';
+export type RecommendationType =
+  | 'COURSE'
+  | 'PROJECT'
+  | 'CERTIFICATE'
+  | 'PRACTICE'
+  | 'DOCUMENT'
+  | 'PORTFOLIO_TASK';
+export type LearningResourceType =
+  | 'COURSE'
+  | 'VIDEO'
+  | 'DOCUMENT'
+  | 'ARTICLE'
+  | 'BOOK'
+  | 'PRACTICE'
+  | 'PROJECT'
+  | 'CERTIFICATE'
+  | 'TOOL';
+export type ResourceProgressStatus =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'SKIPPED';
 export type RoadmapItemType =
   | 'LEARN'
   | 'PRACTICE'
@@ -34,6 +60,64 @@ export type StudentRecommendationStatus =
   | 'DONE'
   | 'DISMISSED'
   | 'OBSOLETE';
+
+export const STUDENT_RECOMMENDATION_STATUSES = [
+  'NEW',
+  'SAVED',
+  'IN_PROGRESS',
+  'DONE',
+  'DISMISSED',
+  'OBSOLETE',
+] as const satisfies readonly StudentRecommendationStatus[];
+
+export const CURRENT_RECOMMENDATION_STATUSES = [
+  'NEW',
+  'SAVED',
+  'IN_PROGRESS',
+  'DONE',
+] as const satisfies readonly StudentRecommendationStatus[];
+
+export const ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES = [
+  'NEW',
+  'SAVED',
+  'IN_PROGRESS',
+] as const satisfies readonly StudentRecommendationStatus[];
+
+export const RECOMMENDATION_STATUS_TRANSITIONS: Record<
+  StudentRecommendationStatus,
+  readonly StudentRecommendationStatus[]
+> = {
+  NEW: ['SAVED', 'DISMISSED'],
+  SAVED: ['IN_PROGRESS', 'DISMISSED'],
+  IN_PROGRESS: ['SAVED', 'DONE'],
+  DONE: [],
+  DISMISSED: [],
+  OBSOLETE: [],
+};
+
+export const ROADMAP_ITEM_STATUSES = [
+  'TODO',
+  'IN_PROGRESS',
+  'DONE',
+  'CANCELLED',
+] as const satisfies readonly RoadmapItemStatus[];
+
+export const ROADMAP_ITEM_DONE_STATUS = 'DONE' as const satisfies RoadmapItemStatus;
+export const ROADMAP_ITEM_IN_PROGRESS_STATUS = 'IN_PROGRESS' as const satisfies RoadmapItemStatus;
+export const ROADMAP_ITEM_CANCELLED_STATUS = 'CANCELLED' as const satisfies RoadmapItemStatus;
+
+export const ROADMAP_ITEM_STATUS_TRANSITIONS: Record<
+  RoadmapItemStatus,
+  readonly RoadmapItemStatus[]
+> = {
+  TODO: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['TODO', 'DONE', 'CANCELLED'],
+  DONE: ['IN_PROGRESS'],
+  CANCELLED: [],
+};
+
+export const ROADMAP_CURRENT_STATUS = 'ACTIVE' as const satisfies RoadmapStatus;
+export const ANALYSIS_CURRENT_STATUS = 'CURRENT' as const satisfies AnalysisResultStatus;
 
 export interface Paginated<T> {
   success: true;
@@ -171,14 +255,49 @@ export interface Evidence {
   student?: { studentCode: string; user?: { fullName: string; email: string } };
 }
 
+export interface RecommendationResource {
+  id: string;
+  resourceId: string;
+  orderIndex: number;
+  resourceTitle: string;
+  resourceDescription?: string | null;
+  resourceType: LearningResourceType;
+  resourceUrl?: string | null;
+  provider?: string | null;
+  estimatedDuration?: string | null;
+  difficultyLevel?: string | null;
+  progressStatus: ResourceProgressStatus;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  lastAccessedAt?: string | null;
+  note?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Recommendation {
   id: string;
+  skillId?: string;
   title: string;
   description?: string | null;
   reason?: string | null;
+  roadmapPhase?: RoadmapPhase | null;
   priorityScore: string | number;
   status: StudentRecommendationStatus;
   skill?: Skill;
+  resources?: RecommendationResource[];
+  isAllResourcesCompleted?: boolean;
+}
+
+export interface RoadmapItemResource {
+  id: string;
+  title: string;
+  resourceType: LearningResourceType;
+  url?: string | null;
+  provider?: string | null;
+  estimatedDuration?: string | null;
+  progressStatus: ResourceProgressStatus;
+  orderIndex: number;
 }
 
 export interface RoadmapItem {
@@ -195,6 +314,7 @@ export interface RoadmapItem {
   status: RoadmapItemStatus;
   deadline?: string | null;
   skill?: Skill | null;
+  resources?: RoadmapItemResource[];
 }
 
 export interface RoadmapPhaseGroup {
@@ -209,11 +329,38 @@ export interface Roadmap {
   title: string;
   description?: string | null;
   progressPercent: string | number;
-  status: RoadmapStatus | string;
+  status: RoadmapStatus;
   careerGoal?: CareerGoal | string;
   specialization?: Specialization | string | null;
   items?: RoadmapItem[];
   phases?: RoadmapPhaseGroup[];
+}
+
+export interface RoadmapHistoryItem {
+  roadmapId: string;
+  version: number;
+  title: string;
+  progressPercent: number;
+  status: RoadmapStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalysisRecommendation {
+  id: string;
+  skillId: string;
+  skillName: string;
+  title: string;
+  description?: string | null;
+  type: RecommendationType;
+  roadmapPhase: RoadmapPhase;
+  priorityScore: number;
+  source:
+    | 'SPECIALIZATION_CAREER_SKILL_TEMPLATE'
+    | 'CAREER_SKILL_TEMPLATE'
+    | 'CATEGORY_SKILL_TEMPLATE'
+    | 'SKILL_TEMPLATE'
+    | 'DEFAULT_GENERATED';
 }
 
 export interface CompetencyAnalysis {
@@ -221,7 +368,7 @@ export interface CompetencyAnalysis {
   careerGoal: string;
   specialization?: string | null;
   matchPercent: number;
-  matchLevel: string;
+  matchLevel: MatchLevel;
   totalWeight: number;
   totalSkillScore: number;
   skills: Array<{
@@ -234,9 +381,71 @@ export interface CompetencyAnalysis {
     weight: number;
     skillScore: number;
     priorityScore: number;
-    status: string;
+    status: AnalysisSkillStatus;
+    recommendation: AnalysisRecommendation | null;
   }>;
-  recommendations: Recommendation[];
+  recommendations: AnalysisRecommendation[];
+}
+
+export interface AnalysisHistoryItem {
+  id: string;
+  studentId: string;
+  careerGoalId: string;
+  specializationId?: string | null;
+  status: AnalysisResultStatus;
+  completionPercent: string | number;
+  matchPercent: string | number;
+  riskScore: number;
+  matchLevel: MatchLevel;
+  analyzedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  careerGoal?: CareerGoal | null;
+  specialization?: Specialization | null;
+}
+
+export interface DashboardMissingSkill {
+  skillId: string;
+  skill?: Skill | null;
+  currentLevel: number;
+  requiredLevel: number;
+  gap: number;
+  priorityScore: number;
+  status: AnalysisSkillStatus;
+}
+
+export interface StudentDashboard {
+  completionPercent: string | number;
+  matchPercent: string | number;
+  careerGoal?: CareerGoal | null;
+  missingSkills: DashboardMissingSkill[];
+  roadmapProgress: {
+    roadmapId: string | null;
+    progressPercent: number;
+    status: RoadmapStatus | null;
+    itemCount: number;
+  };
+}
+
+export interface LecturerDashboard {
+  studentCount: number;
+  weakStudents: number;
+  pendingEvidence: number;
+}
+
+export interface AdminDashboard {
+  totalStudents: number;
+  totalLecturers: number;
+  topMissingSkills: Array<{
+    skillId: string;
+    skill?: Skill | null;
+    missingCount: number;
+  }>;
+  topCareerGoals: Array<{
+    careerGoalId: string | null;
+    careerGoal?: CareerGoal | null;
+    studentCount: number;
+  }>;
 }
 
 export interface NotificationItem {

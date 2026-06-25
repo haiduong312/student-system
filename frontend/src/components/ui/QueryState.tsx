@@ -1,4 +1,5 @@
 import { Alert, Spin } from 'antd';
+import { getApiErrorMessage } from '@/lib/errors';
 
 export function QueryState({
   loading,
@@ -18,7 +19,7 @@ export function QueryState({
   }
 
   if (error) {
-    return <Alert type="error" showIcon message="Unable to load data" />;
+    return <Alert type="error" showIcon message={getApiErrorMessage(error)} />;
   }
 
   return children;

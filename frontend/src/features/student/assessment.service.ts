@@ -29,6 +29,14 @@ export interface AssessmentWarning {
 export interface AssessmentStartResponse {
   assessmentId: string;
   careerGoalId: string;
+  specializationId?: string | null;
+  startedAt: string;
+  expiresAt: string;
+  attemptPolicy?: {
+    maxAttempts: number;
+    cooldownMinutes: number;
+    timeLimitMinutes: number;
+  };
   questions: AssessmentStartQuestion[];
   warnings: AssessmentWarning[];
 }
@@ -60,11 +68,8 @@ export interface AssessmentSubmitResponse {
   skillResults: AssessmentSkillResult[];
 }
 
-export function startAssessment(careerGoalId: string) {
-  return postData<AssessmentStartResponse, { careerGoalId: string }>(
-    '/assessments/start',
-    { careerGoalId },
-  );
+export function startAssessment() {
+  return postData<AssessmentStartResponse, Record<string, never>>('/assessments/start', {});
 }
 
 export function submitAssessment(assessmentId: string, answers: AssessmentAnswerInput[]) {

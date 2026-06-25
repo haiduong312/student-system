@@ -12,30 +12,126 @@ import {
   App,
 } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import type { TableColumnsType } from 'antd';
 import { api } from '@/lib/api';
-import { getData, getPage, patchData } from '@/lib/request';
+import { getPage, patchData, postData } from '@/lib/request';
+import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
 import type {
   CareerGoal,
+  ProjectStatus,
   Skill,
   Specialization,
   StudentProfile,
+  VerificationStatus,
 } from '@/types/domain';
+import {
+  resetStudentCurrentContextQueries,
+  STUDENT_PROFILE_QUERY_KEY,
+  useStudentProfileQuery,
+} from './profile-context';
 
 const GENERAL_SPECIALIZATION_VALUE = '__GENERAL_SPECIALIZATION__';
 
+interface ProfileFormValues {
+  careerGoalId?: string | null;
+  specializationId?: string | null;
+  summary?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+}
+
+interface ProfilePayload {
+  careerGoalId: string | null;
+  specializationId: string | null;
+  summary?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+}
+
+interface StudentResourceBase {
+  id: string;
+  verificationStatus?: VerificationStatus;
+  evidenceStatus?: VerificationStatus;
+}
+
+interface StudentSkillResource extends StudentResourceBase {
+  skillId: string;
+  skill?: Skill | null;
+  currentLevel: number;
+  evidenceStatus: VerificationStatus;
+}
+
+interface StudentProjectResource extends StudentResourceBase {
+  title: string;
+  status: ProjectStatus;
+  verificationStatus: VerificationStatus;
+}
+
+interface StudentCertificateResource extends StudentResourceBase {
+  certificateName: string;
+  issuer?: string | null;
+  verificationStatus: VerificationStatus;
+}
+
+interface StudentActivityResource extends StudentResourceBase {
+  title: string;
+  organization?: string | null;
+  verificationStatus: VerificationStatus;
+}
+
+interface StudentExperienceResource extends StudentResourceBase {
+  companyName: string;
+  position: string;
+  verificationStatus: VerificationStatus;
+}
+
+interface SkillFormValues {
+  skillId: string;
+  description?: string;
+}
+
+interface ProjectFormValues {
+  title: string;
+  roleInProject?: string;
+  description?: string;
+}
+
+interface CertificateFormValues {
+  certificateName: string;
+  issuer?: string;
+}
+
+interface ActivityFormValues {
+  title: string;
+  organization?: string;
+  description?: string;
+}
+
+interface ExperienceFormValues {
+  companyName: string;
+  position: string;
+  description?: string;
+}
+
 export function StudentProfilePageView() {
   const { message } = App.useApp();
+  const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const selectedCareerGoalId = Form.useWatch('careerGoalId', form);
-  const profile = useQuery({
-    queryKey: ['profile', 'me'],
-    queryFn: () => getData<StudentProfile>('/profiles/me'),
-  });
+  const profile = useStudentProfileQuery();
   const careers = useQuery({
     queryKey: ['career-goals', 'options'],
     queryFn: () =>
@@ -61,12 +157,15 @@ export function StudentProfilePageView() {
     (specializations.isLoading || specializationOptions.length > 0);
 
   const save = useMutation({
-    mutationFn: (values: any) =>
-      patchData('/profiles/me', buildProfilePayload(values)),
-    onSuccess: () => {
+    mutationFn: (values: ProfileFormValues) =>
+      patchData<StudentProfile, ProfilePayload>('/profiles/me', buildProfilePayload(values)),
+    onSuccess: (updatedProfile) => {
       message.success('Profile updated');
-      profile.refetch();
+      queryClient.setQueryData(STUDENT_PROFILE_QUERY_KEY, updatedProfile);
+      resetStudentCurrentContextQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: STUDENT_PROFILE_QUERY_KEY });
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
   useEffect(() => {
@@ -106,7 +205,7 @@ export function StudentProfilePageView() {
         description="Update your personal competency profile."
       />
       <Card>
-        <Form
+        <Form<ProfileFormValues>
           form={form}
           layout="vertical"
           onFinish={(values) => save.mutate(values)}
@@ -173,7 +272,7 @@ export function StudentSkillsPageView() {
     queryFn: () => getPage<Skill>('/skills', { limit: 100, status: 'ACTIVE' }),
   });
   return (
-    <StudentResourcePage
+    <StudentResourcePage<StudentSkillResource, SkillFormValues>
       title="Skills"
       endpoint="/profiles/me/skills"
       fields={[
@@ -197,7 +296,7 @@ export function StudentSkillsPageView() {
       columns={[
         {
           title: 'Skill',
-          render: (_value: unknown, row: any) => row.skill?.name ?? row.skillId,
+          render: (_value, row) => row.skill?.name ?? row.skillId,
         },
         { title: 'Current Level', dataIndex: 'currentLevel' },
       ]}
@@ -207,7 +306,7 @@ export function StudentSkillsPageView() {
 
 export function StudentProjectsPageView() {
   return (
-    <StudentResourcePage
+    <StudentResourcePage<StudentProjectResource, ProjectFormValues>
       title="Projects"
       endpoint="/profiles/me/projects"
       fields={projectFields()}
@@ -221,7 +320,7 @@ export function StudentProjectsPageView() {
 
 export function StudentCertificatesPageView() {
   return (
-    <StudentResourcePage
+    <StudentResourcePage<StudentCertificateResource, CertificateFormValues>
       title="Certificates"
       endpoint="/profiles/me/certificates"
       fields={certificateFields()}
@@ -235,7 +334,7 @@ export function StudentCertificatesPageView() {
 
 export function StudentActivitiesPageView() {
   return (
-    <StudentResourcePage
+    <StudentResourcePage<StudentActivityResource, ActivityFormValues>
       title="Activities"
       endpoint="/profiles/me/activities"
       fields={activityFields()}
@@ -249,7 +348,7 @@ export function StudentActivitiesPageView() {
 
 export function StudentExperiencesPageView() {
   return (
-    <StudentResourcePage
+    <StudentResourcePage<StudentExperienceResource, ExperienceFormValues>
       title="Experiences"
       endpoint="/profiles/me/experiences"
       fields={experienceFields()}
@@ -261,26 +360,38 @@ export function StudentExperiencesPageView() {
   );
 }
 
-function StudentResourcePage({ title, endpoint, fields, columns }: any) {
+function StudentResourcePage<TResource extends StudentResourceBase, TFormValues extends object>({
+  title,
+  endpoint,
+  fields,
+  columns,
+}: {
+  title: string;
+  endpoint: string;
+  fields: ReactNode[];
+  columns: TableColumnsType<TResource>;
+}) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const data = useQuery({
     queryKey: [endpoint],
-    queryFn: () => getPage<any>(endpoint, { limit: 50 }),
+    queryFn: () => getPage<TResource>(endpoint, { limit: 50 }),
   });
   const save = useMutation({
-    mutationFn: (values: any) => api.post(endpoint, values),
+    mutationFn: (values: TFormValues) => postData<TResource, TFormValues>(endpoint, values),
     onSuccess: () => {
       message.success('Saved');
       queryClient.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAfterResourceChange(queryClient);
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
   return (
     <QueryState loading={data.isLoading} error={data.error}>
       <PageHeader title={title} />
       <Card style={{ marginBottom: 16 }}>
-        <Form layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form<TFormValues> layout="vertical" onFinish={(values) => save.mutate(values)}>
           {fields}
           <Button type="primary" htmlType="submit" loading={save.isPending}>
             Add
@@ -288,20 +399,26 @@ function StudentResourcePage({ title, endpoint, fields, columns }: any) {
         </Form>
       </Card>
       <SearchBar onSearch={() => undefined} onRefresh={() => data.refetch()} />
-      <Table
+      <Table<TResource>
         rowKey="id"
         dataSource={data.data?.data ?? []}
         columns={[
           ...columns,
           {
             title: 'Verification',
-            dataIndex: 'verificationStatus',
-            render: tag,
+            render: (_value, row) => tag(row.verificationStatus ?? row.evidenceStatus),
           },
           {
             title: 'Evidence',
-            render: (_: unknown, row: any) => (
-              <EvidenceUpload endpoint={`${endpoint}/${row.id}/evidences`} />
+            render: (_value, row) => (
+              <EvidenceUpload
+                endpoint={`${endpoint}/${row.id}/evidences`}
+                onUploaded={() => {
+                  queryClient.invalidateQueries({ queryKey: [endpoint] });
+                  queryClient.invalidateQueries({ queryKey: ['evidences', 'me'] });
+                  invalidateAfterResourceChange(queryClient);
+                }}
+              />
             ),
           },
         ]}
@@ -310,7 +427,13 @@ function StudentResourcePage({ title, endpoint, fields, columns }: any) {
   );
 }
 
-function EvidenceUpload({ endpoint }: { endpoint: string }) {
+function EvidenceUpload({
+  endpoint,
+  onUploaded,
+}: {
+  endpoint: string;
+  onUploaded: () => void;
+}) {
   const { message } = App.useApp();
   return (
     <Upload
@@ -323,8 +446,10 @@ function EvidenceUpload({ endpoint }: { endpoint: string }) {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
           message.success('Evidence uploaded');
+          onUploaded();
           onSuccess?.({});
         } catch (error) {
+          message.error(getApiErrorMessage(error));
           onError?.(error as Error);
         }
       }}
@@ -334,25 +459,40 @@ function EvidenceUpload({ endpoint }: { endpoint: string }) {
   );
 }
 
-const tag = (value: string) => (value ? <Tag>{value}</Tag> : '-');
+const tag = (value?: string | null) => (value ? <Tag>{value}</Tag> : '-');
 
-function toProfileFormValues(profile: StudentProfile) {
+function toProfileFormValues(profile: StudentProfile): ProfileFormValues {
   return {
-    ...profile,
+    careerGoalId: profile.careerGoalId ?? null,
     specializationId: profile.specializationId ?? GENERAL_SPECIALIZATION_VALUE,
+    summary: profile.summary,
+    githubUrl: profile.githubUrl,
+    linkedinUrl: profile.linkedinUrl,
+    portfolioUrl: profile.portfolioUrl,
   };
 }
 
-function buildProfilePayload(values: any) {
+function buildProfilePayload(values: ProfileFormValues): ProfilePayload {
   return {
-    ...values,
     careerGoalId: values.careerGoalId ?? null,
     specializationId:
       values.specializationId &&
       values.specializationId !== GENERAL_SPECIALIZATION_VALUE
         ? values.specializationId
         : null,
+    summary: values.summary,
+    githubUrl: values.githubUrl,
+    linkedinUrl: values.linkedinUrl,
+    portfolioUrl: values.portfolioUrl,
   };
+}
+
+function invalidateAfterResourceChange(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: STUDENT_PROFILE_QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
+  queryClient.invalidateQueries({ queryKey: ['analysis-history', 'me'] });
+  queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
+  queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
 }
 
 function projectFields() {

@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Col,
+  Descriptions,
   Empty,
   List,
   Modal,
@@ -17,16 +18,23 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getData } from '@/lib/request';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
-import type { StudentProfile } from '@/types/domain';
+import type { SkillType } from '@/types/domain';
+import { SKILL_TYPES } from '@/types/domain';
+import {
+  getStudentProfileScopeKey,
+  invalidateStudentCurrentContextQueries,
+  useStudentProfileQuery,
+} from './profile-context';
 import {
   startAssessment,
   submitAssessment,
+  type AssessmentLevelBreakdown,
+  type AssessmentSkillResult,
   type AssessmentStartQuestion,
   type AssessmentStartResponse,
   type AssessmentSubmitResponse,
@@ -35,16 +43,16 @@ import {
 export function StudentAssessmentPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [started, setStarted] = useState<AssessmentStartResponse | null>(null);
   const [result, setResult] = useState<AssessmentSubmitResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const profile = useQuery({
-    queryKey: ['profile', 'me'],
-    queryFn: () => getData<StudentProfile>('/profiles/me'),
-  });
+  const profile = useStudentProfileQuery();
+  const profileScopeKey = getStudentProfileScopeKey(profile.data);
 
   const start = useMutation({
-    mutationFn: (careerGoalId: string) => startAssessment(careerGoalId),
+    mutationKey: ['assessment', 'start', ...profileScopeKey],
+    mutationFn: () => startAssessment(),
     onSuccess: (data) => {
       setStarted(data);
       setResult(null);
@@ -68,6 +76,7 @@ export function StudentAssessmentPage() {
     },
     onSuccess: (data) => {
       setResult(data);
+      invalidateStudentCurrentContextQueries(queryClient);
       message.success('Assessment submitted');
     },
   });
@@ -79,6 +88,7 @@ export function StudentAssessmentPage() {
       {!started ? (
         <StartAssessmentView
           careerGoalName={profile.data?.careerGoal?.name}
+          specializationName={profile.data?.specialization?.name}
           hasCareerGoal={Boolean(careerGoalId)}
           loading={start.isPending}
           onStart={() => {
@@ -86,7 +96,7 @@ export function StudentAssessmentPage() {
               message.error('Please select a career goal before starting.');
               return;
             }
-            start.mutate(careerGoalId);
+            start.mutate();
           }}
         />
       ) : result ? (
@@ -103,6 +113,8 @@ export function StudentAssessmentPage() {
       ) : (
         <AssessmentQuizView
           assessment={started}
+          careerGoalName={profile.data?.careerGoal?.name}
+          specializationName={profile.data?.specialization?.name}
           answers={answers}
           submitting={submit.isPending}
           onAnswer={(questionId, selectedOptionId) =>
@@ -130,11 +142,13 @@ export function StudentAssessmentPage() {
 
 function StartAssessmentView({
   careerGoalName,
+  specializationName,
   hasCareerGoal,
   loading,
   onStart,
 }: {
   careerGoalName?: string | null;
+  specializationName?: string | null;
   hasCareerGoal: boolean;
   loading: boolean;
   onStart: () => void;
@@ -146,12 +160,14 @@ function StartAssessmentView({
         <Col xs={24} lg={16}>
           <Card>
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <div>
-                <Typography.Text type="secondary">Career Goal</Typography.Text>
-                <Typography.Title level={4} style={{ marginTop: 4, marginBottom: 0 }}>
+              <Descriptions bordered column={1} size="small">
+                <Descriptions.Item label="Career Goal">
                   {careerGoalName ?? 'No career goal selected'}
-                </Typography.Title>
-              </div>
+                </Descriptions.Item>
+                <Descriptions.Item label="Specialization">
+                  {specializationName ?? 'General'}
+                </Descriptions.Item>
+              </Descriptions>
               <Typography.Paragraph style={{ marginBottom: 0 }}>
                 Hệ thống sẽ đánh giá kỹ năng của bạn dựa trên kết quả làm bài,
                 thay vì tự khai báo trình độ.
@@ -190,12 +206,16 @@ function StartAssessmentView({
 
 function AssessmentQuizView({
   assessment,
+  careerGoalName,
+  specializationName,
   answers,
   submitting,
   onAnswer,
   onSubmit,
 }: {
   assessment: AssessmentStartResponse;
+  careerGoalName?: string | null;
+  specializationName?: string | null;
   answers: Record<string, string>;
   submitting: boolean;
   onAnswer: (questionId: string, selectedOptionId: string) => void;
@@ -211,6 +231,29 @@ function AssessmentQuizView({
   return (
     <>
       <PageHeader title="Assessment Quiz" />
+      <Card style={{ marginBottom: 16 }}>
+        <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+          <Descriptions.Item label="Career Goal">
+            {careerGoalName ?? assessment.careerGoalId}
+          </Descriptions.Item>
+          <Descriptions.Item label="Specialization">
+            {specializationName ?? (assessment.specializationId ? assessment.specializationId : 'General')}
+          </Descriptions.Item>
+          <Descriptions.Item label="Started At">
+            {formatDateTime(assessment.startedAt)}
+          </Descriptions.Item>
+          <Descriptions.Item label="Expires At">
+            {formatDateTime(assessment.expiresAt)}
+          </Descriptions.Item>
+          {assessment.attemptPolicy ? (
+            <Descriptions.Item label="Attempt Policy" span={2}>
+              Max {assessment.attemptPolicy.maxAttempts} attempts · Cooldown{' '}
+              {assessment.attemptPolicy.cooldownMinutes} min · Time limit{' '}
+              {assessment.attemptPolicy.timeLimitMinutes} min
+            </Descriptions.Item>
+          ) : null}
+        </Descriptions>
+      </Card>
       {assessment.warnings.length ? (
         <Alert
           showIcon
@@ -316,12 +359,12 @@ function AssessmentResultView({
         <Button onClick={onViewRoadmap}>Xem Roadmap</Button>
         <Button onClick={onRestart}>Start Another Assessment</Button>
       </Space>
-      <Table
+      <Table<AssessmentSkillResult>
         rowKey="skillId"
         dataSource={result.skillResults}
         expandable={{
           expandedRowRender: (record) => (
-            <Table
+            <Table<LevelBreakdownRow>
               rowKey="level"
               pagination={false}
               dataSource={Object.entries(record.levelBreakdown).map(([level, stat]) => ({
@@ -332,7 +375,7 @@ function AssessmentResultView({
                 { title: 'Level', dataIndex: 'level' },
                 { title: 'Total', dataIndex: 'total' },
                 { title: 'Correct', dataIndex: 'correct' },
-                { title: 'Percentage', render: (_: unknown, row: any) => `${row.percentage}%` },
+                { title: 'Percentage', render: (_: unknown, row) => `${row.percentage}%` },
               ]}
             />
           ),
@@ -357,16 +400,16 @@ function AssessmentResultView({
 function SkillGroupList({
   groups,
 }: {
-  groups: Record<string, Array<{ skillId: string; skillName: string; count: number }>>;
+  groups: SkillQuestionGroups;
 }) {
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      {Object.entries(groups).map(([skillType, skills]) => (
+      {SKILL_TYPES.filter((skillType) => groups[skillType]?.length).map((skillType) => (
         <div key={skillType}>
-          <SkillTypeTag type={skillType as any} />
+          <SkillTypeTag type={skillType} />
           <List
             size="small"
-            dataSource={skills}
+            dataSource={groups[skillType]}
             renderItem={(skill) => (
               <List.Item>
                 <Typography.Text>{skill.skillName}</Typography.Text>
@@ -380,12 +423,16 @@ function SkillGroupList({
   );
 }
 
-function SkillTypeTag({ type }: { type?: string }) {
+function SkillTypeTag({ type }: { type?: SkillType }) {
   return <Tag color={type === 'COMMON' ? 'blue' : 'green'}>{type ?? '-'}</Tag>;
 }
 
+type SkillQuestionGroups = Partial<
+  Record<SkillType, Array<{ skillId: string; skillName: string; count: number }>>
+>;
+
 function groupQuestionsBySkillType(questions: AssessmentStartQuestion[]) {
-  const groups: Record<string, Array<{ skillId: string; skillName: string; count: number }>> = {};
+  const groups: SkillQuestionGroups = {};
 
   for (const question of questions) {
     const list = groups[question.skillType] ?? [];
@@ -403,4 +450,10 @@ function groupQuestionsBySkillType(questions: AssessmentStartQuestion[]) {
   }
 
   return groups;
+}
+
+type LevelBreakdownRow = AssessmentLevelBreakdown & { level: string };
+
+function formatDateTime(value?: string) {
+  return value ? new Date(value).toLocaleString() : '-';
 }
