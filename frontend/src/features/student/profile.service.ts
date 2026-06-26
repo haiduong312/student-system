@@ -22,6 +22,12 @@ export interface SkillFormValues {
   description?: string;
 }
 
+export interface EvidenceUploadPayload {
+  file?: File | null;
+  evidenceUrl?: string | null;
+  note?: string | null;
+}
+
 export const profileService = {
   getMyProfile() {
     return getData<StudentProfile>('/profiles/me');
@@ -46,9 +52,17 @@ export const profileService = {
   createProfileResource<TResource, TPayload extends object>(endpoint: string, payload: TPayload) {
     return postData<TResource, TPayload>(endpoint, payload);
   },
-  async uploadProfileEvidence(endpoint: string, file: File) {
+  async uploadProfileEvidence(endpoint: string, payload: EvidenceUploadPayload) {
     const formData = new FormData();
-    formData.append('file', file);
+    if (payload.file) {
+      formData.append('file', payload.file);
+    }
+    if (payload.evidenceUrl) {
+      formData.append('evidenceUrl', payload.evidenceUrl);
+    }
+    if (payload.note) {
+      formData.append('note', payload.note);
+    }
     const response = await api.post(endpoint, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

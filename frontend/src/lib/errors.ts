@@ -35,6 +35,8 @@ function getStatusMessage(error: unknown) {
   }
 
   switch (error.response.status) {
+    case 401:
+      return 'Please sign in again to access this resource.';
     case 400:
       return 'The request cannot be processed. Please check the current profile context and submitted data.';
     case 403:

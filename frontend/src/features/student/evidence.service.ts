@@ -1,5 +1,5 @@
 import { getPage, patchData } from '@/lib/request';
-import { openPrivateFile } from '@/lib/private-files';
+import { downloadPrivateFile, openPrivateFile } from '@/lib/private-files';
 import type { Evidence } from '@/types/domain';
 
 export const evidenceService = {
@@ -21,4 +21,5 @@ export const evidenceService = {
     });
   },
   openPrivateFile,
+  downloadPrivateFile,
 };

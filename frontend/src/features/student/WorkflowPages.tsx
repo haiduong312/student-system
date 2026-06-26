@@ -36,6 +36,7 @@ import type {
   CareerGoal,
   CompetencyAnalysis,
   Evidence,
+  EvidenceStatus,
   NotificationItem,
   Paginated,
   Recommendation,
@@ -196,17 +197,42 @@ export function LecturerEvidenceReviewView() {
                 <Button
                   danger
                   loading={reject.isPending}
-                  onClick={() =>
+                  onClick={() => {
+                    let reviewerNote = '';
                     Modal.confirm({
                       title: 'Reject evidence',
-                      content: 'Reject this evidence?',
+                      content: (
+                        <Input.TextArea
+                          rows={3}
+                          maxLength={1000}
+                          placeholder="Reason"
+                          onChange={(event) => {
+                            reviewerNote = event.target.value;
+                          }}
+                        />
+                      ),
+                      okText: 'Reject',
                       onOk: () =>
-                        reject.mutate({
-                          id: row.id,
-                          reviewerNote: 'Rejected by advisor',
+                        new Promise<void>((resolve, rejectPromise) => {
+                          if (!reviewerNote.trim()) {
+                            message.error('A rejection reason is required.');
+                            rejectPromise();
+                            return;
+                          }
+
+                          reject.mutate(
+                            {
+                              id: row.id,
+                              reviewerNote: reviewerNote.trim(),
+                            },
+                            {
+                              onSuccess: () => resolve(),
+                              onError: () => rejectPromise(),
+                            },
+                          );
                         }),
-                    })
-                  }
+                    });
+                  }}
                 >
                   Reject
                 </Button>
@@ -1223,11 +1249,23 @@ function EvidenceTable({
       <PageHeader title={title} />
       <Table<Evidence>
         rowKey="id"
-        dataSource={query.data?.data ?? []}
+        dataSource={sortEvidencesPendingFirst(query.data?.data ?? [])}
         columns={[
           { title: 'Entity', dataIndex: 'relatedEntityType' },
-          { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            render: (value: EvidenceStatus) => <EvidenceStatusTag status={value} />,
+          },
           { title: 'Note', dataIndex: 'note' },
+          {
+            title: 'Reviewer',
+            render: (_value, row) => row.reviewedBy?.fullName ?? row.reviewedById ?? '-',
+          },
+          {
+            title: 'Reviewed At',
+            render: (_value, row) => formatDateTime(row.reviewedAt),
+          },
           { title: 'Reviewer Note', dataIndex: 'reviewerNote' },
           { title: 'Evidence', render: (_value, row) => <EvidenceFileAction evidence={row} /> },
         ]}
@@ -1238,16 +1276,29 @@ function EvidenceTable({
 
 function EvidenceFileAction({ evidence }: { evidence: Evidence }) {
   const { message } = App.useApp();
-  const openFile = useMutation({
+  const previewFile = useMutation({
     mutationFn: () => evidenceService.openPrivateFile(evidence.fileUrl ?? ''),
+    onError: (error) => message.error(getApiErrorMessage(error)),
+  });
+  const downloadFile = useMutation({
+    mutationFn: () =>
+      evidenceService.downloadPrivateFile(
+        evidence.fileUrl ?? '',
+        evidence.fileName ?? `evidence-${evidence.id}`,
+      ),
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
   if (evidence.fileUrl) {
     return (
-      <Button type="link" loading={openFile.isPending} onClick={() => openFile.mutate()}>
-        View file
-      </Button>
+      <Space>
+        <Button type="link" loading={previewFile.isPending} onClick={() => previewFile.mutate()}>
+          Preview
+        </Button>
+        <Button type="link" loading={downloadFile.isPending} onClick={() => downloadFile.mutate()}>
+          Download
+        </Button>
+      </Space>
     );
   }
 
@@ -1262,6 +1313,43 @@ function EvidenceFileAction({ evidence }: { evidence: Evidence }) {
   return '-';
 }
 
-function formatDateTime(value?: string) {
+function sortEvidencesPendingFirst(evidences: Evidence[]) {
+  return evidences.slice().sort((left, right) => {
+    const leftRank = getEvidenceStatusRank(left.status);
+    const rightRank = getEvidenceStatusRank(right.status);
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
+}
+
+function getEvidenceStatusRank(status: EvidenceStatus) {
+  switch (status) {
+    case 'PENDING':
+    case 'VERIFIED_WITH_PENDING_CHANGES':
+      return 0;
+    case 'REJECTED':
+      return 1;
+    case 'VERIFIED':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function EvidenceStatusTag({ status }: { status: EvidenceStatus }) {
+  const color =
+    status === 'VERIFIED'
+      ? 'green'
+      : status === 'PENDING' || status === 'VERIFIED_WITH_PENDING_CHANGES'
+        ? 'processing'
+        : 'red';
+
+  return <Tag color={color}>{status}</Tag>;
+}
+
+function formatDateTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '-';
 }

@@ -18,12 +18,17 @@ export type EvidenceEntityType =
   | 'ACTIVITY'
   | 'EXPERIENCE'
   | 'ROADMAP_ITEM';
-export type EvidenceStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type EvidenceStatus =
+  | 'PENDING'
+  | 'VERIFIED'
+  | 'REJECTED'
+  | 'VERIFIED_WITH_PENDING_CHANGES';
 export type VerificationStatus =
   | 'NO_EVIDENCE'
   | 'PENDING'
   | 'VERIFIED'
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'VERIFIED_WITH_PENDING_CHANGES';
 export type ProjectStatus =
   | 'PLANNED'
   | 'IN_PROGRESS'
@@ -367,6 +372,8 @@ export interface Evidence {
   studentId?: string;
   relatedEntityType: EvidenceEntityType;
   relatedEntityId: string;
+  fileName?: string | null;
+  fileId?: string | null;
   fileUrl?: string | null;
   evidenceUrl?: string | null;
   note?: string | null;

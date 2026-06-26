@@ -6,6 +6,7 @@ import {
   Descriptions,
   Form,
   Input,
+  Modal,
   Select,
   Space,
   Table,
@@ -20,7 +21,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { TableColumnsType } from 'antd';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -116,6 +117,11 @@ interface ExperienceFormValues {
   companyName: string;
   position: string;
   description?: string;
+}
+
+interface EvidenceUploadFormValues {
+  evidenceUrl?: string;
+  note?: string;
 }
 
 export function StudentProfilePageView() {
@@ -497,23 +503,75 @@ function EvidenceUpload({
   onUploaded: () => void;
 }) {
   const { message } = App.useApp();
+  const [form] = Form.useForm<EvidenceUploadFormValues>();
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const reset = () => {
+    form.resetFields();
+    setFile(null);
+    setOpen(false);
+  };
+
+  const submit = async (values: EvidenceUploadFormValues) => {
+    if (!file && !values.evidenceUrl) {
+      message.error('Upload a file or provide an evidence URL.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await profileService.uploadProfileEvidence(endpoint, {
+        file,
+        evidenceUrl: values.evidenceUrl,
+        note: values.note,
+      });
+      message.success('Evidence uploaded and pending review');
+      onUploaded();
+      reset();
+    } catch (error) {
+      message.error(getApiErrorMessage(error));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
-    <Upload
-      showUploadList={false}
-      customRequest={async ({ file, onSuccess, onError }) => {
-        try {
-          await profileService.uploadProfileEvidence(endpoint, file as File);
-          message.success('Evidence uploaded');
-          onUploaded();
-          onSuccess?.({});
-        } catch (error) {
-          message.error(getApiErrorMessage(error));
-          onError?.(error as Error);
-        }
-      }}
-    >
-      <Button icon={<UploadOutlined />}>Upload</Button>
-    </Upload>
+    <>
+      <Button icon={<UploadOutlined />} onClick={() => setOpen(true)}>
+        Upload
+      </Button>
+      <Modal
+        title="Upload evidence"
+        open={open}
+        okText="Upload"
+        confirmLoading={uploading}
+        onCancel={reset}
+        onOk={() => form.submit()}
+      >
+        <Form<EvidenceUploadFormValues> form={form} layout="vertical" onFinish={submit}>
+          <Form.Item label="File">
+            <Upload
+              beforeUpload={(selectedFile) => {
+                setFile(selectedFile);
+                return false;
+              }}
+              maxCount={1}
+              onRemove={() => setFile(null)}
+            >
+              <Button icon={<UploadOutlined />}>Choose file</Button>
+            </Upload>
+          </Form.Item>
+          <Form.Item name="evidenceUrl" label="Evidence URL">
+            <Input placeholder="https://..." />
+          </Form.Item>
+          <Form.Item name="note" label="Note">
+            <Input.TextArea rows={3} maxLength={1000} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   );
 }
 

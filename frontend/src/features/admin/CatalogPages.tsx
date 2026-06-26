@@ -17,12 +17,13 @@ import {
   Tag,
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
+import { invalidateStudentCurrentContextQueries } from '@/features/student/profile-context';
 import type {
   CareerGoal,
   CareerRequiredSkill,
@@ -86,7 +87,7 @@ interface SpecializationFormValues {
 }
 
 export function CatalogPage({ kind }: { kind: CatalogKind }) {
-  const { message } = App.useApp();
+  const { message, notification } = App.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CatalogRecord | null>(null);
@@ -111,20 +112,24 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
       const payload = buildCatalogPayload(kind, values);
       return adminCatalogService.saveCatalog(kind, payload, editing?.id);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Saved');
+      notifyCatalogInvalidation(notification, result);
       setOpen(false);
       setEditing(null);
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: [kind] });
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
   const remove = useMutation({
     mutationFn: (id: string) => adminCatalogService.deleteCatalog(kind, id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Deleted');
+      notifyCatalogInvalidation(notification, result);
       queryClient.invalidateQueries({ queryKey: [kind] });
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
@@ -405,7 +410,7 @@ function RequiredSkillsManager({
   careerLevelSkillIds?: Set<string>;
   careerLevelLoading?: boolean;
 }) {
-  const { message } = App.useApp();
+  const { message, notification } = App.useApp();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<CareerRequiredSkill | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -440,14 +445,16 @@ function RequiredSkillsManager({
       };
       return adminCatalogService.saveRequiredSkill(endpoint, payload, editing?.id);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Saved');
+      notifyCatalogInvalidation(notification, result);
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
       invalidateKeys.forEach((key) =>
         queryClient.invalidateQueries({ queryKey: key }),
       );
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => {
       message.error(getApiErrorMessage(error));
@@ -455,11 +462,13 @@ function RequiredSkillsManager({
   });
   const remove = useMutation({
     mutationFn: (id: string) => adminCatalogService.deleteRequiredSkill(endpoint, id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Deleted');
+      notifyCatalogInvalidation(notification, result);
       invalidateKeys.forEach((key) =>
         queryClient.invalidateQueries({ queryKey: key }),
       );
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => {
       message.error(getApiErrorMessage(error));
@@ -680,7 +689,7 @@ function SpecializationsTab({
   careerGoal: CareerGoal | null;
   open: boolean;
 }) {
-  const { message } = App.useApp();
+  const { message, notification } = App.useApp();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Specialization | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -730,8 +739,9 @@ function SpecializationsTab({
         editing?.id,
       );
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Saved');
+      notifyCatalogInvalidation(notification, result);
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
@@ -739,6 +749,7 @@ function SpecializationsTab({
         queryKey: ['specializations', careerGoal?.id],
       });
       queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => {
       message.error(getApiErrorMessage(error));
@@ -747,12 +758,14 @@ function SpecializationsTab({
 
   const deactivate = useMutation({
     mutationFn: (id: string) => adminCatalogService.deactivateSpecialization(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       message.success('Deactivated');
+      notifyCatalogInvalidation(notification, result);
       queryClient.invalidateQueries({
         queryKey: ['specializations', careerGoal?.id],
       });
       queryClient.invalidateQueries({ queryKey: ['career-goals'] });
+      invalidateCatalogImpactQueries(queryClient);
     },
     onError: (error) => {
       message.error(getApiErrorMessage(error));
@@ -943,6 +956,87 @@ function buildCatalogPayload(kind: CatalogKind, values: CatalogFormValues): Cata
   }
 
   return payload;
+}
+
+interface NotificationApi {
+  info: (config: { message: string; description?: string; duration?: number }) => void;
+}
+
+interface CatalogInvalidationMetadata {
+  analysesInvalidated?: number;
+  analysisInvalidated?: number;
+  recommendationsObsolete?: number;
+  roadmapsArchived?: number;
+  assessmentsCancelled?: number;
+}
+
+function notifyCatalogInvalidation(notification: NotificationApi, result: unknown) {
+  const summary = getCatalogInvalidationSummary(result);
+
+  notification.info({
+    message: 'Catalog impact',
+    description:
+      summary.length > 0
+        ? summary.join(' · ')
+        : 'Thay đổi này có thể làm mới analysis/recommendation/roadmap liên quan.',
+    duration: 6,
+  });
+}
+
+function getCatalogInvalidationSummary(result: unknown) {
+  const metadata = getCatalogInvalidationMetadata(result);
+  if (!metadata) {
+    return [];
+  }
+
+  return [
+    getCountLine(metadata.analysesInvalidated ?? metadata.analysisInvalidated, 'analyses invalidated'),
+    getCountLine(metadata.recommendationsObsolete, 'recommendations obsolete'),
+    getCountLine(metadata.roadmapsArchived, 'roadmaps archived'),
+    getCountLine(metadata.assessmentsCancelled, 'assessments cancelled'),
+  ].filter((line): line is string => Boolean(line));
+}
+
+function getCatalogInvalidationMetadata(result: unknown): CatalogInvalidationMetadata | null {
+  if (!isObject(result)) {
+    return null;
+  }
+
+  const candidates = [
+    result.invalidation,
+    result.invalidationSummary,
+    result.affected,
+    result.metadata,
+    result,
+  ];
+  const match = candidates.find(
+    (candidate) =>
+      isObject(candidate) &&
+      ('analysesInvalidated' in candidate ||
+        'analysisInvalidated' in candidate ||
+        'recommendationsObsolete' in candidate ||
+        'roadmapsArchived' in candidate ||
+        'assessmentsCancelled' in candidate),
+  );
+
+  return match ? (match as CatalogInvalidationMetadata) : null;
+}
+
+function getCountLine(value: unknown, label: string) {
+  return typeof value === 'number' ? `${value} ${label}` : null;
+}
+
+function invalidateCatalogImpactQueries(queryClient: QueryClient) {
+  invalidateStudentCurrentContextQueries(queryClient);
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+  queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+  queryClient.invalidateQueries({ queryKey: ['analysis'] });
+  queryClient.invalidateQueries({ queryKey: ['assessment'] });
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
 }
 
 export function CareerGoalsPage() {
