@@ -1,22 +1,25 @@
 'use client';
 
-import { Alert, Button, Card, Col, Empty, List, Progress, Row, Table, Tag } from 'antd';
+import { Alert, Button, Card, Col, Empty, List, Progress, Row, Table, Tag, Typography } from 'antd';
 import { BarChartOutlined, CheckCircleOutlined, TeamOutlined, WarningOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import type {
+  AnalysisHistoryItem,
   AdminDashboard,
   DashboardMissingSkill,
   LecturerDashboard,
   StudentDashboard,
 } from '@/types/domain';
-import { ROADMAP_CURRENT_STATUS } from '@/types/domain';
+import { ANALYSIS_CURRENT_STATUS, ROADMAP_CURRENT_STATUS } from '@/types/domain';
 import {
+  isSameProfileScope,
   studentQueryKeys,
   useCurrentProfileContext,
 } from '@/features/student/profile-context';
+import { analysisService } from '@/features/student/analysis.service';
 import { dashboardService } from './dashboard.service';
 
 type TopMissingSkill = AdminDashboard['topMissingSkills'][number];
@@ -29,6 +32,14 @@ export function StudentDashboardView() {
     queryFn: () => dashboardService.getStudentDashboard(),
     enabled: context.isContextReady,
   });
+  const analysisHistory = useQuery({
+    queryKey: studentQueryKeys.analysisHistory,
+    queryFn: () => analysisService.listMyHistory(),
+    enabled: context.isContextReady,
+  });
+  const currentAnalysis = (analysisHistory.data?.data ?? []).find(
+    (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(context.profile, item),
+  );
   const roadmapProgress =
     query.data?.roadmapProgress.status === ROADMAP_CURRENT_STATUS
       ? query.data.roadmapProgress
@@ -42,8 +53,11 @@ export function StudentDashboardView() {
 
   return (
     <QueryState
-      loading={context.loading || (context.isContextReady && query.isLoading)}
-      error={context.error ?? query.error}
+      loading={
+        context.loading ||
+        (context.isContextReady && (query.isLoading || analysisHistory.isLoading))
+      }
+      error={context.error ?? query.error ?? analysisHistory.error}
     >
       <PageHeader title="Student Dashboard" description="Track your competency profile health." />
       {!context.isContextReady ? (
@@ -59,6 +73,12 @@ export function StudentDashboardView() {
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
+          <Col xs={24}>
+            <CurrentGoalCard
+              careerGoalName={careerScope}
+              hasCurrentAnalysis={Boolean(currentAnalysis)}
+            />
+          </Col>
           <Col xs={24} md={8}>
             <MetricCard title="Completion" value={Number(query.data?.completionPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
           </Col>
@@ -67,6 +87,12 @@ export function StudentDashboardView() {
           </Col>
           <Col xs={24} md={8}>
             <MetricCard title="Roadmap Progress" value={Number(roadmapProgress?.progressPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
+          </Col>
+          <Col xs={24}>
+            <DashboardSummary
+              analysis={currentAnalysis}
+              missingSkills={query.data?.missingSkills ?? []}
+            />
           </Col>
           <Col xs={24} lg={14}>
             <Card title="Missing Skills">
@@ -87,13 +113,101 @@ export function StudentDashboardView() {
           </Col>
           <Col xs={24} lg={10}>
             <Card title="Roadmap">
-              <Progress percent={Number(roadmapProgress?.progressPercent ?? 0)} />
-              <Alert style={{ marginTop: 16 }} type="info" message={careerScope} />
+              {roadmapProgress ? (
+                <>
+                  <Progress percent={Number(roadmapProgress.progressPercent ?? 0)} />
+                  <Alert
+                    style={{ marginTop: 16 }}
+                    type="success"
+                    message="Active roadmap"
+                    description={`${roadmapProgress.itemCount} items in progress for ${careerScope}.`}
+                  />
+                </>
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No active roadmap for the current context."
+                >
+                  <Button type="primary" href="/student/roadmap">
+                    Generate Roadmap
+                  </Button>
+                </Empty>
+              )}
             </Card>
           </Col>
         </Row>
       )}
     </QueryState>
+  );
+}
+
+function CurrentGoalCard({
+  careerGoalName,
+  hasCurrentAnalysis,
+}: {
+  careerGoalName: string;
+  hasCurrentAnalysis: boolean;
+}) {
+  return (
+    <Alert
+      showIcon
+      type={hasCurrentAnalysis ? 'success' : 'info'}
+      message={`Current context: ${careerGoalName}`}
+      description={
+        hasCurrentAnalysis
+          ? 'Dashboard metrics are scoped to the current profile context.'
+          : 'Complete an assessment and run analysis to populate current competency data.'
+      }
+      action={
+        hasCurrentAnalysis ? null : (
+          <Button size="small" href="/student/assessment">
+            Do Assessment
+          </Button>
+        )
+      }
+    />
+  );
+}
+
+function DashboardSummary({
+  analysis,
+  missingSkills,
+}: {
+  analysis?: AnalysisHistoryItem;
+  missingSkills: DashboardMissingSkill[];
+}) {
+  if (!analysis) {
+    return (
+      <Card>
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="No current analysis for this career goal and specialization."
+        >
+          <Button type="primary" href="/student/analysis">
+            Analyze Now
+          </Button>
+        </Empty>
+      </Card>
+    );
+  }
+
+  return (
+    <div>
+      <Typography.Title level={4} style={{ marginTop: 0 }}>
+        Competency Summary
+      </Typography.Title>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={8}>
+          <MetricCard title="Match Level" value={analysis.matchLevel} icon={<BarChartOutlined />} />
+        </Col>
+        <Col xs={24} md={8}>
+          <MetricCard title="Current Match" value={Number(analysis.matchPercent)} suffix="%" icon={<CheckCircleOutlined />} />
+        </Col>
+        <Col xs={24} md={8}>
+          <MetricCard title="Skill Gaps" value={missingSkills.length} icon={<WarningOutlined />} />
+        </Col>
+      </Row>
+    </div>
   );
 }
 

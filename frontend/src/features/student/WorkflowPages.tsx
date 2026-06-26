@@ -15,6 +15,7 @@ import {
   Space,
   Table,
   Tag,
+  Tabs,
   Typography,
 } from 'antd';
 import {
@@ -23,7 +24,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { getPage, patchData } from '@/lib/request';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -43,16 +44,18 @@ import type {
   Roadmap,
   RoadmapHistoryItem,
   RoadmapItem,
+  RoadmapItemResource,
   RoadmapItemStatus,
+  RoadmapStatus,
   Specialization,
   StudentRecommendationStatus,
 } from '@/types/domain';
 import {
   ANALYSIS_CURRENT_STATUS,
   ANALYSIS_OBSOLETE_STATUS,
-  CURRENT_RECOMMENDATION_STATUSES,
   RECOMMENDATION_STATUS_TRANSITIONS,
   RESOURCE_PROGRESS_STATUS_TRANSITIONS,
+  ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES,
   ROADMAP_CURRENT_STATUS,
   ROADMAP_ITEM_CANCELLED_STATUS,
   ROADMAP_ITEM_DONE_STATUS,
@@ -72,6 +75,33 @@ import { recommendationService } from './recommendation.service';
 import { roadmapService } from './roadmap.service';
 
 type AnalysisSkill = CompetencyAnalysis['skills'][number];
+type RecommendationFilter = 'active' | 'done' | 'dismissed';
+
+interface LearningResourceProgressItem {
+  key: string;
+  resourceId: string;
+  title: string;
+  description?: string | null;
+  resourceType: RecommendationResource['resourceType'];
+  url?: string | null;
+  provider?: string | null;
+  estimatedDuration?: string | null;
+  progressStatus: ResourceProgressStatus;
+  recommendationId?: string | null;
+}
+
+const RECOMMENDATION_FILTER_LABEL: Record<RecommendationFilter, string> = {
+  active: 'Active',
+  done: 'Done',
+  dismissed: 'Dismissed',
+};
+
+const RECOMMENDATION_FILTER_STATUS: Partial<
+  Record<RecommendationFilter, StudentRecommendationStatus>
+> = {
+  done: 'DONE',
+  dismissed: 'DISMISSED',
+};
 
 export function StudentEvidencesView() {
   const query = useQuery({
@@ -193,9 +223,13 @@ export function RecommendationsView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const context = useCurrentProfileContext();
+  const [filter, setFilter] = useState<RecommendationFilter>('active');
   const query = useQuery({
-    queryKey: studentQueryKeys.recommendationsMe(context.scopeKey),
-    queryFn: () => recommendationService.listMine(),
+    queryKey: studentQueryKeys.recommendationsMe(context.scopeKey, filter),
+    queryFn: () =>
+      recommendationService.listMine({
+        status: RECOMMENDATION_FILTER_STATUS[filter],
+      }),
     enabled: context.isContextReady,
   });
   const update = useMutation({
@@ -229,7 +263,9 @@ export function RecommendationsView() {
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
   const recommendations = (query.data?.data ?? []).filter((item) =>
-    isCurrentRecommendationStatus(item.status),
+    filter === 'active'
+      ? isActionableRecommendationStatus(item.status)
+      : item.status === RECOMMENDATION_FILTER_STATUS[filter],
   );
 
   return (
@@ -238,6 +274,11 @@ export function RecommendationsView() {
       error={context.error ?? query.error}
     >
       <PageHeader title="Recommendations" />
+      <CareerScopeSummary
+        careerGoal={context.profile?.careerGoal}
+        specialization={context.profile?.specialization}
+        style={{ marginBottom: 16 }}
+      />
       {!context.isContextReady ? (
         <Alert
           showIcon
@@ -246,48 +287,29 @@ export function RecommendationsView() {
           message="Please select a career goal before viewing recommendations."
         />
       ) : null}
-      <List
-        dataSource={recommendations}
-        locale={{ emptyText: 'No current recommendations.' }}
-        renderItem={(item) => (
-          <List.Item
-            actions={[
-              <Select<StudentRecommendationStatus>
-                key="status"
-                value={item.status}
-                disabled={!RECOMMENDATION_STATUS_TRANSITIONS[item.status].length}
-                onChange={(status) => update.mutate({ id: item.id, status })}
-                options={getRecommendationStatusOptions(item.status)}
-                style={{ width: 150 }}
-              />,
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <Space wrap>
-                  {item.title}
-                  <Tag>{item.status}</Tag>
-                </Space>
-              }
-              description={`${item.skill?.name ?? ''} · Priority ${item.priorityScore} · ${
-                item.reason ?? ''
-              }`}
-            />
-            {item.resources?.length ? (
-              <RecommendationResources
-                recommendation={item}
-                updating={updateResourceProgress.isPending}
-                onProgressChange={(resource, status) =>
-                  updateResourceProgress.mutate({
-                    resource,
-                    recommendationId: item.id,
-                    status,
-                  })
-                }
-              />
-            ) : null}
-          </List.Item>
+      <Tabs
+        activeKey={filter}
+        onChange={(key) => setFilter(key as RecommendationFilter)}
+        items={(Object.keys(RECOMMENDATION_FILTER_LABEL) as RecommendationFilter[]).map(
+          (key) => ({
+            key,
+            label: RECOMMENDATION_FILTER_LABEL[key],
+          }),
         )}
+      />
+      <RecommendationList
+        recommendations={recommendations}
+        filter={filter}
+        updatingStatus={update.isPending}
+        updatingResource={updateResourceProgress.isPending}
+        onStatusChange={(id, status) => update.mutate({ id, status })}
+        onProgressChange={(resource, recommendationId, status) =>
+          updateResourceProgress.mutate({
+            resource,
+            recommendationId,
+            status,
+          })
+        }
       />
     </QueryState>
   );
@@ -329,6 +351,28 @@ export function RoadmapView() {
     }) =>
       roadmapService.updateItemStatus(id, note ? { status, note } : { status }),
     onSuccess: () => {
+      invalidateStudentCurrentContextQueries(queryClient);
+    },
+    onError: (error) => message.error(getApiErrorMessage(error)),
+  });
+  const updateResourceProgress = useMutation({
+    mutationFn: ({
+      resource,
+      recommendationId,
+      status,
+    }: {
+      resource: RoadmapItemResource;
+      recommendationId?: string | null;
+      status: ResourceProgressStatus;
+    }) =>
+      learningResourceService.updateProgress(resource.id, {
+        status,
+        ...(recommendationId ? { recommendationId } : {}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: studentQueryKeys.learningResourceProgress(context.scopeKey),
+      });
       invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
@@ -426,40 +470,34 @@ export function RoadmapView() {
             careerGoal={activeRoadmap.careerGoal}
             specialization={activeRoadmap.specialization}
           />
+          <Space style={{ marginTop: 16, marginBottom: 8 }}>
+            <StatusBadge status={activeRoadmap.status} />
+            <Typography.Text type="secondary">
+              Generated from actionable recommendations only.
+            </Typography.Text>
+          </Space>
           <Progress percent={Number(activeRoadmap.progressPercent)} />
-          <List
-            dataSource={roadmapItems}
-            locale={{ emptyText: 'No active roadmap items.' }}
-            renderItem={(item) => (
-              <List.Item
-                actions={[
-                  <Select<RoadmapItemStatus>
-                    key="status"
-                    value={item.status}
-                    disabled={!ROADMAP_ITEM_STATUS_TRANSITIONS[item.status].length}
-                    onChange={(status) => handleItemStatusChange(item, status)}
-                    options={getRoadmapItemStatusOptions(item.status)}
-                    style={{ width: 150 }}
-                  />,
-                ]}
-              >
-                <List.Item.Meta
-                  title={
-                    <Space wrap>
-                      {`${item.orderIndex}. ${item.title}`}
-                      {item.roadmapPhase ? <Tag>{item.roadmapPhase}</Tag> : null}
-                      <Tag>{item.status}</Tag>
-                    </Space>
-                  }
-                  description={item.description}
-                />
-              </List.Item>
-            )}
+          <RoadmapTimeline
+            items={roadmapItems}
+            updatingItem={update.isPending}
+            updatingResource={updateResourceProgress.isPending}
+            onItemStatusChange={handleItemStatusChange}
+            onResourceProgressChange={(resource, recommendationId, status) =>
+              updateResourceProgress.mutate({
+                resource,
+                recommendationId,
+                status,
+              })
+            }
           />
         </Card>
       ) : (
         <Card>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active roadmap." />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active roadmap.">
+            <Button type="primary" loading={generate.isPending} onClick={handleGenerate}>
+              Generate Roadmap
+            </Button>
+          </Empty>
         </Card>
       )}
       {context.isContextReady ? (
@@ -468,7 +506,9 @@ export function RoadmapView() {
             rowKey="roadmapId"
             size="small"
             loading={history.isLoading}
-            dataSource={history.data ?? []}
+            dataSource={(history.data ?? []).filter(
+              (item) => item.status !== ROADMAP_CURRENT_STATUS,
+            )}
             pagination={false}
             columns={[
               { title: 'Version', dataIndex: 'version' },
@@ -477,7 +517,7 @@ export function RoadmapView() {
                 title: 'Progress',
                 render: (_value, row) => `${Number(row.progressPercent)}%`,
               },
-              { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+              { title: 'Status', dataIndex: 'status', render: (value) => <StatusBadge status={value} /> },
             ]}
           />
         </Card>
@@ -807,26 +847,191 @@ function getRecommendationStatusOptions(status: StudentRecommendationStatus) {
   );
 }
 
-function isCurrentRecommendationStatus(status: StudentRecommendationStatus) {
-  return CURRENT_RECOMMENDATION_STATUSES.some((currentStatus) => currentStatus === status);
+function isActionableRecommendationStatus(status: StudentRecommendationStatus) {
+  return ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES.some(
+    (currentStatus) => currentStatus === status,
+  );
 }
 
-function RecommendationResources({
-  recommendation,
-  updating,
+function RecommendationList({
+  recommendations,
+  filter,
+  updatingStatus,
+  updatingResource,
+  onStatusChange,
   onProgressChange,
 }: {
-  recommendation: Recommendation;
-  updating: boolean;
+  recommendations: Recommendation[];
+  filter: RecommendationFilter;
+  updatingStatus: boolean;
+  updatingResource: boolean;
+  onStatusChange: (id: string, status: StudentRecommendationStatus) => void;
   onProgressChange: (
     resource: RecommendationResource,
+    recommendationId: string,
+    status: ResourceProgressStatus,
+  ) => void;
+}) {
+  if (!recommendations.length) {
+    return (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          filter === 'active'
+            ? 'Chưa có gợi ý học tập. Hãy hoàn thành phân tích năng lực trước.'
+            : `No ${RECOMMENDATION_FILTER_LABEL[filter].toLowerCase()} recommendations.`
+        }
+      >
+        {filter === 'active' ? (
+          <Button type="primary" href="/student/analysis">
+            Analyze Now
+          </Button>
+        ) : null}
+      </Empty>
+    );
+  }
+
+  return (
+    <List<Recommendation>
+      dataSource={recommendations}
+      renderItem={(item) => (
+        <List.Item
+          actions={[
+            <Select<StudentRecommendationStatus>
+              key="status"
+              value={item.status}
+              loading={updatingStatus}
+              disabled={
+                updatingStatus ||
+                !RECOMMENDATION_STATUS_TRANSITIONS[item.status].length
+              }
+              onChange={(status) => onStatusChange(item.id, status)}
+              options={getRecommendationStatusOptions(item.status)}
+              style={{ width: 150 }}
+            />,
+          ]}
+        >
+          <List.Item.Meta
+            title={
+              <Space wrap>
+                {item.title}
+                <StatusBadge status={item.status} />
+                {isActionableRecommendationStatus(item.status) ? (
+                  <Tag color="blue">ROADMAP ACTIONABLE</Tag>
+                ) : null}
+              </Space>
+            }
+            description={`${item.skill?.name ?? ''} · Priority ${item.priorityScore} · ${
+              item.reason ?? ''
+            }`}
+          />
+          {item.resources?.length ? (
+            <LearningResourceList
+              resources={item.resources.map((resource) =>
+                toRecommendationResourceProgressItem(resource, item.id),
+              )}
+              updating={updatingResource}
+              onProgressChange={(resource, status) =>
+                onProgressChange(
+                  resourceToRecommendationResource(resource, item.resources ?? []),
+                  item.id,
+                  status,
+                )
+              }
+            />
+          ) : null}
+        </List.Item>
+      )}
+    />
+  );
+}
+
+function RoadmapTimeline({
+  items,
+  updatingItem,
+  updatingResource,
+  onItemStatusChange,
+  onResourceProgressChange,
+}: {
+  items: RoadmapItem[];
+  updatingItem: boolean;
+  updatingResource: boolean;
+  onItemStatusChange: (item: RoadmapItem, status: RoadmapItemStatus) => void;
+  onResourceProgressChange: (
+    resource: RoadmapItemResource,
+    recommendationId: string | null | undefined,
     status: ResourceProgressStatus,
   ) => void;
 }) {
   return (
-    <List<RecommendationResource>
+    <List<RoadmapItem>
+      dataSource={items}
+      locale={{ emptyText: 'No active roadmap items.' }}
+      style={{ marginTop: 16 }}
+      renderItem={(item) => (
+        <List.Item
+          actions={[
+            <Select<RoadmapItemStatus>
+              key="status"
+              value={item.status}
+              loading={updatingItem}
+              disabled={
+                updatingItem ||
+                !ROADMAP_ITEM_STATUS_TRANSITIONS[item.status].length
+              }
+              onChange={(status) => onItemStatusChange(item, status)}
+              options={getRoadmapItemStatusOptions(item.status)}
+              style={{ width: 150 }}
+            />,
+          ]}
+        >
+          <List.Item.Meta
+            title={
+              <Space wrap>
+                {`${item.orderIndex}. ${item.title}`}
+                {item.roadmapPhase ? <Tag>{item.roadmapPhase}</Tag> : null}
+                <StatusBadge status={item.status} />
+              </Space>
+            }
+            description={item.description}
+          />
+          {item.resources?.length ? (
+            <LearningResourceList
+              resources={item.resources.map((resource) =>
+                toRoadmapResourceProgressItem(resource, item.recommendationId),
+              )}
+              updating={updatingResource}
+              onProgressChange={(resource, status) =>
+                onResourceProgressChange(
+                  resourceToRoadmapResource(resource, item.resources ?? []),
+                  item.recommendationId,
+                  status,
+                )
+              }
+            />
+          ) : null}
+        </List.Item>
+      )}
+    />
+  );
+}
+
+function LearningResourceList({
+  resources,
+  updating,
+  onProgressChange,
+}: {
+  resources: LearningResourceProgressItem[];
+  updating: boolean;
+  onProgressChange: (
+    resource: LearningResourceProgressItem,
+    status: ResourceProgressStatus,
+  ) => void;
+}) {
+  return (
+    <List<LearningResourceProgressItem>
       size="small"
-      dataSource={recommendation.resources ?? []}
+      dataSource={resources}
       style={{ marginTop: 12, width: '100%' }}
       renderItem={(resource) => (
         <List.Item
@@ -835,7 +1040,10 @@ function RecommendationResources({
               key="progress"
               value={resource.progressStatus}
               loading={updating}
-              disabled={!RESOURCE_PROGRESS_STATUS_TRANSITIONS[resource.progressStatus].length}
+              disabled={
+                updating ||
+                !RESOURCE_PROGRESS_STATUS_TRANSITIONS[resource.progressStatus].length
+              }
               onChange={(status) => onProgressChange(resource, status)}
               options={getResourceProgressStatusOptions(resource.progressStatus)}
               style={{ width: 150 }}
@@ -844,13 +1052,16 @@ function RecommendationResources({
         >
           <List.Item.Meta
             title={
-              resource.resourceUrl ? (
-                <Typography.Link href={resource.resourceUrl} target="_blank" rel="noreferrer">
-                  {resource.resourceTitle}
-                </Typography.Link>
-              ) : (
-                resource.resourceTitle
-              )
+              <Space wrap>
+                {resource.url ? (
+                  <Typography.Link href={resource.url} target="_blank" rel="noreferrer">
+                    {resource.title}
+                  </Typography.Link>
+                ) : (
+                  resource.title
+                )}
+                <StatusBadge status={resource.progressStatus} />
+              </Space>
             }
             description={`${resource.resourceType} · ${resource.provider ?? '-'} · ${
               resource.estimatedDuration ?? '-'
@@ -860,6 +1071,102 @@ function RecommendationResources({
       )}
     />
   );
+}
+
+function toRecommendationResourceProgressItem(
+  resource: RecommendationResource,
+  recommendationId: string,
+): LearningResourceProgressItem {
+  return {
+    key: resource.id,
+    resourceId: resource.resourceId,
+    title: resource.resourceTitle,
+    description: resource.resourceDescription,
+    resourceType: resource.resourceType,
+    url: resource.resourceUrl,
+    provider: resource.provider,
+    estimatedDuration: resource.estimatedDuration,
+    progressStatus: resource.progressStatus,
+    recommendationId,
+  };
+}
+
+function toRoadmapResourceProgressItem(
+  resource: RoadmapItemResource,
+  recommendationId?: string | null,
+): LearningResourceProgressItem {
+  return {
+    key: resource.id,
+    resourceId: resource.id,
+    title: resource.title,
+    resourceType: resource.resourceType,
+    url: resource.url,
+    provider: resource.provider,
+    estimatedDuration: resource.estimatedDuration,
+    progressStatus: resource.progressStatus,
+    recommendationId,
+  };
+}
+
+function resourceToRecommendationResource(
+  resource: LearningResourceProgressItem,
+  resources: RecommendationResource[],
+) {
+  const original = resources.find((item) => item.resourceId === resource.resourceId);
+  if (!original) {
+    throw new Error('Learning resource is no longer attached to this recommendation.');
+  }
+
+  return original;
+}
+
+function resourceToRoadmapResource(
+  resource: LearningResourceProgressItem,
+  resources: RoadmapItemResource[],
+) {
+  const original = resources.find((item) => item.id === resource.resourceId);
+  if (!original) {
+    throw new Error('Learning resource is no longer attached to this roadmap item.');
+  }
+
+  return original;
+}
+
+type StatusBadgeValue =
+  | StudentRecommendationStatus
+  | RoadmapStatus
+  | RoadmapItemStatus
+  | ResourceProgressStatus
+  | AnalysisHistoryItem['status'];
+
+function StatusBadge({ status }: { status: StatusBadgeValue }) {
+  return <Tag color={getStatusColor(status)}>{status}</Tag>;
+}
+
+function getStatusColor(status: StatusBadgeValue) {
+  switch (status) {
+    case 'CURRENT':
+    case 'ACTIVE':
+    case 'DONE':
+    case 'COMPLETED':
+      return 'green';
+    case 'NEW':
+    case 'SAVED':
+    case 'TODO':
+    case 'NOT_STARTED':
+      return 'blue';
+    case 'IN_PROGRESS':
+      return 'processing';
+    case 'DISMISSED':
+    case 'SKIPPED':
+    case 'ARCHIVED':
+    case 'OBSOLETE':
+      return 'default';
+    case 'CANCELLED':
+      return 'red';
+    default:
+      return 'default';
+  }
 }
 
 function getResourceProgressStatusOptions(status: ResourceProgressStatus) {

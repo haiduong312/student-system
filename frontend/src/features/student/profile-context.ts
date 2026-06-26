@@ -40,8 +40,8 @@ export const studentQueryKeys = {
   analysisCurrent: (scopeKey: StudentProfileScopeKey) =>
     ['analysis', 'current', ...scopeKey] as const,
   analysisHistory: ['analysis', 'history'] as const,
-  recommendationsMe: (scopeKey: StudentProfileScopeKey) =>
-    ['recommendations', 'me', ...scopeKey] as const,
+  recommendationsMe: (scopeKey: StudentProfileScopeKey, filter = 'active') =>
+    ['recommendations', 'me', ...scopeKey, filter] as const,
   roadmapsActive: (scopeKey: StudentProfileScopeKey) =>
     ['roadmaps', 'active', ...scopeKey] as const,
   roadmapsHistory: ['roadmaps', 'history'] as const,
