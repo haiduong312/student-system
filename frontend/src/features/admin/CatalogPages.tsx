@@ -19,21 +19,28 @@ import {
 import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { deleteData, getPage, patchData, postData } from '@/lib/request';
+import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
 import type {
   CareerGoal,
   CareerRequiredSkill,
+  CatalogStatus,
   RoadmapPhase,
   Skill,
   SkillCategory,
   SkillType,
   Specialization,
 } from '@/types/domain';
-
-type CatalogKind = 'skill-categories' | 'skills' | 'career-goals';
+import {
+  adminCatalogService,
+  type CatalogKind,
+  type CatalogPayload,
+  type CatalogRecord,
+  type RequiredSkillPayload,
+  type SpecializationPayload,
+} from './catalog.service';
 
 const titles: Record<CatalogKind, string> = {
   'skill-categories': 'Skill Categories',
@@ -53,37 +60,56 @@ const roadmapPhaseOptions: Array<{ value: RoadmapPhase; label: string }> = [
   { value: 'PORTFOLIO_PREPARATION', label: 'Portfolio Preparation' },
 ];
 
+interface CatalogFormValues {
+  name: string;
+  description?: string | null;
+  status?: CatalogStatus;
+  categoryId?: string | null;
+  type?: SkillType;
+  defaultRequiredLevel?: number;
+  defaultWeight?: number;
+  roadmapPhase?: RoadmapPhase | null;
+}
+
+interface RequiredSkillFormValues {
+  skillId: string;
+  requiredLevel: number;
+  weight: number;
+  learningOrder?: number;
+  roadmapPhase?: RoadmapPhase;
+}
+
+interface SpecializationFormValues {
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+}
+
 export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<any | null>(null);
+  const [editing, setEditing] = useState<CatalogRecord | null>(null);
   const [open, setOpen] = useState(false);
   const [selectedCareerGoal, setSelectedCareerGoal] =
     useState<CareerGoal | null>(null);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<CatalogFormValues>();
   const selectedSkillType = Form.useWatch('type', form);
 
   const query = useQuery({
     queryKey: [kind, search],
-    queryFn: () => getPage<any>(`/${kind}`, { search, limit: 50 }),
+    queryFn: () => adminCatalogService.listCatalog<CatalogRecord>(kind, { search }),
   });
   const categories = useQuery({
     queryKey: ['skill-categories', 'options'],
-    queryFn: () =>
-      getPage<SkillCategory>('/skill-categories', {
-        limit: 100,
-        status: 'ACTIVE',
-      }),
+    queryFn: () => adminCatalogService.listSkillCategories(),
     enabled: kind === 'skills',
   });
 
   const save = useMutation({
-    mutationFn: (values: any) => {
+    mutationFn: (values: CatalogFormValues) => {
       const payload = buildCatalogPayload(kind, values);
-      return editing
-        ? patchData(`/${kind}/${editing.id}`, payload)
-        : postData(`/${kind}`, payload);
+      return adminCatalogService.saveCatalog(kind, payload, editing?.id);
     },
     onSuccess: () => {
       message.success('Saved');
@@ -92,20 +118,22 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
       form.resetFields();
       queryClient.invalidateQueries({ queryKey: [kind] });
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => deleteData(`/${kind}/${id}`),
+    mutationFn: (id: string) => adminCatalogService.deleteCatalog(kind, id),
     onSuccess: () => {
       message.success('Deleted');
       queryClient.invalidateQueries({ queryKey: [kind] });
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
-  const openForm = (record?: any) => {
+  const openForm = (record?: CatalogRecord) => {
     setEditing(record ?? null);
     form.resetFields();
     form.setFieldsValue(
-      record ?? { status: 'ACTIVE', type: 'CAREER_SPECIFIC' },
+      record ? toCatalogFormValues(record) : { status: 'ACTIVE', type: 'CAREER_SPECIFIC' },
     );
     setOpen(true);
   };
@@ -126,7 +154,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           </Button>
         }
       />
-      <Table<any>
+      <Table<CatalogRecord>
         rowKey="id"
         dataSource={query.data?.data ?? []}
         pagination={{ pageSize: 10, total: query.data?.meta.total }}
@@ -136,26 +164,26 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
             ? [
                 {
                   title: 'Type',
-                  render: (_: unknown, row: Skill) => (
-                    <SkillTypeTag type={row.type} />
+                  render: (_: unknown, row: CatalogRecord) => (
+                    <SkillTypeTag type={(row as Skill).type} />
                   ),
                 },
                 {
                   title: 'Default Level',
-                  render: (_: unknown, row: Skill) =>
-                    row.type === 'COMMON'
-                      ? (row.defaultRequiredLevel ?? '-')
+                  render: (_: unknown, row: CatalogRecord) =>
+                    (row as Skill).type === 'COMMON'
+                      ? ((row as Skill).defaultRequiredLevel ?? '-')
                       : '-',
                 },
                 {
                   title: 'Default Weight',
-                  render: (_: unknown, row: Skill) =>
-                    row.type === 'COMMON' ? (row.defaultWeight ?? '-') : '-',
+                  render: (_: unknown, row: CatalogRecord) =>
+                    (row as Skill).type === 'COMMON' ? ((row as Skill).defaultWeight ?? '-') : '-',
                 },
                 {
                   title: 'Questions',
-                  render: (_: unknown, row: Skill) =>
-                    row._count?.assessmentQuestions ?? 0,
+                  render: (_: unknown, row: CatalogRecord) =>
+                    (row as Skill)._count?.assessmentQuestions ?? 0,
                 },
               ]
             : []),
@@ -163,13 +191,13 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
             ? [
                 {
                   title: 'Required Skills',
-                  render: (_: unknown, row: CareerGoal) =>
-                    row._count?.requiredSkills ?? 0,
+                  render: (_: unknown, row: CatalogRecord) =>
+                    (row as CareerGoal)._count?.requiredSkills ?? 0,
                 },
                 {
                   title: 'Specializations',
-                  render: (_: unknown, row: CareerGoal) =>
-                    row._count?.specializations ?? '-',
+                  render: (_: unknown, row: CatalogRecord) =>
+                    (row as CareerGoal)._count?.specializations ?? '-',
                 },
               ]
             : []),
@@ -181,10 +209,10 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           { title: 'Description', dataIndex: 'description', ellipsis: true },
           {
             title: 'Actions',
-            render: (_value: unknown, record: any) => (
+            render: (_value: unknown, record: CatalogRecord) => (
               <Space>
                 {kind === 'career-goals' ? (
-                  <Button onClick={() => setSelectedCareerGoal(record)}>
+                  <Button onClick={() => setSelectedCareerGoal(record as CareerGoal)}>
                     Manage
                   </Button>
                 ) : null}
@@ -204,7 +232,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
       >
-        <Form
+        <Form<CatalogFormValues>
           form={form}
           layout="vertical"
           onFinish={(values) => save.mutate(values)}
@@ -381,18 +409,18 @@ function RequiredSkillsManager({
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<CareerRequiredSkill | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<RequiredSkillFormValues>();
   const isSpecializationScope = scope === 'specialization';
 
   const requiredSkills = useQuery({
     queryKey,
-    queryFn: () => getPage<CareerRequiredSkill>(endpoint, { limit: 100 }),
+    queryFn: () => adminCatalogService.listRequiredSkills(endpoint, 100),
     enabled,
   });
   const careerSpecificSkills = useQuery({
     queryKey: ['skills', 'career-specific-options'],
     queryFn: () =>
-      getPage<Skill>('/skills', {
+      adminCatalogService.listSkills({
         limit: 200,
         status: 'ACTIVE',
         type: 'CAREER_SPECIFIC',
@@ -401,15 +429,16 @@ function RequiredSkillsManager({
   });
 
   const save = useMutation({
-    mutationFn: (values: any) => {
-      const payload = {
-        ...values,
+    mutationFn: (values: RequiredSkillFormValues) => {
+      const payload: RequiredSkillPayload = {
+        skillId: values.skillId,
+        requiredLevel: values.requiredLevel,
         weight: Number(values.weight),
         learningOrder: values.learningOrder ?? 0,
+        roadmapPhase: values.roadmapPhase ?? defaultRoadmapPhase,
+        isRequired: true,
       };
-      return editing
-        ? patchData(`${endpoint}/${editing.id}`, payload)
-        : postData(endpoint, { ...payload, isRequired: true });
+      return adminCatalogService.saveRequiredSkill(endpoint, payload, editing?.id);
     },
     onSuccess: () => {
       message.success('Saved');
@@ -421,11 +450,11 @@ function RequiredSkillsManager({
       );
     },
     onError: (error) => {
-      message.error(getErrorMessage(error));
+      message.error(getApiErrorMessage(error));
     },
   });
   const remove = useMutation({
-    mutationFn: (id: string) => deleteData(`${endpoint}/${id}`),
+    mutationFn: (id: string) => adminCatalogService.deleteRequiredSkill(endpoint, id),
     onSuccess: () => {
       message.success('Deleted');
       invalidateKeys.forEach((key) =>
@@ -433,7 +462,7 @@ function RequiredSkillsManager({
       );
     },
     onError: (error) => {
-      message.error(getErrorMessage(error));
+      message.error(getApiErrorMessage(error));
     },
   });
 
@@ -581,7 +610,7 @@ function RequiredSkillsManager({
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
       >
-        <Form
+        <Form<RequiredSkillFormValues>
           form={form}
           layout="vertical"
           onFinish={(values) => save.mutate(values)}
@@ -657,7 +686,7 @@ function SpecializationsTab({
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedSpecialization, setSelectedSpecialization] =
     useState<Specialization | null>(null);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<SpecializationFormValues>();
   const endpoint = careerGoal
     ? `/admin/career-goals/${careerGoal.id}/specializations`
     : '';
@@ -666,15 +695,15 @@ function SpecializationsTab({
 
   const specializations = useQuery({
     queryKey: ['specializations', careerGoal?.id],
-    queryFn: () => getPage<Specialization>(endpoint, { limit: 100 }),
+    queryFn: () => adminCatalogService.listSpecializations(endpoint),
     enabled: open && Boolean(careerGoal?.id),
   });
   const careerLevelRequiredSkills = useQuery({
     queryKey: ['career-required-skills', 'career-goal', selectedCareerGoalId],
     queryFn: () =>
-      getPage<CareerRequiredSkill>(
+      adminCatalogService.listRequiredSkills(
         `/career-goals/${selectedCareerGoalId}/required-skills`,
-        { limit: 200 },
+        200,
       ),
     enabled: Boolean(selectedSpecialization?.id && selectedCareerGoalId),
   });
@@ -685,23 +714,21 @@ function SpecializationsTab({
   );
 
   const save = useMutation({
-    mutationFn: (values: any) => {
+    mutationFn: (values: SpecializationFormValues) => {
       if (!careerGoal) {
         throw new Error('Career goal is required');
       }
 
-      const payload = {
+      const payload: SpecializationPayload = {
         name: values.name,
         description: values.description,
         status: values.isActive ? 'ACTIVE' : 'INACTIVE',
       };
 
-      return editing
-        ? patchData(`/admin/specializations/${editing.id}`, payload)
-        : postData('/admin/specializations', {
-            ...payload,
-            careerGoalId: careerGoal.id,
-          });
+      return adminCatalogService.saveSpecialization(
+        editing ? payload : { ...payload, careerGoalId: careerGoal.id },
+        editing?.id,
+      );
     },
     onSuccess: () => {
       message.success('Saved');
@@ -714,12 +741,12 @@ function SpecializationsTab({
       queryClient.invalidateQueries({ queryKey: ['career-goals'] });
     },
     onError: (error) => {
-      message.error(getErrorMessage(error));
+      message.error(getApiErrorMessage(error));
     },
   });
 
   const deactivate = useMutation({
-    mutationFn: (id: string) => deleteData(`/admin/specializations/${id}`),
+    mutationFn: (id: string) => adminCatalogService.deactivateSpecialization(id),
     onSuccess: () => {
       message.success('Deactivated');
       queryClient.invalidateQueries({
@@ -728,7 +755,7 @@ function SpecializationsTab({
       queryClient.invalidateQueries({ queryKey: ['career-goals'] });
     },
     onError: (error) => {
-      message.error(getErrorMessage(error));
+      message.error(getApiErrorMessage(error));
     },
   });
 
@@ -816,7 +843,7 @@ function SpecializationsTab({
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
       >
-        <Form
+        <Form<SpecializationFormValues>
           form={form}
           layout="vertical"
           onFinish={(values) => save.mutate(values)}
@@ -887,31 +914,29 @@ function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-function getErrorMessage(error: unknown) {
-  if (
-    error &&
-    typeof error === 'object' &&
-    'response' in error &&
-    error.response &&
-    typeof error.response === 'object' &&
-    'data' in error.response &&
-    error.response.data &&
-    typeof error.response.data === 'object' &&
-    'message' in error.response.data
-  ) {
-    const message = error.response.data.message;
-    return Array.isArray(message) ? message.join(', ') : String(message);
-  }
-
-  return 'Something went wrong.';
+function toCatalogFormValues(record: CatalogRecord): CatalogFormValues {
+  return {
+    name: record.name,
+    description: record.description,
+    status: record.status,
+    categoryId: 'categoryId' in record ? record.categoryId : undefined,
+    type: 'type' in record ? record.type : undefined,
+    defaultRequiredLevel:
+      'defaultRequiredLevel' in record ? (record.defaultRequiredLevel ?? undefined) : undefined,
+    defaultWeight:
+      'defaultWeight' in record && record.defaultWeight !== null && record.defaultWeight !== undefined
+        ? Number(record.defaultWeight)
+        : undefined,
+    roadmapPhase: 'roadmapPhase' in record ? record.roadmapPhase : undefined,
+  };
 }
 
-function buildCatalogPayload(kind: CatalogKind, values: any) {
+function buildCatalogPayload(kind: CatalogKind, values: CatalogFormValues): CatalogPayload {
   if (kind !== 'skills') {
     return values;
   }
 
-  const payload = { ...values };
+  const payload: CatalogFormValues = { ...values };
   if (payload.type !== 'COMMON') {
     delete payload.defaultRequiredLevel;
     delete payload.defaultWeight;

@@ -21,8 +21,6 @@ import {
 import { useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { TableColumnsType } from 'antd';
-import { api } from '@/lib/api';
-import { getPage, patchData, postData } from '@/lib/request';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
@@ -40,21 +38,17 @@ import {
   STUDENT_PROFILE_QUERY_KEY,
   useStudentProfileQuery,
 } from './profile-context';
+import {
+  profileService,
+  type ProfilePayload,
+  type SkillFormValues,
+} from './profile.service';
 
 const GENERAL_SPECIALIZATION_VALUE = '__GENERAL_SPECIALIZATION__';
 
 interface ProfileFormValues {
   careerGoalId?: string | null;
   specializationId?: string | null;
-  summary?: string | null;
-  githubUrl?: string | null;
-  linkedinUrl?: string | null;
-  portfolioUrl?: string | null;
-}
-
-interface ProfilePayload {
-  careerGoalId: string | null;
-  specializationId: string | null;
   summary?: string | null;
   githubUrl?: string | null;
   linkedinUrl?: string | null;
@@ -98,11 +92,6 @@ interface StudentExperienceResource extends StudentResourceBase {
   verificationStatus: VerificationStatus;
 }
 
-interface SkillFormValues {
-  skillId: string;
-  description?: string;
-}
-
 interface ProjectFormValues {
   title: string;
   roleInProject?: string;
@@ -134,18 +123,12 @@ export function StudentProfilePageView() {
   const profile = useStudentProfileQuery();
   const careers = useQuery({
     queryKey: ['career-goals', 'options'],
-    queryFn: () =>
-      getPage<CareerGoal>('/career-goals', { limit: 100, status: 'ACTIVE' }),
+    queryFn: () => profileService.listActiveCareerGoals(),
   });
   const specializations = useQuery({
     queryKey: ['career-goal-specializations', selectedCareerGoalId],
     queryFn: () =>
-      getPage<Specialization>(
-        `/career-goals/${selectedCareerGoalId}/specializations`,
-        {
-          limit: 100,
-        },
-      ),
+      profileService.listCareerGoalSpecializations(selectedCareerGoalId),
     enabled: Boolean(selectedCareerGoalId),
   });
   const specializationOptions = useMemo(
@@ -158,7 +141,7 @@ export function StudentProfilePageView() {
 
   const save = useMutation({
     mutationFn: (values: ProfileFormValues) =>
-      patchData<StudentProfile, ProfilePayload>('/profiles/me', buildProfilePayload(values)),
+      profileService.updateMyProfile(buildProfilePayload(values)),
     onSuccess: (updatedProfile) => {
       message.success('Profile updated');
       queryClient.setQueryData(STUDENT_PROFILE_QUERY_KEY, updatedProfile);
@@ -269,7 +252,7 @@ export function StudentProfilePageView() {
 export function StudentSkillsPageView() {
   const skills = useQuery({
     queryKey: ['skills', 'options'],
-    queryFn: () => getPage<Skill>('/skills', { limit: 100, status: 'ACTIVE' }),
+    queryFn: () => profileService.listActiveSkills(),
   });
   return (
     <StudentResourcePage<StudentSkillResource, SkillFormValues>
@@ -375,10 +358,11 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
   const queryClient = useQueryClient();
   const data = useQuery({
     queryKey: [endpoint],
-    queryFn: () => getPage<TResource>(endpoint, { limit: 50 }),
+    queryFn: () => profileService.listProfileResources<TResource>(endpoint),
   });
   const save = useMutation({
-    mutationFn: (values: TFormValues) => postData<TResource, TFormValues>(endpoint, values),
+    mutationFn: (values: TFormValues) =>
+      profileService.createProfileResource<TResource, TFormValues>(endpoint, values),
     onSuccess: () => {
       message.success('Saved');
       queryClient.invalidateQueries({ queryKey: [endpoint] });
@@ -439,12 +423,8 @@ function EvidenceUpload({
     <Upload
       showUploadList={false}
       customRequest={async ({ file, onSuccess, onError }) => {
-        const formData = new FormData();
-        formData.append('file', file as File);
         try {
-          await api.post(endpoint, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await profileService.uploadProfileEvidence(endpoint, file as File);
           message.success('Evidence uploaded');
           onUploaded();
           onSuccess?.({});

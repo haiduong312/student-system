@@ -16,7 +16,7 @@ import {
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { deleteData, getPage, patchData, postData } from '@/lib/request';
+import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
@@ -24,9 +24,13 @@ import type {
   AssessmentQuestion,
   QuestionStatus,
   QuestionType,
-  Skill,
   SkillType,
 } from '@/types/domain';
+import {
+  assessmentQuestionService,
+  type AssessmentQuestionOptionPayload,
+  type AssessmentQuestionPayload,
+} from './assessment-question.service';
 
 const questionTypeOptions: Array<{ value: QuestionType; label: string }> = [
   { value: 'SINGLE_CHOICE', label: 'SINGLE_CHOICE' },
@@ -51,6 +55,8 @@ interface QuestionFilters {
   questionType?: QuestionType;
 }
 
+type QuestionFormValues = AssessmentQuestionPayload;
+
 export function AssessmentQuestionBankPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -58,29 +64,26 @@ export function AssessmentQuestionBankPage() {
   const [filters, setFilters] = useState<QuestionFilters>({});
   const [editing, setEditing] = useState<AssessmentQuestion | null>(null);
   const [open, setOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<QuestionFormValues>();
   const questionType = Form.useWatch('questionType', form) as QuestionType | undefined;
 
   const questions = useQuery({
     queryKey: ['assessment-questions', search, filters],
     queryFn: () =>
-      getPage<AssessmentQuestion>('/assessment-questions', {
+      assessmentQuestionService.listQuestions({
         search,
-        limit: 50,
         ...filters,
       }),
   });
   const skills = useQuery({
     queryKey: ['skills', 'question-bank-options'],
-    queryFn: () => getPage<Skill>('/skills', { limit: 200, status: 'ACTIVE' }),
+    queryFn: () => assessmentQuestionService.listSkills(),
   });
 
   const save = useMutation({
-    mutationFn: (values: any) => {
+    mutationFn: (values: QuestionFormValues) => {
       const payload = buildQuestionPayload(values);
-      return editing
-        ? patchData(`/assessment-questions/${editing.id}`, payload)
-        : postData('/assessment-questions', payload);
+      return assessmentQuestionService.saveQuestion(payload, editing?.id);
     },
     onSuccess: () => {
       message.success('Saved');
@@ -90,14 +93,16 @@ export function AssessmentQuestionBankPage() {
       queryClient.invalidateQueries({ queryKey: ['assessment-questions'] });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => deleteData(`/assessment-questions/${id}`),
+    mutationFn: (id: string) => assessmentQuestionService.deleteQuestion(id),
     onSuccess: () => {
       message.success('Deleted');
       queryClient.invalidateQueries({ queryKey: ['assessment-questions'] });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
   const openForm = (record?: AssessmentQuestion) => {
@@ -143,7 +148,7 @@ export function AssessmentQuestionBankPage() {
     }
   };
 
-  const handleSubmit = (values: any) => {
+  const handleSubmit = (values: QuestionFormValues) => {
     const validationError = validateQuestion(values);
     if (validationError) {
       message.error(validationError);
@@ -214,7 +219,7 @@ export function AssessmentQuestionBankPage() {
           </>
         }
       />
-      <Table
+      <Table<AssessmentQuestion>
         rowKey="id"
         dataSource={questions.data?.data ?? []}
         pagination={{ pageSize: 10, total: questions.data?.meta.total }}
@@ -244,7 +249,7 @@ export function AssessmentQuestionBankPage() {
         confirmLoading={save.isPending}
         width={760}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+        <Form<QuestionFormValues> form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="skillId" label="Skill" rules={[{ required: true }]}>
             <Select
               loading={skills.isLoading}
@@ -347,7 +352,7 @@ function defaultChoiceOptions() {
   ];
 }
 
-function validateQuestion(values: any) {
+function validateQuestion(values: QuestionFormValues) {
   if (!values.skillId) {
     return 'Please choose a skill.';
   }
@@ -356,8 +361,8 @@ function validateQuestion(values: any) {
   }
 
   const options = Array.isArray(values.options) ? values.options : [];
-  const correctCount = options.filter((option: any) => option?.isCorrect).length;
-  if (!options.length || options.some((option: any) => !option?.optionText?.trim())) {
+  const correctCount = options.filter((option) => option?.isCorrect).length;
+  if (!options.length || options.some((option) => !option?.optionText?.trim())) {
     return 'Please enter all options.';
   }
   if (values.questionType === 'SINGLE_CHOICE' && correctCount !== 1) {
@@ -374,7 +379,7 @@ function validateQuestion(values: any) {
   return null;
 }
 
-function buildQuestionPayload(values: any) {
+function buildQuestionPayload(values: QuestionFormValues): AssessmentQuestionPayload {
   return {
     skillId: values.skillId,
     questionText: values.questionText,
@@ -382,7 +387,7 @@ function buildQuestionPayload(values: any) {
     level: values.level,
     explanation: values.explanation,
     status: values.status ?? 'ACTIVE',
-    options: values.options.map((option: any, index: number) => ({
+    options: values.options.map((option: AssessmentQuestionOptionPayload, index: number) => ({
       optionText: option.optionText,
       isCorrect: Boolean(option.isCorrect),
       orderIndex: option.orderIndex ?? index + 1,

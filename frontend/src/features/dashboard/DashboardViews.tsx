@@ -3,7 +3,6 @@
 import { Alert, Card, Col, List, Progress, Row, Table, Tag } from 'antd';
 import { BarChartOutlined, CheckCircleOutlined, TeamOutlined, WarningOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { getData } from '@/lib/request';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
@@ -18,6 +17,7 @@ import {
   getStudentProfileScopeKey,
   useStudentProfileQuery,
 } from '@/features/student/profile-context';
+import { dashboardService } from './dashboard.service';
 
 type TopMissingSkill = AdminDashboard['topMissingSkills'][number];
 type TopCareerGoal = AdminDashboard['topCareerGoals'][number];
@@ -27,7 +27,7 @@ export function StudentDashboardView() {
   const scopeKey = getStudentProfileScopeKey(profile.data);
   const query = useQuery({
     queryKey: ['dashboard', 'student', ...scopeKey],
-    queryFn: () => getData<StudentDashboard>('/dashboard/student'),
+    queryFn: () => dashboardService.getStudentDashboard(),
     enabled: profile.isSuccess,
   });
   const roadmapProgress =
@@ -85,7 +85,7 @@ export function StudentDashboardView() {
 export function LecturerDashboardView() {
   const query = useQuery({
     queryKey: ['dashboard', 'lecturer'],
-    queryFn: () => getData<LecturerDashboard>('/dashboard/lecturer'),
+    queryFn: () => dashboardService.getLecturerDashboard(),
   });
 
   return (
@@ -103,7 +103,7 @@ export function LecturerDashboardView() {
 export function AdminDashboardView() {
   const query = useQuery({
     queryKey: ['dashboard', 'admin'],
-    queryFn: () => getData<AdminDashboard>('/dashboard/admin'),
+    queryFn: () => dashboardService.getAdminDashboard(),
   });
 
   return (

@@ -24,9 +24,8 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { CSSProperties } from 'react';
-import { getData, getPage, patchData, postData } from '@/lib/request';
+import { getPage, patchData } from '@/lib/request';
 import { getApiErrorMessage } from '@/lib/errors';
-import { openPrivateFile } from '@/lib/private-files';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import type {
@@ -37,6 +36,8 @@ import type {
   NotificationItem,
   Paginated,
   Recommendation,
+  RecommendationResource,
+  ResourceProgressStatus,
   Roadmap,
   RoadmapHistoryItem,
   RoadmapItem,
@@ -48,6 +49,7 @@ import {
   ANALYSIS_CURRENT_STATUS,
   CURRENT_RECOMMENDATION_STATUSES,
   RECOMMENDATION_STATUS_TRANSITIONS,
+  RESOURCE_PROGRESS_STATUS_TRANSITIONS,
   ROADMAP_CURRENT_STATUS,
   ROADMAP_ITEM_CANCELLED_STATUS,
   ROADMAP_ITEM_DONE_STATUS,
@@ -60,13 +62,18 @@ import {
   isSameProfileScope,
   useStudentProfileQuery,
 } from './profile-context';
+import { analysisService } from './analysis.service';
+import { evidenceService } from './evidence.service';
+import { learningResourceService } from './learning-resource.service';
+import { recommendationService } from './recommendation.service';
+import { roadmapService } from './roadmap.service';
 
 type AnalysisSkill = CompetencyAnalysis['skills'][number];
 
 export function StudentEvidencesView() {
   const query = useQuery({
     queryKey: ['evidences', 'me'],
-    queryFn: () => getPage<Evidence>('/evidences/me', { limit: 50 }),
+    queryFn: () => evidenceService.listMine(),
   });
   return <EvidenceTable title="Evidences" query={query} />;
 }
@@ -76,14 +83,11 @@ export function LecturerEvidenceReviewView() {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['evidences', 'pending'],
-    queryFn: () => getPage<Evidence>('/evidences/pending', { limit: 50 }),
+    queryFn: () => evidenceService.listPending(),
   });
   const verify = useMutation({
     mutationFn: ({ id, currentLevel }: { id: string; currentLevel?: number }) =>
-      patchData(
-        `/evidences/${id}/verify`,
-        currentLevel === undefined ? {} : { currentLevel },
-      ),
+      evidenceService.verify(id, currentLevel),
     onSuccess: () => {
       message.success('Verified');
       queryClient.invalidateQueries({ queryKey: ['evidences'] });
@@ -92,7 +96,7 @@ export function LecturerEvidenceReviewView() {
   });
   const reject = useMutation({
     mutationFn: ({ id, reviewerNote }: { id: string; reviewerNote: string }) =>
-      patchData(`/evidences/${id}/reject`, { reviewerNote }),
+      evidenceService.reject(id, reviewerNote),
     onSuccess: () => {
       message.success('Rejected');
       queryClient.invalidateQueries({ queryKey: ['evidences'] });
@@ -189,15 +193,33 @@ export function RecommendationsView() {
   const scopeKey = getStudentProfileScopeKey(profile.data);
   const query = useQuery({
     queryKey: ['recommendations', 'me', ...scopeKey],
-    queryFn: () => getPage<Recommendation>('/recommendations/me', { limit: 50 }),
+    queryFn: () => recommendationService.listMine(),
     enabled: profile.isSuccess,
   });
   const update = useMutation({
     mutationFn: ({ id, status }: { id: string; status: StudentRecommendationStatus }) =>
-      patchData<Recommendation, { status: StudentRecommendationStatus }>(
-        `/recommendations/${id}/status`,
-        { status },
-      ),
+      recommendationService.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
+    },
+    onError: (error) => message.error(getApiErrorMessage(error)),
+  });
+  const updateResourceProgress = useMutation({
+    mutationFn: ({
+      resource,
+      recommendationId,
+      status,
+    }: {
+      resource: RecommendationResource;
+      recommendationId: string;
+      status: ResourceProgressStatus;
+    }) =>
+      learningResourceService.updateProgress(resource.resourceId, {
+        status,
+        recommendationId,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
       queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
@@ -247,6 +269,19 @@ export function RecommendationsView() {
                 item.reason ?? ''
               }`}
             />
+            {item.resources?.length ? (
+              <RecommendationResources
+                recommendation={item}
+                updating={updateResourceProgress.isPending}
+                onProgressChange={(resource, status) =>
+                  updateResourceProgress.mutate({
+                    resource,
+                    recommendationId: item.id,
+                    status,
+                  })
+                }
+              />
+            ) : null}
           </List.Item>
         )}
       />
@@ -261,22 +296,18 @@ export function RoadmapView() {
   const scopeKey = getStudentProfileScopeKey(profile.data);
   const roadmap = useQuery({
     queryKey: ['roadmaps', 'me', 'active', ...scopeKey],
-    queryFn: () => getData<Roadmap | null>('/roadmaps/me'),
+    queryFn: () => roadmapService.getMyActiveRoadmap(),
     enabled: profile.isSuccess,
   });
   const history = useQuery({
     queryKey: ['roadmaps', 'history', 'me', ...scopeKey],
-    queryFn: () => getData<RoadmapHistoryItem[]>('/roadmaps/history/me'),
+    queryFn: () => roadmapService.listMyHistory(),
     enabled: profile.isSuccess,
   });
   const activeRoadmap =
     roadmap.data?.status === ROADMAP_CURRENT_STATUS ? roadmap.data : null;
   const generate = useMutation({
-    mutationFn: () =>
-      postData<Roadmap, { archiveCurrentActiveRoadmap: boolean }>(
-        '/roadmaps/generate/me',
-        { archiveCurrentActiveRoadmap: true },
-      ),
+    mutationFn: () => roadmapService.generateMine({ archiveCurrentActiveRoadmap: true }),
     onSuccess: () => {
       message.success('Roadmap generated');
       invalidateStudentCurrentContextQueries(queryClient);
@@ -293,10 +324,7 @@ export function RoadmapView() {
       status: RoadmapItemStatus;
       note?: string;
     }) =>
-      patchData<Roadmap, { status: RoadmapItemStatus; note?: string }>(
-        `/roadmaps/items/${id}/status`,
-        note ? { status, note } : { status },
-      ),
+      roadmapService.updateItemStatus(id, note ? { status, note } : { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
       queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
@@ -487,18 +515,14 @@ export function AnalysisView() {
   const scopeKey = getStudentProfileScopeKey(profile.data);
   const history = useQuery({
     queryKey: ['analysis-history', 'me', ...scopeKey],
-    queryFn: () =>
-      getPage<AnalysisHistoryItem>('/competency/analysis-history/me', {
-        limit: 20,
-        sortOrder: 'desc',
-      }),
+    queryFn: () => analysisService.listMyHistory(),
     enabled: profile.isSuccess,
   });
   const currentAnalysis = (history.data?.data ?? []).find(
     (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(profile.data, item),
   );
   const analyze = useMutation({
-    mutationFn: () => postData<CompetencyAnalysis>('/competency/analyze/me', {}),
+    mutationFn: () => analysisService.analyzeMine(),
     onSuccess: () => {
       message.success('Analysis completed');
       invalidateStudentCurrentContextQueries(queryClient);
@@ -639,6 +663,63 @@ function isCurrentRecommendationStatus(status: StudentRecommendationStatus) {
   return CURRENT_RECOMMENDATION_STATUSES.some((currentStatus) => currentStatus === status);
 }
 
+function RecommendationResources({
+  recommendation,
+  updating,
+  onProgressChange,
+}: {
+  recommendation: Recommendation;
+  updating: boolean;
+  onProgressChange: (
+    resource: RecommendationResource,
+    status: ResourceProgressStatus,
+  ) => void;
+}) {
+  return (
+    <List<RecommendationResource>
+      size="small"
+      dataSource={recommendation.resources ?? []}
+      style={{ marginTop: 12, width: '100%' }}
+      renderItem={(resource) => (
+        <List.Item
+          actions={[
+            <Select<ResourceProgressStatus>
+              key="progress"
+              value={resource.progressStatus}
+              loading={updating}
+              disabled={!RESOURCE_PROGRESS_STATUS_TRANSITIONS[resource.progressStatus].length}
+              onChange={(status) => onProgressChange(resource, status)}
+              options={getResourceProgressStatusOptions(resource.progressStatus)}
+              style={{ width: 150 }}
+            />,
+          ]}
+        >
+          <List.Item.Meta
+            title={
+              resource.resourceUrl ? (
+                <Typography.Link href={resource.resourceUrl} target="_blank" rel="noreferrer">
+                  {resource.resourceTitle}
+                </Typography.Link>
+              ) : (
+                resource.resourceTitle
+              )
+            }
+            description={`${resource.resourceType} · ${resource.provider ?? '-'} · ${
+              resource.estimatedDuration ?? '-'
+            }`}
+          />
+        </List.Item>
+      )}
+    />
+  );
+}
+
+function getResourceProgressStatusOptions(status: ResourceProgressStatus) {
+  return Array.from(new Set([status, ...RESOURCE_PROGRESS_STATUS_TRANSITIONS[status]])).map(
+    (value) => ({ value, label: value }),
+  );
+}
+
 function getRoadmapItemStatusOptions(status: RoadmapItemStatus) {
   return Array.from(new Set([status, ...ROADMAP_ITEM_STATUS_TRANSITIONS[status]])).map(
     (value) => ({ value, label: value }),
@@ -703,7 +784,7 @@ function EvidenceTable({
 function EvidenceFileAction({ evidence }: { evidence: Evidence }) {
   const { message } = App.useApp();
   const openFile = useMutation({
-    mutationFn: () => openPrivateFile(evidence.fileUrl ?? ''),
+    mutationFn: () => evidenceService.openPrivateFile(evidence.fileUrl ?? ''),
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
 

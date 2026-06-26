@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query';
-import { getData } from '@/lib/request';
 import type { StudentProfile } from '@/types/domain';
+import { profileService } from './profile.service';
 
 export const STUDENT_PROFILE_QUERY_KEY = ['profile', 'me'] as const;
 
@@ -10,7 +10,7 @@ const GENERAL_SPECIALIZATION_SCOPE = 'GENERAL_SPECIALIZATION';
 export function useStudentProfileQuery() {
   return useQuery({
     queryKey: STUDENT_PROFILE_QUERY_KEY,
-    queryFn: () => getData<StudentProfile>('/profiles/me'),
+    queryFn: () => profileService.getMyProfile(),
   });
 }
 
