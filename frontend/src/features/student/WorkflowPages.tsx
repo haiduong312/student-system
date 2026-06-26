@@ -57,10 +57,10 @@ import {
   ROADMAP_ITEM_STATUS_TRANSITIONS,
 } from '@/types/domain';
 import {
-  getStudentProfileScopeKey,
   invalidateStudentCurrentContextQueries,
   isSameProfileScope,
-  useStudentProfileQuery,
+  studentQueryKeys,
+  useCurrentProfileContext,
 } from './profile-context';
 import { analysisService } from './analysis.service';
 import { evidenceService } from './evidence.service';
@@ -72,7 +72,7 @@ type AnalysisSkill = CompetencyAnalysis['skills'][number];
 
 export function StudentEvidencesView() {
   const query = useQuery({
-    queryKey: ['evidences', 'me'],
+    queryKey: studentQueryKeys.evidencesMe,
     queryFn: () => evidenceService.listMine(),
   });
   return <EvidenceTable title="Evidences" query={query} />;
@@ -82,7 +82,7 @@ export function LecturerEvidenceReviewView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ['evidences', 'pending'],
+    queryKey: studentQueryKeys.evidencesPending,
     queryFn: () => evidenceService.listPending(),
   });
   const verify = useMutation({
@@ -189,20 +189,17 @@ export function LecturerEvidenceReviewView() {
 export function RecommendationsView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const profile = useStudentProfileQuery();
-  const scopeKey = getStudentProfileScopeKey(profile.data);
+  const context = useCurrentProfileContext();
   const query = useQuery({
-    queryKey: ['recommendations', 'me', ...scopeKey],
+    queryKey: studentQueryKeys.recommendationsMe(context.scopeKey),
     queryFn: () => recommendationService.listMine(),
-    enabled: profile.isSuccess,
+    enabled: context.isContextReady,
   });
   const update = useMutation({
     mutationFn: ({ id, status }: { id: string; status: StudentRecommendationStatus }) =>
       recommendationService.updateStatus(id, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
+      invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
@@ -221,9 +218,10 @@ export function RecommendationsView() {
         recommendationId,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
+      queryClient.invalidateQueries({
+        queryKey: studentQueryKeys.learningResourceProgress(context.scopeKey),
+      });
+      invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
@@ -232,9 +230,12 @@ export function RecommendationsView() {
   );
 
   return (
-    <QueryState loading={profile.isLoading || query.isLoading} error={profile.error ?? query.error}>
+    <QueryState
+      loading={context.loading || (context.isContextReady && query.isLoading)}
+      error={context.error ?? query.error}
+    >
       <PageHeader title="Recommendations" />
-      {!profile.data?.careerGoalId ? (
+      {!context.isContextReady ? (
         <Alert
           showIcon
           type="warning"
@@ -292,17 +293,16 @@ export function RecommendationsView() {
 export function RoadmapView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const profile = useStudentProfileQuery();
-  const scopeKey = getStudentProfileScopeKey(profile.data);
+  const context = useCurrentProfileContext();
   const roadmap = useQuery({
-    queryKey: ['roadmaps', 'me', 'active', ...scopeKey],
+    queryKey: studentQueryKeys.roadmapsActive(context.scopeKey),
     queryFn: () => roadmapService.getMyActiveRoadmap(),
-    enabled: profile.isSuccess,
+    enabled: context.isContextReady,
   });
   const history = useQuery({
-    queryKey: ['roadmaps', 'history', 'me', ...scopeKey],
+    queryKey: studentQueryKeys.roadmapsHistory,
     queryFn: () => roadmapService.listMyHistory(),
-    enabled: profile.isSuccess,
+    enabled: context.isContextReady,
   });
   const activeRoadmap =
     roadmap.data?.status === ROADMAP_CURRENT_STATUS ? roadmap.data : null;
@@ -326,9 +326,7 @@ export function RoadmapView() {
     }) =>
       roadmapService.updateItemStatus(id, note ? { status, note } : { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
+      invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
@@ -339,7 +337,7 @@ export function RoadmapView() {
     : [];
 
   const handleGenerate = () => {
-    if (!profile.data?.careerGoalId) {
+    if (!context.isContextReady) {
       message.error('Please select a career goal before generating roadmap.');
       return;
     }
@@ -397,14 +395,29 @@ export function RoadmapView() {
   };
 
   return (
-    <QueryState loading={profile.isLoading || roadmap.isLoading} error={profile.error ?? roadmap.error}>
+    <QueryState
+      loading={context.loading || (context.isContextReady && roadmap.isLoading)}
+      error={context.error ?? roadmap.error}
+    >
       <PageHeader title="Roadmap" />
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleGenerate} loading={generate.isPending}>
+        <Button
+          type="primary"
+          onClick={handleGenerate}
+          loading={generate.isPending}
+          disabled={!context.isContextReady}
+        >
           Generate Roadmap
         </Button>
       </Space>
-      {activeRoadmap ? (
+      {!context.isContextReady ? (
+        <Card>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="Select a career goal in your profile before generating a roadmap."
+          />
+        </Card>
+      ) : activeRoadmap ? (
         <Card title={getRoadmapDisplayTitle(activeRoadmap)}>
           <CareerScopeSummary
             careerGoal={activeRoadmap.careerGoal}
@@ -446,24 +459,26 @@ export function RoadmapView() {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active roadmap." />
         </Card>
       )}
-      <Card title="Roadmap History" style={{ marginTop: 16 }}>
-        <Table<RoadmapHistoryItem>
-          rowKey="roadmapId"
-          size="small"
-          loading={history.isLoading}
-          dataSource={history.data ?? []}
-          pagination={false}
-          columns={[
-            { title: 'Version', dataIndex: 'version' },
-            { title: 'Title', dataIndex: 'title' },
-            {
-              title: 'Progress',
-              render: (_value, row) => `${Number(row.progressPercent)}%`,
-            },
-            { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
-          ]}
-        />
-      </Card>
+      {context.isContextReady ? (
+        <Card title="Roadmap History" style={{ marginTop: 16 }}>
+          <Table<RoadmapHistoryItem>
+            rowKey="roadmapId"
+            size="small"
+            loading={history.isLoading}
+            dataSource={history.data ?? []}
+            pagination={false}
+            columns={[
+              { title: 'Version', dataIndex: 'version' },
+              { title: 'Title', dataIndex: 'title' },
+              {
+                title: 'Progress',
+                render: (_value, row) => `${Number(row.progressPercent)}%`,
+              },
+              { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+            ]}
+          />
+        </Card>
+      ) : null}
     </QueryState>
   );
 }
@@ -471,12 +486,12 @@ export function RoadmapView() {
 export function NotificationsView() {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ['notifications', 'me'],
+    queryKey: studentQueryKeys.notificationsMe,
     queryFn: () => getPage<NotificationItem>('/notifications/me', { limit: 50 }),
   });
   const read = useMutation({
     mutationFn: (id: string) => patchData(`/notifications/${id}/read`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications', 'me'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: studentQueryKeys.notificationsMe }),
   });
   return (
     <QueryState loading={query.isLoading} error={query.error}>
@@ -511,15 +526,14 @@ export function NotificationsView() {
 export function AnalysisView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const profile = useStudentProfileQuery();
-  const scopeKey = getStudentProfileScopeKey(profile.data);
+  const context = useCurrentProfileContext();
   const history = useQuery({
-    queryKey: ['analysis-history', 'me', ...scopeKey],
+    queryKey: studentQueryKeys.analysisHistory,
     queryFn: () => analysisService.listMyHistory(),
-    enabled: profile.isSuccess,
+    enabled: context.isContextReady,
   });
   const currentAnalysis = (history.data?.data ?? []).find(
-    (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(profile.data, item),
+    (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(context.profile, item),
   );
   const analyze = useMutation({
     mutationFn: () => analysisService.analyzeMine(),
@@ -531,14 +545,17 @@ export function AnalysisView() {
   });
 
   return (
-    <QueryState loading={profile.isLoading || history.isLoading} error={profile.error ?? history.error}>
+    <QueryState
+      loading={context.loading || (context.isContextReady && history.isLoading)}
+      error={context.error ?? history.error}
+    >
       <PageHeader title="Competency Analysis" />
       <Card>
         <CareerScopeSummary
-          careerGoal={profile.data?.careerGoal}
-          specialization={profile.data?.specialization}
+          careerGoal={context.profile?.careerGoal}
+          specialization={context.profile?.specialization}
         />
-        {!profile.data?.careerGoalId ? (
+        {!context.isContextReady ? (
           <Alert
             showIcon
             type="warning"
@@ -550,7 +567,7 @@ export function AnalysisView() {
           <Button
             type="primary"
             loading={analyze.isPending}
-            disabled={!profile.data?.careerGoalId}
+            disabled={!context.isContextReady}
             onClick={() => analyze.mutate()}
           >
             Analyze Now
@@ -564,30 +581,32 @@ export function AnalysisView() {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No current analysis." />
         )}
       </Card>
-      <Card title="Analysis History" style={{ marginTop: 16 }}>
-        <Table<AnalysisHistoryItem>
-          rowKey="id"
-          size="small"
-          dataSource={history.data?.data ?? []}
-          pagination={false}
-          columns={[
-            {
-              title: 'Scope',
-              render: (_value, row) =>
-                `${row.careerGoal?.name ?? row.careerGoalId} / ${
-                  row.specialization?.name ?? 'General'
-                }`,
-            },
-            { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
-            {
-              title: 'Match',
-              render: (_value, row) => `${Number(row.matchPercent)}%`,
-            },
-            { title: 'Level', dataIndex: 'matchLevel' },
-            { title: 'Analyzed At', render: (_value, row) => formatDateTime(row.analyzedAt) },
-          ]}
-        />
-      </Card>
+      {context.isContextReady ? (
+        <Card title="Analysis History" style={{ marginTop: 16 }}>
+          <Table<AnalysisHistoryItem>
+            rowKey="id"
+            size="small"
+            dataSource={history.data?.data ?? []}
+            pagination={false}
+            columns={[
+              {
+                title: 'Scope',
+                render: (_value, row) =>
+                  `${row.careerGoal?.name ?? row.careerGoalId} / ${
+                    row.specialization?.name ?? 'General'
+                  }`,
+              },
+              { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+              {
+                title: 'Match',
+                render: (_value, row) => `${Number(row.matchPercent)}%`,
+              },
+              { title: 'Level', dataIndex: 'matchLevel' },
+              { title: 'Analyzed At', render: (_value, row) => formatDateTime(row.analyzedAt) },
+            ]}
+          />
+        </Card>
+      ) : null}
     </QueryState>
   );
 }

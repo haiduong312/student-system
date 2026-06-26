@@ -34,9 +34,10 @@ import type {
   VerificationStatus,
 } from '@/types/domain';
 import {
+  invalidateStudentCurrentContextQueries,
   resetStudentCurrentContextQueries,
-  STUDENT_PROFILE_QUERY_KEY,
-  useStudentProfileQuery,
+  studentQueryKeys,
+  useCurrentProfileContext,
 } from './profile-context';
 import {
   profileService,
@@ -120,7 +121,7 @@ export function StudentProfilePageView() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const selectedCareerGoalId = Form.useWatch('careerGoalId', form);
-  const profile = useStudentProfileQuery();
+  const context = useCurrentProfileContext();
   const careers = useQuery({
     queryKey: ['career-goals', 'options'],
     queryFn: () => profileService.listActiveCareerGoals(),
@@ -135,6 +136,8 @@ export function StudentProfilePageView() {
     () => specializations.data?.data ?? [],
     [specializations.data],
   );
+  const requiresSpecialization =
+    Boolean(selectedCareerGoalId) && specializationOptions.length > 0;
   const showSpecializationSelect =
     Boolean(selectedCareerGoalId) &&
     (specializations.isLoading || specializationOptions.length > 0);
@@ -144,18 +147,24 @@ export function StudentProfilePageView() {
       profileService.updateMyProfile(buildProfilePayload(values)),
     onSuccess: (updatedProfile) => {
       message.success('Profile updated');
-      queryClient.setQueryData(STUDENT_PROFILE_QUERY_KEY, updatedProfile);
-      resetStudentCurrentContextQueries(queryClient);
-      queryClient.invalidateQueries({ queryKey: STUDENT_PROFILE_QUERY_KEY });
+      const contextChanged =
+        context.careerGoalId !== (updatedProfile.careerGoalId ?? null) ||
+        context.specializationId !== (updatedProfile.specializationId ?? null);
+
+      queryClient.setQueryData(studentQueryKeys.profile, updatedProfile);
+      if (contextChanged) {
+        resetStudentCurrentContextQueries(queryClient);
+      }
+      invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
   useEffect(() => {
-    if (profile.data && !form.isFieldsTouched()) {
-      form.setFieldsValue(toProfileFormValues(profile.data));
+    if (context.profile && !form.isFieldsTouched()) {
+      form.setFieldsValue(toProfileFormValues(context.profile));
     }
-  }, [form, profile.data]);
+  }, [form, context.profile]);
 
   useEffect(() => {
     if (!selectedCareerGoalId) {
@@ -182,7 +191,7 @@ export function StudentProfilePageView() {
   }, [form, selectedCareerGoalId, specializationOptions, specializations.data]);
 
   return (
-    <QueryState loading={profile.isLoading} error={profile.error}>
+    <QueryState loading={context.loading} error={context.error}>
       <PageHeader
         title="Profile"
         description="Update your personal competency profile."
@@ -210,21 +219,45 @@ export function StudentProfilePageView() {
             />
           </Form.Item>
           {showSpecializationSelect ? (
-            <Form.Item name="specializationId" label="Specialization">
+            <Form.Item
+              name="specializationId"
+              label="Specialization"
+              rules={[
+                {
+                  validator: async (_rule, value: string | null | undefined) => {
+                    if (
+                      !requiresSpecialization ||
+                      (value && value !== GENERAL_SPECIALIZATION_VALUE)
+                    ) {
+                      return;
+                    }
+
+                    throw new Error('Please select a specialization for this career goal.');
+                  },
+                },
+              ]}
+            >
               <Select
                 allowClear
                 loading={specializations.isLoading}
                 placeholder="Select specialization"
-                options={[
-                  {
-                    label: 'General / No specialization',
-                    value: GENERAL_SPECIALIZATION_VALUE,
-                  },
-                  ...specializationOptions.map((specialization) => ({
-                    label: specialization.name,
-                    value: specialization.id,
-                  })),
-                ]}
+                options={
+                  requiresSpecialization
+                    ? specializationOptions.map((specialization) => ({
+                        label: specialization.name,
+                        value: specialization.id,
+                      }))
+                    : [
+                        {
+                          label: 'General / No specialization',
+                          value: GENERAL_SPECIALIZATION_VALUE,
+                        },
+                        ...specializationOptions.map((specialization) => ({
+                          label: specialization.name,
+                          value: specialization.id,
+                        })),
+                      ]
+                }
               />
             </Form.Item>
           ) : null}
@@ -399,7 +432,7 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
                 endpoint={`${endpoint}/${row.id}/evidences`}
                 onUploaded={() => {
                   queryClient.invalidateQueries({ queryKey: [endpoint] });
-                  queryClient.invalidateQueries({ queryKey: ['evidences', 'me'] });
+                  queryClient.invalidateQueries({ queryKey: studentQueryKeys.evidencesMe });
                   invalidateAfterResourceChange(queryClient);
                 }}
               />
@@ -468,11 +501,7 @@ function buildProfilePayload(values: ProfileFormValues): ProfilePayload {
 }
 
 function invalidateAfterResourceChange(queryClient: QueryClient) {
-  queryClient.invalidateQueries({ queryKey: STUDENT_PROFILE_QUERY_KEY });
-  queryClient.invalidateQueries({ queryKey: ['dashboard', 'student'] });
-  queryClient.invalidateQueries({ queryKey: ['analysis-history', 'me'] });
-  queryClient.invalidateQueries({ queryKey: ['recommendations', 'me'] });
-  queryClient.invalidateQueries({ queryKey: ['roadmaps', 'me'] });
+  invalidateStudentCurrentContextQueries(queryClient);
 }
 
 function projectFields() {

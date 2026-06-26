@@ -1,6 +1,6 @@
 'use client';
 
-import { Alert, Card, Col, List, Progress, Row, Table, Tag } from 'antd';
+import { Alert, Button, Card, Col, Empty, List, Progress, Row, Table, Tag } from 'antd';
 import { BarChartOutlined, CheckCircleOutlined, TeamOutlined, WarningOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -14,8 +14,8 @@ import type {
 } from '@/types/domain';
 import { ROADMAP_CURRENT_STATUS } from '@/types/domain';
 import {
-  getStudentProfileScopeKey,
-  useStudentProfileQuery,
+  studentQueryKeys,
+  useCurrentProfileContext,
 } from '@/features/student/profile-context';
 import { dashboardService } from './dashboard.service';
 
@@ -23,61 +23,76 @@ type TopMissingSkill = AdminDashboard['topMissingSkills'][number];
 type TopCareerGoal = AdminDashboard['topCareerGoals'][number];
 
 export function StudentDashboardView() {
-  const profile = useStudentProfileQuery();
-  const scopeKey = getStudentProfileScopeKey(profile.data);
+  const context = useCurrentProfileContext();
   const query = useQuery({
-    queryKey: ['dashboard', 'student', ...scopeKey],
+    queryKey: studentQueryKeys.dashboardStudent(context.scopeKey),
     queryFn: () => dashboardService.getStudentDashboard(),
-    enabled: profile.isSuccess,
+    enabled: context.isContextReady,
   });
   const roadmapProgress =
     query.data?.roadmapProgress.status === ROADMAP_CURRENT_STATUS
       ? query.data.roadmapProgress
       : null;
   const careerScope = [
-    query.data?.careerGoal?.name ?? profile.data?.careerGoal?.name ?? 'No career goal selected',
-    profile.data?.specialization?.name,
+    query.data?.careerGoal?.name ?? context.careerGoalName ?? 'No career goal selected',
+    context.specializationName ?? 'General',
   ]
     .filter(Boolean)
     .join(' / ');
 
   return (
-    <QueryState loading={profile.isLoading || query.isLoading} error={profile.error ?? query.error}>
+    <QueryState
+      loading={context.loading || (context.isContextReady && query.isLoading)}
+      error={context.error ?? query.error}
+    >
       <PageHeader title="Student Dashboard" description="Track your competency profile health." />
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <MetricCard title="Completion" value={Number(query.data?.completionPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
-        </Col>
-        <Col xs={24} md={8}>
-          <MetricCard title="Career Match" value={Number(query.data?.matchPercent ?? 0)} suffix="%" icon={<BarChartOutlined />} />
-        </Col>
-        <Col xs={24} md={8}>
-          <MetricCard title="Roadmap Progress" value={Number(roadmapProgress?.progressPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card title="Missing Skills">
-            <List<DashboardMissingSkill>
-              dataSource={query.data?.missingSkills ?? []}
-              locale={{ emptyText: 'No missing skills from latest analysis.' }}
-              renderItem={(item) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={item.skill?.name ?? item.skillId}
-                    description={`Gap ${item.gap} · Priority ${item.priorityScore}`}
-                  />
-                  <Tag>{item.status}</Tag>
-                </List.Item>
-              )}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} lg={10}>
-          <Card title="Roadmap">
-            <Progress percent={Number(roadmapProgress?.progressPercent ?? 0)} />
-            <Alert style={{ marginTop: 16 }} type="info" message={careerScope} />
-          </Card>
-        </Col>
-      </Row>
+      {!context.isContextReady ? (
+        <Card>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="Select a career goal in your profile to load dashboard data for the current context."
+          >
+            <Button type="primary" href="/student/profile">
+              Update Profile
+            </Button>
+          </Empty>
+        </Card>
+      ) : (
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={8}>
+            <MetricCard title="Completion" value={Number(query.data?.completionPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
+          </Col>
+          <Col xs={24} md={8}>
+            <MetricCard title="Career Match" value={Number(query.data?.matchPercent ?? 0)} suffix="%" icon={<BarChartOutlined />} />
+          </Col>
+          <Col xs={24} md={8}>
+            <MetricCard title="Roadmap Progress" value={Number(roadmapProgress?.progressPercent ?? 0)} suffix="%" icon={<CheckCircleOutlined />} />
+          </Col>
+          <Col xs={24} lg={14}>
+            <Card title="Missing Skills">
+              <List<DashboardMissingSkill>
+                dataSource={query.data?.missingSkills ?? []}
+                locale={{ emptyText: 'No missing skills from latest analysis.' }}
+                renderItem={(item) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      title={item.skill?.name ?? item.skillId}
+                      description={`Gap ${item.gap} · Priority ${item.priorityScore}`}
+                    />
+                    <Tag>{item.status}</Tag>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} lg={10}>
+            <Card title="Roadmap">
+              <Progress percent={Number(roadmapProgress?.progressPercent ?? 0)} />
+              <Alert style={{ marginTop: 16 }} type="info" message={careerScope} />
+            </Card>
+          </Col>
+        </Row>
+      )}
     </QueryState>
   );
 }

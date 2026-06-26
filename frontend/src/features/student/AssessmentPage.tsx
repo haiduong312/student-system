@@ -19,16 +19,17 @@ import {
   Typography,
 } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import type { SkillType } from '@/types/domain';
 import { SKILL_TYPES } from '@/types/domain';
 import {
-  getStudentProfileScopeKey,
   invalidateStudentCurrentContextQueries,
-  useStudentProfileQuery,
+  studentQueryKeys,
+  useCurrentProfileContext,
 } from './profile-context';
 import {
   startAssessment,
@@ -47,11 +48,10 @@ export function StudentAssessmentPage() {
   const [started, setStarted] = useState<AssessmentStartResponse | null>(null);
   const [result, setResult] = useState<AssessmentSubmitResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const profile = useStudentProfileQuery();
-  const profileScopeKey = getStudentProfileScopeKey(profile.data);
+  const context = useCurrentProfileContext();
 
   const start = useMutation({
-    mutationKey: ['assessment', 'start', ...profileScopeKey],
+    mutationKey: studentQueryKeys.assessmentStart(context.scopeKey),
     mutationFn: () => startAssessment(),
     onSuccess: (data) => {
       setStarted(data);
@@ -59,6 +59,7 @@ export function StudentAssessmentPage() {
       setAnswers({});
       message.success('Assessment started');
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
   const submit = useMutation({
     mutationFn: () => {
@@ -79,20 +80,26 @@ export function StudentAssessmentPage() {
       invalidateStudentCurrentContextQueries(queryClient);
       message.success('Assessment submitted');
     },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
-  const careerGoalId = profile.data?.careerGoalId;
+  useEffect(() => {
+    setStarted(null);
+    setResult(null);
+    setAnswers({});
+  }, [context.careerGoalId, context.specializationId]);
 
   return (
-    <QueryState loading={profile.isLoading} error={profile.error}>
+    <QueryState loading={context.loading} error={context.error}>
       {!started ? (
         <StartAssessmentView
-          careerGoalName={profile.data?.careerGoal?.name}
-          specializationName={profile.data?.specialization?.name}
-          hasCareerGoal={Boolean(careerGoalId)}
+          careerGoalName={context.careerGoalName}
+          specializationName={context.specializationName}
+          hasCareerGoal={context.hasCareerGoal}
+          isContextReady={context.isContextReady}
           loading={start.isPending}
           onStart={() => {
-            if (!careerGoalId) {
+            if (!context.isContextReady) {
               message.error('Please select a career goal before starting.');
               return;
             }
@@ -113,8 +120,8 @@ export function StudentAssessmentPage() {
       ) : (
         <AssessmentQuizView
           assessment={started}
-          careerGoalName={profile.data?.careerGoal?.name}
-          specializationName={profile.data?.specialization?.name}
+          careerGoalName={context.careerGoalName}
+          specializationName={context.specializationName}
           answers={answers}
           submitting={submit.isPending}
           onAnswer={(questionId, selectedOptionId) =>
@@ -144,12 +151,14 @@ function StartAssessmentView({
   careerGoalName,
   specializationName,
   hasCareerGoal,
+  isContextReady,
   loading,
   onStart,
 }: {
   careerGoalName?: string | null;
   specializationName?: string | null;
   hasCareerGoal: boolean;
+  isContextReady: boolean;
   loading: boolean;
   onStart: () => void;
 }) {
@@ -172,18 +181,22 @@ function StartAssessmentView({
                 Hệ thống sẽ đánh giá kỹ năng của bạn dựa trên kết quả làm bài,
                 thay vì tự khai báo trình độ.
               </Typography.Paragraph>
-              {!hasCareerGoal ? (
+              {!isContextReady ? (
                 <Alert
                   type="warning"
                   showIcon
-                  message="Please select a career goal in your profile before starting."
+                  message={
+                    hasCareerGoal
+                      ? 'Current profile context is not ready yet.'
+                      : 'Please select a career goal in your profile before starting.'
+                  }
                 />
               ) : null}
               <Button
                 type="primary"
                 size="large"
                 loading={loading}
-                disabled={!hasCareerGoal}
+                disabled={!isContextReady}
                 onClick={onStart}
               >
                 Bắt đầu đánh giá
