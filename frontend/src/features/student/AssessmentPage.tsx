@@ -24,8 +24,8 @@ import { useRouter } from 'next/navigation';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
-import type { SkillType } from '@/types/domain';
-import { SKILL_TYPES } from '@/types/domain';
+import type { AssessmentCooldown, SkillType } from '@/types/domain';
+import { ASSESSMENT_IN_PROGRESS_STATUS, SKILL_TYPES } from '@/types/domain';
 import {
   invalidateStudentCurrentContextQueries,
   studentQueryKeys,
@@ -49,6 +49,9 @@ export function StudentAssessmentPage() {
   const [result, setResult] = useState<AssessmentSubmitResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const context = useCurrentProfileContext();
+  const startedMatchesContext = started
+    ? isAssessmentInCurrentContext(started, context.careerGoalId, context.specializationId)
+    : true;
 
   const start = useMutation({
     mutationKey: studentQueryKeys.assessmentStart(context.scopeKey),
@@ -66,13 +69,13 @@ export function StudentAssessmentPage() {
       if (!started) {
         throw new Error('Assessment has not started');
       }
+      if (!isAssessmentInCurrentContext(started, context.careerGoalId, context.specializationId)) {
+        throw new Error('Assessment does not match the current career goal or specialization');
+      }
 
       return submitAssessment(
         started.assessmentId,
-        started.questions.map((question) => ({
-          questionId: question.id,
-          selectedOptionId: answers[question.id],
-        })),
+        buildAssessmentAnswers(started, answers),
       );
     },
     onSuccess: (data) => {
@@ -124,11 +127,21 @@ export function StudentAssessmentPage() {
           specializationName={context.specializationName}
           answers={answers}
           submitting={submit.isPending}
+          canSubmit={startedMatchesContext && !submit.isPending}
           onAnswer={(questionId, selectedOptionId) =>
             setAnswers((current) => ({ ...current, [questionId]: selectedOptionId }))
           }
           onSubmit={() => {
-            const answeredCount = Object.keys(answers).length;
+            if (submit.isPending) {
+              return;
+            }
+            if (!startedMatchesContext) {
+              message.error('This assessment no longer matches the current profile context.');
+              return;
+            }
+            const answeredCount = started.questions.filter(
+              (question) => answers[question.id],
+            ).length;
             if (answeredCount < started.questions.length) {
               message.error('Please answer all questions before submitting.');
               return;
@@ -138,7 +151,7 @@ export function StudentAssessmentPage() {
               title: 'Submit assessment?',
               content: 'Your answers will be graded and used to update your skill levels.',
               okText: 'Submit',
-              onOk: () => submit.mutate(),
+              onOk: () => submit.mutateAsync(),
             });
           }}
         />
@@ -223,6 +236,7 @@ function AssessmentQuizView({
   specializationName,
   answers,
   submitting,
+  canSubmit,
   onAnswer,
   onSubmit,
 }: {
@@ -231,11 +245,14 @@ function AssessmentQuizView({
   specializationName?: string | null;
   answers: Record<string, string>;
   submitting: boolean;
+  canSubmit: boolean;
   onAnswer: (questionId: string, selectedOptionId: string) => void;
   onSubmit: () => void;
 }) {
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = assessment.questions.filter((question) => answers[question.id]).length;
   const percent = Math.round((answeredCount / assessment.questions.length) * 100);
+  const status = assessment.status ?? ASSESSMENT_IN_PROGRESS_STATUS;
+  const remainingTime = useCountdown(assessment.expiresAt);
   const groupedSkills = useMemo(
     () => groupQuestionsBySkillType(assessment.questions),
     [assessment.questions],
@@ -246,6 +263,9 @@ function AssessmentQuizView({
       <PageHeader title="Assessment Quiz" />
       <Card style={{ marginBottom: 16 }}>
         <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+          <Descriptions.Item label="Status">
+            <Tag color="processing">{status}</Tag>
+          </Descriptions.Item>
           <Descriptions.Item label="Career Goal">
             {careerGoalName ?? assessment.careerGoalId}
           </Descriptions.Item>
@@ -258,6 +278,9 @@ function AssessmentQuizView({
           <Descriptions.Item label="Expires At">
             {formatDateTime(assessment.expiresAt)}
           </Descriptions.Item>
+          <Descriptions.Item label="Time Remaining">
+            {remainingTime}
+          </Descriptions.Item>
           {assessment.attemptPolicy ? (
             <Descriptions.Item label="Attempt Policy" span={2}>
               Max {assessment.attemptPolicy.maxAttempts} attempts · Cooldown{' '}
@@ -265,15 +288,30 @@ function AssessmentQuizView({
               {assessment.attemptPolicy.timeLimitMinutes} min
             </Descriptions.Item>
           ) : null}
+          {assessment.cooldown ? (
+            <Descriptions.Item label="Cooldown" span={2}>
+              {formatCooldown(assessment.cooldown)}
+            </Descriptions.Item>
+          ) : null}
         </Descriptions>
       </Card>
+      {!canSubmit ? (
+        <Alert
+          showIcon
+          type="warning"
+          style={{ marginBottom: 16 }}
+          message="This assessment cannot be submitted for the current profile context."
+        />
+      ) : null}
       {assessment.warnings.length ? (
         <Alert
           showIcon
           type="warning"
           style={{ marginBottom: 16 }}
           message="Some skills do not have enough active questions."
-          description={assessment.warnings.map((warning) => warning.skillName).join(', ')}
+          description={assessment.warnings
+            .map((warning) => `${warning.skillName}: ${warning.message}`)
+            .join(', ')}
         />
       ) : null}
       <Row gutter={[16, 16]}>
@@ -304,7 +342,11 @@ function AssessmentQuizView({
                 type="primary"
                 size="large"
                 loading={submitting}
-                disabled={answeredCount < assessment.questions.length}
+                disabled={
+                  submitting ||
+                  !canSubmit ||
+                  answeredCount < assessment.questions.length
+                }
                 onClick={onSubmit}
               >
                 Submit Assessment
@@ -466,6 +508,83 @@ function groupQuestionsBySkillType(questions: AssessmentStartQuestion[]) {
 }
 
 type LevelBreakdownRow = AssessmentLevelBreakdown & { level: string };
+
+function buildAssessmentAnswers(
+  assessment: AssessmentStartResponse,
+  answers: Record<string, string>,
+) {
+  return assessment.questions.map((question) => {
+    const selectedOptionId = answers[question.id];
+    if (!selectedOptionId) {
+      throw new Error('Please answer all questions before submitting.');
+    }
+    const belongsToQuestion = question.options.some((option) => option.id === selectedOptionId);
+    if (!belongsToQuestion) {
+      throw new Error('Selected option does not belong to this assessment question.');
+    }
+
+    return {
+      questionId: question.id,
+      selectedOptionId,
+    };
+  });
+}
+
+function isAssessmentInCurrentContext(
+  assessment: AssessmentStartResponse,
+  careerGoalId?: string | null,
+  specializationId?: string | null,
+) {
+  return (
+    assessment.careerGoalId === careerGoalId &&
+    (assessment.specializationId ?? null) === (specializationId ?? null)
+  );
+}
+
+function useCountdown(expiresAt?: string) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!expiresAt) {
+    return '-';
+  }
+
+  const remainingMs = new Date(expiresAt).getTime() - now;
+  if (remainingMs <= 0) {
+    return 'Expired';
+  }
+
+  return formatDuration(remainingMs);
+}
+
+function formatDuration(milliseconds: number) {
+  const totalSeconds = Math.ceil(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+function formatCooldown(cooldown: AssessmentCooldown) {
+  if (cooldown.message) {
+    return cooldown.message;
+  }
+  if (cooldown.nextAllowedAt) {
+    return `Next attempt after ${formatDateTime(cooldown.nextAllowedAt)}`;
+  }
+  if (cooldown.remainingMinutes !== undefined) {
+    return `${cooldown.remainingMinutes} minutes remaining`;
+  }
+  if (cooldown.remainingSeconds !== undefined) {
+    return formatDuration(cooldown.remainingSeconds * 1000);
+  }
+
+  return '-';
+}
 
 function formatDateTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';

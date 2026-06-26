@@ -1,5 +1,9 @@
-import { getPage, postData } from '@/lib/request';
-import type { AnalysisHistoryItem, CompetencyAnalysis } from '@/types/domain';
+import { getData, getPage, postData } from '@/lib/request';
+import type {
+  AnalysisHistoryItem,
+  AnalysisResultDetail,
+  CompetencyAnalysis,
+} from '@/types/domain';
 
 export const analysisService = {
   analyzeMine() {
@@ -10,5 +14,8 @@ export const analysisService = {
       limit: 20,
       sortOrder: 'desc',
     });
+  },
+  getResult(id: string) {
+    return getData<AnalysisResultDetail>(`/competency/analysis-results/${id}`);
   },
 };

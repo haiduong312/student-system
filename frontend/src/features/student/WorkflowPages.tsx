@@ -23,13 +23,15 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { getPage, patchData } from '@/lib/request';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import type {
   AnalysisHistoryItem,
+  AnalysisResultDetail,
+  AnalysisResultSkillDetail,
   CareerGoal,
   CompetencyAnalysis,
   Evidence,
@@ -47,6 +49,7 @@ import type {
 } from '@/types/domain';
 import {
   ANALYSIS_CURRENT_STATUS,
+  ANALYSIS_OBSOLETE_STATUS,
   CURRENT_RECOMMENDATION_STATUSES,
   RECOMMENDATION_STATUS_TRANSITIONS,
   RESOURCE_PROGRESS_STATUS_TRANSITIONS,
@@ -535,6 +538,17 @@ export function AnalysisView() {
   const currentAnalysis = (history.data?.data ?? []).find(
     (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(context.profile, item),
   );
+  const currentDetail = useQuery({
+    queryKey: studentQueryKeys.analysisCurrent(context.scopeKey),
+    queryFn: () => {
+      if (!currentAnalysis) {
+        throw new Error('No current analysis is available.');
+      }
+
+      return analysisService.getResult(currentAnalysis.id);
+    },
+    enabled: context.isContextReady && Boolean(currentAnalysis),
+  });
   const analyze = useMutation({
     mutationFn: () => analysisService.analyzeMine(),
     onSuccess: () => {
@@ -544,10 +558,17 @@ export function AnalysisView() {
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
 
+  useEffect(() => {
+    analyze.reset();
+  }, [context.careerGoalId, context.specializationId]);
+
   return (
     <QueryState
-      loading={context.loading || (context.isContextReady && history.isLoading)}
-      error={context.error ?? history.error}
+      loading={
+        context.loading ||
+        (context.isContextReady && (history.isLoading || currentDetail.isLoading))
+      }
+      error={context.error ?? history.error ?? currentDetail.error}
     >
       <PageHeader title="Competency Analysis" />
       <Card>
@@ -572,13 +593,30 @@ export function AnalysisView() {
           >
             Analyze Now
           </Button>
+          <Button href="/student/assessment">
+            Go to Assessment
+          </Button>
         </Space>
+        {analyze.error ? (
+          <Alert
+            showIcon
+            type="warning"
+            style={{ marginBottom: 16 }}
+            message={getApiErrorMessage(analyze.error)}
+            action={<Button href="/student/assessment">Do assessment</Button>}
+          />
+        ) : null}
         {analyze.data ? (
-          <AnalysisResultDetails analysis={analyze.data} />
+          <AnalysisResultDetails
+            analysis={analyze.data}
+            status={ANALYSIS_CURRENT_STATUS}
+          />
+        ) : currentDetail.data ? (
+          <AnalysisResultDetailView analysis={currentDetail.data} />
         ) : currentAnalysis ? (
           <CurrentAnalysisSummary analysis={currentAnalysis} />
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No current analysis." />
+          <AssessmentRequiredEmpty />
         )}
       </Card>
       {context.isContextReady ? (
@@ -596,7 +634,7 @@ export function AnalysisView() {
                     row.specialization?.name ?? 'General'
                   }`,
               },
-              { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+              { title: 'Status', dataIndex: 'status', render: (value) => <AnalysisStatusTag status={value} /> },
               {
                 title: 'Match',
                 render: (_value, row) => `${Number(row.matchPercent)}%`,
@@ -611,10 +649,19 @@ export function AnalysisView() {
   );
 }
 
-function AnalysisResultDetails({ analysis }: { analysis: CompetencyAnalysis }) {
+function AnalysisResultDetails({
+  analysis,
+  status,
+}: {
+  analysis: CompetencyAnalysis;
+  status: typeof ANALYSIS_CURRENT_STATUS;
+}) {
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+        <Descriptions.Item label="Status">
+          <AnalysisStatusTag status={status} />
+        </Descriptions.Item>
         <Descriptions.Item label="Career Goal">{analysis.careerGoal}</Descriptions.Item>
         <Descriptions.Item label="Specialization">
           {analysis.specialization ?? 'General'}
@@ -640,11 +687,75 @@ function AnalysisResultDetails({ analysis }: { analysis: CompetencyAnalysis }) {
   );
 }
 
+function AnalysisResultDetailView({ analysis }: { analysis: AnalysisResultDetail }) {
+  return (
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+        <Descriptions.Item label="Status">
+          <AnalysisStatusTag status={analysis.status} />
+        </Descriptions.Item>
+        <Descriptions.Item label="Career Goal">
+          {analysis.careerGoal?.name ?? analysis.careerGoalId}
+        </Descriptions.Item>
+        <Descriptions.Item label="Specialization">
+          {analysis.specialization?.name ?? 'General'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Match">
+          {Number(analysis.matchPercent)}%
+        </Descriptions.Item>
+        <Descriptions.Item label="Level">{analysis.matchLevel}</Descriptions.Item>
+        <Descriptions.Item label="Analyzed At">
+          {formatDateTime(analysis.analyzedAt)}
+        </Descriptions.Item>
+      </Descriptions>
+      <Table<AnalysisResultSkillDetail>
+        rowKey={(row) => row.id ?? row.skillId}
+        size="small"
+        dataSource={analysis.details}
+        pagination={false}
+        columns={[
+          { title: 'Skill', render: (_value, row) => row.skill?.name ?? row.skillId },
+          { title: 'Category', render: (_value, row) => row.skill?.category?.name ?? '-' },
+          { title: 'Current', dataIndex: 'currentLevel' },
+          { title: 'Required', dataIndex: 'requiredLevel' },
+          { title: 'Gap', dataIndex: 'gap' },
+          { title: 'Priority', render: (_value, row) => Number(row.priorityScore) },
+          { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+        ]}
+      />
+      <Typography.Title level={5} style={{ margin: 0 }}>
+        Recommendations
+      </Typography.Title>
+      <div>
+        <List<Recommendation>
+          dataSource={analysis.recommendations}
+          locale={{ emptyText: 'No recommendations for this analysis.' }}
+          renderItem={(item) => (
+            <List.Item>
+              <List.Item.Meta
+                title={
+                  <Space wrap>
+                    {item.title}
+                    <Tag>{item.status}</Tag>
+                  </Space>
+                }
+                description={`${item.skill?.name ?? item.skillId ?? ''} · Priority ${
+                  item.priorityScore
+                }`}
+              />
+            </List.Item>
+          )}
+        />
+      </div>
+    </Space>
+  );
+}
+
 function CurrentAnalysisSummary({ analysis }: { analysis: AnalysisHistoryItem }) {
   return (
     <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
       <Descriptions.Item label="Lifecycle">
-        <Tag color="green">{analysis.status}</Tag>
+        <AnalysisStatusTag status={analysis.status} />
       </Descriptions.Item>
       <Descriptions.Item label="Match">{Number(analysis.matchPercent)}%</Descriptions.Item>
       <Descriptions.Item label="Level">{analysis.matchLevel}</Descriptions.Item>
@@ -653,6 +764,24 @@ function CurrentAnalysisSummary({ analysis }: { analysis: AnalysisHistoryItem })
       </Descriptions.Item>
     </Descriptions>
   );
+}
+
+function AssessmentRequiredEmpty() {
+  return (
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description="Bạn cần hoàn thành assessment để xem phân tích năng lực."
+    >
+      <Button type="primary" href="/student/assessment">
+        Làm assessment
+      </Button>
+    </Empty>
+  );
+}
+
+function AnalysisStatusTag({ status }: { status: AnalysisHistoryItem['status'] }) {
+  const color = status === ANALYSIS_CURRENT_STATUS ? 'green' : 'default';
+  return <Tag color={color}>{status === ANALYSIS_OBSOLETE_STATUS ? 'OBSOLETE' : status}</Tag>;
 }
 
 function CareerScopeSummary({

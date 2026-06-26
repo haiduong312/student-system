@@ -140,6 +140,7 @@ export const ROADMAP_ITEM_STATUSES = [
 export const ROADMAP_ITEM_DONE_STATUS = 'DONE' as const satisfies RoadmapItemStatus;
 export const ROADMAP_ITEM_IN_PROGRESS_STATUS = 'IN_PROGRESS' as const satisfies RoadmapItemStatus;
 export const ROADMAP_ITEM_CANCELLED_STATUS = 'CANCELLED' as const satisfies RoadmapItemStatus;
+export const ASSESSMENT_IN_PROGRESS_STATUS = 'IN_PROGRESS' as const satisfies AssessmentStatus;
 
 export const ROADMAP_ITEM_STATUS_TRANSITIONS: Record<
   RoadmapItemStatus,
@@ -153,6 +154,7 @@ export const ROADMAP_ITEM_STATUS_TRANSITIONS: Record<
 
 export const ROADMAP_CURRENT_STATUS = 'ACTIVE' as const satisfies RoadmapStatus;
 export const ANALYSIS_CURRENT_STATUS = 'CURRENT' as const satisfies AnalysisResultStatus;
+export const ANALYSIS_OBSOLETE_STATUS = 'OBSOLETE' as const satisfies AnalysisResultStatus;
 
 export interface Paginated<T> {
   success: true;
@@ -270,6 +272,13 @@ export interface AssessmentAttemptPolicy {
   timeLimitMinutes: number;
 }
 
+export interface AssessmentCooldown {
+  nextAllowedAt?: string;
+  remainingSeconds?: number;
+  remainingMinutes?: number;
+  message?: string;
+}
+
 export interface AssessmentStartOption {
   id: string;
   optionText: string;
@@ -297,9 +306,11 @@ export interface AssessmentStartResponse {
   assessmentId: string;
   careerGoalId: string;
   specializationId?: string | null;
+  status?: Extract<AssessmentStatus, 'IN_PROGRESS'>;
   startedAt: string;
   expiresAt: string;
   attemptPolicy?: AssessmentAttemptPolicy;
+  cooldown?: AssessmentCooldown;
   questions: AssessmentStartQuestion[];
   warnings: AssessmentWarning[];
 }
@@ -551,6 +562,38 @@ export interface CompetencyAnalysis {
     recommendation: AnalysisRecommendation | null;
   }>;
   recommendations: AnalysisRecommendation[];
+}
+
+export interface AnalysisResultSkillDetail {
+  id?: string;
+  skillId: string;
+  currentLevel: number;
+  requiredLevel: number;
+  gap: number;
+  weight: string | number;
+  achievedScore: string | number;
+  priorityScore: string | number;
+  status: AnalysisSkillStatus;
+  skill?: (Skill & { category?: SkillCategory | null }) | null;
+}
+
+export interface AnalysisResultDetail {
+  id: string;
+  studentId: string;
+  careerGoalId: string;
+  specializationId?: string | null;
+  status: AnalysisResultStatus;
+  completionPercent: string | number;
+  matchPercent: string | number;
+  riskScore: number;
+  matchLevel: MatchLevel;
+  analyzedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  careerGoal?: CareerGoal | null;
+  specialization?: Specialization | null;
+  details: AnalysisResultSkillDetail[];
+  recommendations: Recommendation[];
 }
 
 export interface AnalysisHistoryItem {

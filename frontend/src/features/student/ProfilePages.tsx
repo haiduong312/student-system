@@ -3,9 +3,11 @@
 import {
   Button,
   Card,
+  Descriptions,
   Form,
   Input,
   Select,
+  Space,
   Table,
   Tag,
   Upload,
@@ -117,7 +119,7 @@ interface ExperienceFormValues {
 }
 
 export function StudentProfilePageView() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const selectedCareerGoalId = Form.useWatch('careerGoalId', form);
@@ -156,9 +158,32 @@ export function StudentProfilePageView() {
         resetStudentCurrentContextQueries(queryClient);
       }
       invalidateStudentCurrentContextQueries(queryClient);
+      void queryClient.refetchQueries({ queryKey: studentQueryKeys.profile });
+      void queryClient.refetchQueries({ queryKey: ['dashboard', 'student'] });
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
+
+  const handleSubmit = (values: ProfileFormValues) => {
+    const payload = buildProfilePayload(values);
+    const contextChanged =
+      context.careerGoalId !== payload.careerGoalId ||
+      context.specializationId !== payload.specializationId;
+
+    if (!contextChanged) {
+      save.mutate(values);
+      return;
+    }
+
+    modal.confirm({
+      title: 'Change profile context?',
+      content:
+        'Assessment, analysis, recommendations, and roadmap data may refresh for the new career goal or specialization.',
+      okText: 'Update profile',
+      cancelText: 'Review',
+      onOk: () => save.mutate(values),
+    });
+  };
 
   useEffect(() => {
     if (context.profile && !form.isFieldsTouched()) {
@@ -196,11 +221,31 @@ export function StudentProfilePageView() {
         title="Profile"
         description="Update your personal competency profile."
       />
+      <Card title="Current Profile Context" style={{ marginBottom: 16 }}>
+        <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
+          <Descriptions.Item label="Career Goal">
+            <Space>
+              {context.careerGoalName ?? 'Not selected'}
+              <Tag color={context.hasCareerGoal ? 'blue' : 'warning'}>
+                {context.hasCareerGoal ? 'READY' : 'MISSING'}
+              </Tag>
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="Specialization">
+            <Space>
+              {context.specializationName ?? 'General'}
+              <Tag color={context.hasSpecialization ? 'green' : 'default'}>
+                {context.hasSpecialization ? 'SPECIALIZED' : 'GENERAL'}
+              </Tag>
+            </Space>
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
       <Card>
         <Form<ProfileFormValues>
           form={form}
           layout="vertical"
-          onFinish={(values) => save.mutate(values)}
+          onFinish={handleSubmit}
         >
           <Form.Item name="careerGoalId" label="Career Goal">
             <Select
