@@ -23,6 +23,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { invalidateStudentCurrentContextQueries } from '@/features/student/profile-context';
 import type {
   CareerGoal,
@@ -209,7 +210,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           {
             title: 'Status',
             dataIndex: 'status',
-            render: (status) => <Tag>{status}</Tag>,
+            render: (status: CatalogStatus) => <StatusTag status={status} />,
           },
           { title: 'Description', dataIndex: 'description', ellipsis: true },
           {
@@ -917,10 +918,8 @@ function SkillTypeTag({ type }: { type?: SkillType }) {
   return <Tag color={type === 'COMMON' ? 'blue' : 'green'}>{type ?? '-'}</Tag>;
 }
 
-function StatusTag({ status }: { status?: string }) {
-  return (
-    <Tag color={status === 'ACTIVE' ? 'green' : 'default'}>{status ?? '-'}</Tag>
-  );
+function StatusTag({ status }: { status?: CatalogStatus | null }) {
+  return <StatusBadge status={status} />;
 }
 
 function formatDate(value?: string | null) {

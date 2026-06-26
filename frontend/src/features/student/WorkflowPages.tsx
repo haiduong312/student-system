@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   Descriptions,
-  Empty,
   Input,
   List,
   Modal,
@@ -29,6 +28,18 @@ import { getPage, patchData } from '@/lib/request';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import {
+  canUpdateRecommendationStatus,
+  canUpdateResourceProgressStatus,
+  canUpdateRoadmapItemStatus,
+  getRecommendationStatusOptions,
+  getResourceProgressStatusOptions,
+  getRoadmapItemStatusOptions,
+  isActionableRecommendation,
+  isActiveRoadmap,
+} from '@/lib/status';
 import type {
   AnalysisHistoryItem,
   AnalysisResultDetail,
@@ -47,21 +58,14 @@ import type {
   RoadmapItem,
   RoadmapItemResource,
   RoadmapItemStatus,
-  RoadmapStatus,
   Specialization,
   StudentRecommendationStatus,
 } from '@/types/domain';
 import {
   ANALYSIS_CURRENT_STATUS,
-  ANALYSIS_OBSOLETE_STATUS,
-  RECOMMENDATION_STATUS_TRANSITIONS,
-  RESOURCE_PROGRESS_STATUS_TRANSITIONS,
-  ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES,
-  ROADMAP_CURRENT_STATUS,
   ROADMAP_ITEM_CANCELLED_STATUS,
   ROADMAP_ITEM_DONE_STATUS,
   ROADMAP_ITEM_IN_PROGRESS_STATUS,
-  ROADMAP_ITEM_STATUS_TRANSITIONS,
 } from '@/types/domain';
 import {
   invalidateStudentCurrentContextQueries,
@@ -290,7 +294,7 @@ export function RecommendationsView() {
   });
   const recommendations = (query.data?.data ?? []).filter((item) =>
     filter === 'active'
-      ? isActionableRecommendationStatus(item.status)
+      ? isActionableRecommendation(item.status)
       : item.status === RECOMMENDATION_FILTER_STATUS[filter],
   );
 
@@ -355,8 +359,7 @@ export function RoadmapView() {
     queryFn: () => roadmapService.listMyHistory(),
     enabled: context.isContextReady,
   });
-  const activeRoadmap =
-    roadmap.data?.status === ROADMAP_CURRENT_STATUS ? roadmap.data : null;
+  const activeRoadmap = isActiveRoadmap(roadmap.data?.status) ? roadmap.data : null;
   const generate = useMutation({
     mutationFn: () => roadmapService.generateMine({ archiveCurrentActiveRoadmap: true }),
     onSuccess: () => {
@@ -485,10 +488,7 @@ export function RoadmapView() {
       </Space>
       {!context.isContextReady ? (
         <Card>
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Select a career goal in your profile before generating a roadmap."
-          />
+          <EmptyState description="Select a career goal in your profile before generating a roadmap." />
         </Card>
       ) : activeRoadmap ? (
         <Card title={getRoadmapDisplayTitle(activeRoadmap)}>
@@ -519,11 +519,11 @@ export function RoadmapView() {
         </Card>
       ) : (
         <Card>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active roadmap.">
+          <EmptyState description="No active roadmap.">
             <Button type="primary" loading={generate.isPending} onClick={handleGenerate}>
               Generate Roadmap
             </Button>
-          </Empty>
+          </EmptyState>
         </Card>
       )}
       {context.isContextReady ? (
@@ -533,7 +533,7 @@ export function RoadmapView() {
             size="small"
             loading={history.isLoading}
             dataSource={(history.data ?? []).filter(
-              (item) => item.status !== ROADMAP_CURRENT_STATUS,
+              (item) => !isActiveRoadmap(item.status),
             )}
             pagination={false}
             columns={[
@@ -700,7 +700,7 @@ export function AnalysisView() {
                     row.specialization?.name ?? 'General'
                   }`,
               },
-              { title: 'Status', dataIndex: 'status', render: (value) => <AnalysisStatusTag status={value} /> },
+              { title: 'Status', dataIndex: 'status', render: (value) => <StatusBadge status={value} /> },
               {
                 title: 'Match',
                 render: (_value, row) => `${Number(row.matchPercent)}%`,
@@ -726,7 +726,7 @@ function AnalysisResultDetails({
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
         <Descriptions.Item label="Status">
-          <AnalysisStatusTag status={status} />
+          <StatusBadge status={status} />
         </Descriptions.Item>
         <Descriptions.Item label="Career Goal">{analysis.careerGoal}</Descriptions.Item>
         <Descriptions.Item label="Specialization">
@@ -758,7 +758,7 @@ function AnalysisResultDetailView({ analysis }: { analysis: AnalysisResultDetail
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
         <Descriptions.Item label="Status">
-          <AnalysisStatusTag status={analysis.status} />
+          <StatusBadge status={analysis.status} />
         </Descriptions.Item>
         <Descriptions.Item label="Career Goal">
           {analysis.careerGoal?.name ?? analysis.careerGoalId}
@@ -802,7 +802,7 @@ function AnalysisResultDetailView({ analysis }: { analysis: AnalysisResultDetail
                 title={
                   <Space wrap>
                     {item.title}
-                    <Tag>{item.status}</Tag>
+                    <StatusBadge status={item.status} />
                   </Space>
                 }
                 description={`${item.skill?.name ?? item.skillId ?? ''} · Priority ${
@@ -821,7 +821,7 @@ function CurrentAnalysisSummary({ analysis }: { analysis: AnalysisHistoryItem })
   return (
     <Descriptions bordered column={{ xs: 1, md: 2 }} size="small">
       <Descriptions.Item label="Lifecycle">
-        <AnalysisStatusTag status={analysis.status} />
+        <StatusBadge status={analysis.status} />
       </Descriptions.Item>
       <Descriptions.Item label="Match">{Number(analysis.matchPercent)}%</Descriptions.Item>
       <Descriptions.Item label="Level">{analysis.matchLevel}</Descriptions.Item>
@@ -834,20 +834,12 @@ function CurrentAnalysisSummary({ analysis }: { analysis: AnalysisHistoryItem })
 
 function AssessmentRequiredEmpty() {
   return (
-    <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description="Bạn cần hoàn thành assessment để xem phân tích năng lực."
-    >
+    <EmptyState description="Bạn cần hoàn thành assessment để xem phân tích năng lực.">
       <Button type="primary" href="/student/assessment">
         Làm assessment
       </Button>
-    </Empty>
+    </EmptyState>
   );
-}
-
-function AnalysisStatusTag({ status }: { status: AnalysisHistoryItem['status'] }) {
-  const color = status === ANALYSIS_CURRENT_STATUS ? 'green' : 'default';
-  return <Tag color={color}>{status === ANALYSIS_OBSOLETE_STATUS ? 'OBSOLETE' : status}</Tag>;
 }
 
 function CareerScopeSummary({
@@ -864,18 +856,6 @@ function CareerScopeSummary({
       <Descriptions.Item label="Career Goal">{getEntityName(careerGoal) ?? '-'}</Descriptions.Item>
       <Descriptions.Item label="Specialization">{getSpecializationDisplayName(specialization)}</Descriptions.Item>
     </Descriptions>
-  );
-}
-
-function getRecommendationStatusOptions(status: StudentRecommendationStatus) {
-  return Array.from(new Set([status, ...RECOMMENDATION_STATUS_TRANSITIONS[status]])).map(
-    (value) => ({ value, label: value }),
-  );
-}
-
-function isActionableRecommendationStatus(status: StudentRecommendationStatus) {
-  return ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES.some(
-    (currentStatus) => currentStatus === status,
   );
 }
 
@@ -900,8 +880,7 @@ function RecommendationList({
 }) {
   if (!recommendations.length) {
     return (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      <EmptyState
         description={
           filter === 'active'
             ? 'Chưa có gợi ý học tập. Hãy hoàn thành phân tích năng lực trước.'
@@ -913,7 +892,7 @@ function RecommendationList({
             Analyze Now
           </Button>
         ) : null}
-      </Empty>
+      </EmptyState>
     );
   }
 
@@ -927,11 +906,17 @@ function RecommendationList({
               key="status"
               value={item.status}
               loading={updatingStatus}
-              disabled={
-                updatingStatus ||
-                !RECOMMENDATION_STATUS_TRANSITIONS[item.status].length
-              }
-              onChange={(status) => onStatusChange(item.id, status)}
+              disabled={updatingStatus || getRecommendationStatusOptions(item.status).length <= 1}
+              onChange={(status) => {
+                if (
+                  status === item.status ||
+                  !canUpdateRecommendationStatus(item.status, status)
+                ) {
+                  return;
+                }
+
+                onStatusChange(item.id, status);
+              }}
               options={getRecommendationStatusOptions(item.status)}
               style={{ width: 150 }}
             />,
@@ -942,7 +927,7 @@ function RecommendationList({
               <Space wrap>
                 {item.title}
                 <StatusBadge status={item.status} />
-                {isActionableRecommendationStatus(item.status) ? (
+                {isActionableRecommendation(item.status) ? (
                   <Tag color="blue">ROADMAP ACTIONABLE</Tag>
                 ) : null}
               </Space>
@@ -1001,11 +986,17 @@ function RoadmapTimeline({
               key="status"
               value={item.status}
               loading={updatingItem}
-              disabled={
-                updatingItem ||
-                !ROADMAP_ITEM_STATUS_TRANSITIONS[item.status].length
-              }
-              onChange={(status) => onItemStatusChange(item, status)}
+              disabled={updatingItem || getRoadmapItemStatusOptions(item.status).length <= 1}
+              onChange={(status) => {
+                if (
+                  status === item.status ||
+                  !canUpdateRoadmapItemStatus(item.status, status)
+                ) {
+                  return;
+                }
+
+                onItemStatusChange(item, status);
+              }}
               options={getRoadmapItemStatusOptions(item.status)}
               style={{ width: 150 }}
             />,
@@ -1068,9 +1059,18 @@ function LearningResourceList({
               loading={updating}
               disabled={
                 updating ||
-                !RESOURCE_PROGRESS_STATUS_TRANSITIONS[resource.progressStatus].length
+                getResourceProgressStatusOptions(resource.progressStatus).length <= 1
               }
-              onChange={(status) => onProgressChange(resource, status)}
+              onChange={(status) => {
+                if (
+                  status === resource.progressStatus ||
+                  !canUpdateResourceProgressStatus(resource.progressStatus, status)
+                ) {
+                  return;
+                }
+
+                onProgressChange(resource, status);
+              }}
               options={getResourceProgressStatusOptions(resource.progressStatus)}
               style={{ width: 150 }}
             />,
@@ -1158,55 +1158,6 @@ function resourceToRoadmapResource(
   return original;
 }
 
-type StatusBadgeValue =
-  | StudentRecommendationStatus
-  | RoadmapStatus
-  | RoadmapItemStatus
-  | ResourceProgressStatus
-  | AnalysisHistoryItem['status'];
-
-function StatusBadge({ status }: { status: StatusBadgeValue }) {
-  return <Tag color={getStatusColor(status)}>{status}</Tag>;
-}
-
-function getStatusColor(status: StatusBadgeValue) {
-  switch (status) {
-    case 'CURRENT':
-    case 'ACTIVE':
-    case 'DONE':
-    case 'COMPLETED':
-      return 'green';
-    case 'NEW':
-    case 'SAVED':
-    case 'TODO':
-    case 'NOT_STARTED':
-      return 'blue';
-    case 'IN_PROGRESS':
-      return 'processing';
-    case 'DISMISSED':
-    case 'SKIPPED':
-    case 'ARCHIVED':
-    case 'OBSOLETE':
-      return 'default';
-    case 'CANCELLED':
-      return 'red';
-    default:
-      return 'default';
-  }
-}
-
-function getResourceProgressStatusOptions(status: ResourceProgressStatus) {
-  return Array.from(new Set([status, ...RESOURCE_PROGRESS_STATUS_TRANSITIONS[status]])).map(
-    (value) => ({ value, label: value }),
-  );
-}
-
-function getRoadmapItemStatusOptions(status: RoadmapItemStatus) {
-  return Array.from(new Set([status, ...ROADMAP_ITEM_STATUS_TRANSITIONS[status]])).map(
-    (value) => ({ value, label: value }),
-  );
-}
-
 function getRoadmapDisplayTitle(roadmap: Roadmap) {
   const specializationName = getEntityName(roadmap.specialization);
   const careerGoalName = getEntityName(roadmap.careerGoal);
@@ -1255,7 +1206,7 @@ function EvidenceTable({
           {
             title: 'Status',
             dataIndex: 'status',
-            render: (value: EvidenceStatus) => <EvidenceStatusTag status={value} />,
+            render: (value: EvidenceStatus) => <StatusBadge status={value} />,
           },
           { title: 'Note', dataIndex: 'note' },
           {
@@ -1337,17 +1288,6 @@ function getEvidenceStatusRank(status: EvidenceStatus) {
     default:
       return 3;
   }
-}
-
-function EvidenceStatusTag({ status }: { status: EvidenceStatus }) {
-  const color =
-    status === 'VERIFIED'
-      ? 'green'
-      : status === 'PENDING' || status === 'VERIFIED_WITH_PENDING_CHANGES'
-        ? 'processing'
-        : 'red';
-
-  return <Tag color={color}>{status}</Tag>;
 }
 
 function formatDateTime(value?: string | null) {

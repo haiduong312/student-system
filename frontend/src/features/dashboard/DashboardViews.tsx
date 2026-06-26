@@ -1,11 +1,14 @@
 'use client';
 
-import { Alert, Button, Card, Col, Empty, List, Progress, Row, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, List, Progress, Row, Table, Tag, Typography } from 'antd';
 import { BarChartOutlined, CheckCircleOutlined, TeamOutlined, WarningOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { CurrentGoalCard } from '@/components/ui/CurrentGoalCard';
+import { isActiveRoadmap } from '@/lib/status';
 import type {
   AnalysisHistoryItem,
   AdminDashboard,
@@ -13,7 +16,7 @@ import type {
   LecturerDashboard,
   StudentDashboard,
 } from '@/types/domain';
-import { ANALYSIS_CURRENT_STATUS, ROADMAP_CURRENT_STATUS } from '@/types/domain';
+import { ANALYSIS_CURRENT_STATUS } from '@/types/domain';
 import {
   isSameProfileScope,
   studentQueryKeys,
@@ -40,10 +43,9 @@ export function StudentDashboardView() {
   const currentAnalysis = (analysisHistory.data?.data ?? []).find(
     (item) => item.status === ANALYSIS_CURRENT_STATUS && isSameProfileScope(context.profile, item),
   );
-  const roadmapProgress =
-    query.data?.roadmapProgress.status === ROADMAP_CURRENT_STATUS
-      ? query.data.roadmapProgress
-      : null;
+  const roadmapProgress = isActiveRoadmap(query.data?.roadmapProgress?.status)
+    ? query.data?.roadmapProgress
+    : null;
   const careerScope = [
     query.data?.careerGoal?.name ?? context.careerGoalName ?? 'No career goal selected',
     context.specializationName ?? 'General',
@@ -62,21 +64,30 @@ export function StudentDashboardView() {
       <PageHeader title="Student Dashboard" description="Track your competency profile health." />
       {!context.isContextReady ? (
         <Card>
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Select a career goal in your profile to load dashboard data for the current context."
-          >
+          <EmptyState description="Select a career goal in your profile to load dashboard data for the current context.">
             <Button type="primary" href="/student/profile">
               Update Profile
             </Button>
-          </Empty>
+          </EmptyState>
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
           <Col xs={24}>
             <CurrentGoalCard
-              careerGoalName={careerScope}
-              hasCurrentAnalysis={Boolean(currentAnalysis)}
+              contextLabel={careerScope}
+              tone={currentAnalysis ? 'success' : 'info'}
+              description={
+                currentAnalysis
+                  ? 'Dashboard metrics are scoped to the current profile context.'
+                  : 'Complete an assessment and run analysis to populate current competency data.'
+              }
+              action={
+                currentAnalysis ? null : (
+                  <Button size="small" href="/student/assessment">
+                    Do Assessment
+                  </Button>
+                )
+              }
             />
           </Col>
           <Col xs={24} md={8}>
@@ -124,48 +135,17 @@ export function StudentDashboardView() {
                   />
                 </>
               ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No active roadmap for the current context."
-                >
+                <EmptyState description="No active roadmap for the current context.">
                   <Button type="primary" href="/student/roadmap">
                     Generate Roadmap
                   </Button>
-                </Empty>
+                </EmptyState>
               )}
             </Card>
           </Col>
         </Row>
       )}
     </QueryState>
-  );
-}
-
-function CurrentGoalCard({
-  careerGoalName,
-  hasCurrentAnalysis,
-}: {
-  careerGoalName: string;
-  hasCurrentAnalysis: boolean;
-}) {
-  return (
-    <Alert
-      showIcon
-      type={hasCurrentAnalysis ? 'success' : 'info'}
-      message={`Current context: ${careerGoalName}`}
-      description={
-        hasCurrentAnalysis
-          ? 'Dashboard metrics are scoped to the current profile context.'
-          : 'Complete an assessment and run analysis to populate current competency data.'
-      }
-      action={
-        hasCurrentAnalysis ? null : (
-          <Button size="small" href="/student/assessment">
-            Do Assessment
-          </Button>
-        )
-      }
-    />
   );
 }
 
@@ -179,14 +159,11 @@ function DashboardSummary({
   if (!analysis) {
     return (
       <Card>
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="No current analysis for this career goal and specialization."
-        >
+        <EmptyState description="No current analysis for this career goal and specialization.">
           <Button type="primary" href="/student/analysis">
             Analyze Now
           </Button>
-        </Empty>
+        </EmptyState>
       </Card>
     );
   }
