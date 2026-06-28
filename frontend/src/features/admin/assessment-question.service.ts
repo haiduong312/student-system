@@ -25,6 +25,8 @@ export interface AssessmentQuestionPayload {
 
 export interface AssessmentQuestionFilters {
   search?: string;
+  page?: number;
+  limit?: number;
   skillId?: string;
   skillType?: SkillType;
   level?: number;
@@ -35,7 +37,7 @@ export interface AssessmentQuestionFilters {
 export const assessmentQuestionService = {
   listQuestions(filters: AssessmentQuestionFilters) {
     return getPage<AssessmentQuestion>('/assessment-questions', {
-      limit: 50,
+      limit: 10,
       ...filters,
     });
   },

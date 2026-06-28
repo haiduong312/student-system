@@ -38,7 +38,6 @@ import type {
 import {
   adminCatalogService,
   type CatalogKind,
-  type CatalogPayload,
   type CatalogRecord,
   type RequiredSkillPayload,
   type SpecializationPayload,
@@ -49,6 +48,8 @@ const titles: Record<CatalogKind, string> = {
   skills: 'Skills',
   'career-goals': 'Career Goals',
 };
+
+const DEFAULT_TABLE_PAGE_SIZE = 10;
 
 const skillTypeOptions: Array<{ value: SkillType; label: string }> = [
   { value: 'COMMON', label: 'COMMON' },
@@ -68,8 +69,6 @@ interface CatalogFormValues {
   status?: CatalogStatus;
   categoryId?: string | null;
   type?: SkillType;
-  defaultRequiredLevel?: number;
-  defaultWeight?: number;
   roadmapPhase?: RoadmapPhase | null;
 }
 
@@ -95,12 +94,18 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const [open, setOpen] = useState(false);
   const [selectedCareerGoal, setSelectedCareerGoal] =
     useState<CareerGoal | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
   const [form] = Form.useForm<CatalogFormValues>();
-  const selectedSkillType = Form.useWatch('type', form);
 
   const query = useQuery({
-    queryKey: [kind, search],
-    queryFn: () => adminCatalogService.listCatalog<CatalogRecord>(kind, { search }),
+    queryKey: [kind, search, page, pageSize],
+    queryFn: () =>
+      adminCatalogService.listCatalog<CatalogRecord>(kind, {
+        search,
+        page,
+        limit: pageSize,
+      }),
   });
   const categories = useQuery({
     queryKey: ['skill-categories', 'options'],
@@ -109,10 +114,8 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   });
 
   const save = useMutation({
-    mutationFn: (values: CatalogFormValues) => {
-      const payload = buildCatalogPayload(kind, values);
-      return adminCatalogService.saveCatalog(kind, payload, editing?.id);
-    },
+    mutationFn: (values: CatalogFormValues) =>
+      adminCatalogService.saveCatalog(kind, values, editing?.id),
     onSuccess: (result) => {
       message.success('Saved');
       notifyCatalogInvalidation(notification, result);
@@ -148,7 +151,10 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
     <QueryState loading={query.isLoading} error={query.error}>
       <PageHeader title={titles[kind]} />
       <SearchBar
-        onSearch={setSearch}
+        onSearch={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
         onRefresh={() => query.refetch()}
         extra={
           <Button
@@ -163,7 +169,16 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
       <Table<CatalogRecord>
         rowKey="id"
         dataSource={query.data?.data ?? []}
-        pagination={{ pageSize: 10, total: query.data?.meta.total }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: query.data?.meta.total ?? 0,
+          showSizeChanger: true,
+        }}
+        onChange={(pagination) => {
+          setPage(pagination.current ?? 1);
+          setPageSize(pagination.pageSize ?? DEFAULT_TABLE_PAGE_SIZE);
+        }}
         columns={[
           { title: 'Name', dataIndex: 'name' },
           ...(kind === 'skills'
@@ -173,18 +188,6 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
                   render: (_: unknown, row: CatalogRecord) => (
                     <SkillTypeTag type={(row as Skill).type} />
                   ),
-                },
-                {
-                  title: 'Default Level',
-                  render: (_: unknown, row: CatalogRecord) =>
-                    (row as Skill).type === 'COMMON'
-                      ? ((row as Skill).defaultRequiredLevel ?? '-')
-                      : '-',
-                },
-                {
-                  title: 'Default Weight',
-                  render: (_: unknown, row: CatalogRecord) =>
-                    (row as Skill).type === 'COMMON' ? ((row as Skill).defaultWeight ?? '-') : '-',
                 },
                 {
                   title: 'Questions',
@@ -261,32 +264,6 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
                   }))}
                 />
               </Form.Item>
-              {selectedSkillType === 'COMMON' ? (
-                <Space.Compact block>
-                  <Form.Item
-                    name="defaultRequiredLevel"
-                    label="Default Level"
-                    preserve={false}
-                    rules={[{ required: true }]}
-                    style={{ width: '50%' }}
-                  >
-                    <InputNumber min={1} max={3} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item
-                    name="defaultWeight"
-                    label="Default Weight"
-                    preserve={false}
-                    rules={[{ required: true }]}
-                    style={{ width: '50%' }}
-                  >
-                    <InputNumber
-                      min={0.01}
-                      step={0.5}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                </Space.Compact>
-              ) : null}
             </>
           ) : null}
           <Form.Item name="description" label="Description">
@@ -933,28 +910,8 @@ function toCatalogFormValues(record: CatalogRecord): CatalogFormValues {
     status: record.status,
     categoryId: 'categoryId' in record ? record.categoryId : undefined,
     type: 'type' in record ? record.type : undefined,
-    defaultRequiredLevel:
-      'defaultRequiredLevel' in record ? (record.defaultRequiredLevel ?? undefined) : undefined,
-    defaultWeight:
-      'defaultWeight' in record && record.defaultWeight !== null && record.defaultWeight !== undefined
-        ? Number(record.defaultWeight)
-        : undefined,
     roadmapPhase: 'roadmapPhase' in record ? record.roadmapPhase : undefined,
   };
-}
-
-function buildCatalogPayload(kind: CatalogKind, values: CatalogFormValues): CatalogPayload {
-  if (kind !== 'skills') {
-    return values;
-  }
-
-  const payload: CatalogFormValues = { ...values };
-  if (payload.type !== 'COMMON') {
-    delete payload.defaultRequiredLevel;
-    delete payload.defaultWeight;
-  }
-
-  return payload;
 }
 
 interface NotificationApi {

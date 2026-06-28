@@ -1,6 +1,6 @@
 # Thiết kế kiến trúc hệ thống Student Digital Competency Profile & Personal Development Roadmap
 
-Tài liệu này mô tả kiến trúc đúng theo code hiện tại trong `backend/src`, `backend/prisma/schema.prisma` và `frontend/src`.
+Tài liệu này mô tả kiến trúc đúng theo source code hiện tại trong `backend/src`, `backend/prisma/schema.prisma` và `frontend/src`.
 
 ## 1. Kiến trúc tổng thể
 
@@ -39,12 +39,13 @@ Backend dùng `api` làm global prefix, Swagger ở `/api/docs`, CORS bật `ori
 - Global `ValidationPipe`, `GlobalExceptionFilter`, `ResponseInterceptor`.
 - Multer upload qua `FileInterceptor`.
 - `@nestjs/schedule` cho notification cron.
+- `ActivityLogsService` và `ExportLogsService` là global modules.
 
 ### Database
 
 - PostgreSQL.
 - Schema chính: `backend/prisma/schema.prisma`.
-- Seed hiện tại chỉ upsert một số skill nền tảng trong `backend/prisma/seed.ts`.
+- Seed hiện tại upsert một số skill nền tảng trong `backend/prisma/seed.ts`.
 
 ## 3. Cấu trúc frontend hiện tại
 
@@ -91,7 +92,21 @@ frontend/src/
 └── types/
 ```
 
-Các route admin `users`, `students`, `lecturers`, `reports`, lecturer `students`, `reviews`, `reports`, và student `portfolio` hiện là placeholder UI. Các route có UI nghiệp vụ rõ gồm dashboard, catalog, question bank, profile resources, evidence review, assessment, analysis, recommendations, roadmap và notifications.
+Các route có UI nghiệp vụ rõ:
+
+- Dashboard theo role.
+- Admin catalog: skill categories, skills, career goals, specializations, required skills.
+- Admin question bank.
+- Student profile/resources/evidence, assessment, analysis, recommendations, roadmap, notifications.
+- Lecturer evidence review.
+
+Các route hiện là placeholder UI:
+
+- Admin: `users`, `students`, `lecturers`, `advisor-assignments`, `reports`.
+- Lecturer: `students`, `reviews`, `reports`.
+- Student: `portfolio`.
+
+Lưu ý: backend đã có API cho nhiều route placeholder này, nhưng frontend chưa dựng màn quản trị tương ứng.
 
 ## 4. Cấu trúc backend hiện tại
 
@@ -103,28 +118,33 @@ backend/
 └── src/
     ├── app.module.ts
     ├── main.ts
-    ├── auth/
-    ├── users/
-    ├── students/
-    ├── lecturers/
+    ├── activity-logs/
     ├── advisor-assignments/
-    ├── skill-categories/
-    ├── skills/
-    ├── career-goals/
+    ├── advisor-reviews/
     ├── assessment-questions/
     ├── assessments/
-    ├── profiles/
-    ├── evidences/
+    ├── auth/
+    ├── career-goals/
+    ├── common/
     ├── competency-analysis/
+    ├── dashboard/
+    ├── evidences/
+    ├── export-logs/
+    ├── learning-resources/
+    ├── lecturers/
+    ├── notifications/
+    ├── prisma/
+    ├── profiles/
+    ├── recommendation-templates/
     ├── recommendations/
     ├── roadmaps/
-    ├── notifications/
-    ├── dashboard/
-    ├── prisma/
-    └── common/
+    ├── skill-categories/
+    ├── skills/
+    ├── students/
+    └── users/
 ```
 
-`students` và `lecturers` đã có module/controller/service shell nhưng controller chưa expose endpoint CRUD riêng.
+`app.module.ts` import đầy đủ các module domain trên. `ActivityLogsModule` và `ExportLogsModule` là `@Global()` modules, cung cấp service nội bộ cho các module khác.
 
 ## 5. Prisma modules
 
@@ -140,27 +160,22 @@ backend/
 - `SkillCategory`
 - `Skill`
 
-### Assessment Question Bank
-
-- `AssessmentQuestion`
-- `AssessmentOption`
-
-### Assessment
-
-- `Assessment`
-- `AssessmentQuestionItem`
-- `AssessmentAnswer`
-- `AssessmentSkillResult`
-
 ### Career Configuration
 
 - `CareerGoal`
 - `Specialization`
 - `CareerRequiredSkill`
 
-`Specialization` tồn tại trong Prisma và được analysis/roadmap đọc nếu `student_profiles.specialization_id` có dữ liệu. Code hiện tại chưa có controller/UI riêng để CRUD specialization hoặc chọn specialization trong profile.
+### Assessment Question Bank & Runtime
 
-### Student Profile
+- `AssessmentQuestion`
+- `AssessmentOption`
+- `Assessment`
+- `AssessmentQuestionItem`
+- `AssessmentAnswer`
+- `AssessmentSkillResult`
+
+### Student Profile & Evidence
 
 - `StudentProfile`
 - `StudentSkill`
@@ -171,17 +186,20 @@ backend/
 - `Evidence`
 - `AdvisorReview`
 
-### Analysis, Recommendation & Roadmap
+### Analysis, Recommendation, Resource & Roadmap
 
 - `CompetencyAnalysisResult`
 - `CompetencyAnalysisDetail`
 - `RecommendationTemplate`
 - `StudentRecommendation`
+- `LearningResource`
+- `LearningResourceSkill`
+- `RecommendationTemplateResource`
+- `StudentRecommendationResource`
+- `StudentResourceProgress`
 - `DevelopmentRoadmap`
 - `RoadmapItem`
 - `StudentRoadmapProgress`
-
-`RecommendationTemplate` có trong schema và được `CompetencyAnalysisService` dùng để fallback template, nhưng hiện chưa có controller/UI quản trị template.
 
 ### Notification, Audit & Export
 
@@ -190,29 +208,34 @@ backend/
 - `ActivityLog`
 - `ExportLog`
 
-`ActivityLog` và `ExportLog` tồn tại trong schema nhưng hiện chưa có API export/audit log.
-
 ## 6. Backend modules
 
 | Module | Trạng thái | Chức năng trong code |
 |---|---|---|
 | `auth` | Có API | Login, refresh, logout, profile/me, change password |
-| `users` | Một phần | `GET /users`, `GET /users/me`; chưa có CRUD user |
-| `students` | Shell | Chưa expose endpoint |
-| `lecturers` | Shell | Chưa expose endpoint |
-| `advisor-assignments` | Có API | CRUD phân công cố vấn cho admin |
-| `skill-categories` | Có API | CRUD nhóm kỹ năng |
-| `skills` | Có API | CRUD kỹ năng, lọc theo type/status/category, đếm question bank |
-| `career-goals` | Có API | CRUD mục tiêu nghề nghiệp, quản lý required skills |
-| `assessment-questions` | Có API mới | Admin CRUD ngân hàng câu hỏi |
-| `assessments` | Có API mới | Student start/submit bài đánh giá |
-| `profiles` | Có API | Profile sinh viên, resources, avatar, evidence nested upload |
+| `users` | Có API một phần | Admin list/detail/update/deactivate/reactivate/reset-password; current user |
+| `students` | Có API | Admin CRUD/import/status, lecturer/student read theo quyền |
+| `lecturers` | Có API | Admin CRUD/status, lecturer read own detail |
+| `advisor-assignments` | Có API | Admin CRUD phân công cố vấn |
+| `skill-categories` | Có API | Admin CRUD nhóm kỹ năng |
+| `skills` | Có API | Admin CRUD; list cho cả 3 role, non-admin active-only |
+| `career-goals` | Có API | Admin CRUD career goal và career-level required skills; list cho cả 3 role |
+| `career-goals/specializations` | Có API | Admin CRUD specialization và specialization required skills; public active list theo career goal |
+| `learning-resources` | Có API | Admin CRUD/link skill, student update progress |
+| `recommendation-templates` | Có API | Admin CRUD template và link learning resources |
+| `assessment-questions` | Có API | Admin CRUD ngân hàng câu hỏi/options |
+| `assessments` | Có API | Student start/submit bài đánh giá |
+| `profiles` | Có API | Profile sinh viên, resources, avatar, nested evidence upload |
 | `evidences` | Có API | Upload, danh sách, queue pending, verify/reject |
-| `competency-analysis` | Có API | Phân tích năng lực, lịch sử, chi tiết |
+| `advisor-reviews` | Có API | Lecturer tạo review, student/admin/lecturer xem theo quyền |
+| `competency-analysis` | Có API | Phân tích năng lực, lịch sử, chi tiết; base path alias `competency` |
 | `recommendations` | Có API | Student xem/cập nhật trạng thái gợi ý |
-| `roadmaps` | Có API | Sinh roadmap, active roadmap, history, update item status |
-| `notifications` | Có API | Danh sách, unread count, mark read/all read |
+| `roadmaps` | Có API | Sinh roadmap, active roadmap, history, detail, update item status |
+| `notifications` | Có API | Danh sách, unread count, mark read/all read, scheduler |
 | `dashboard` | Có API | Dashboard theo Student/Lecturer/Admin |
+| `activity-logs` | Service nội bộ | Ghi log thao tác, chưa có controller đọc log |
+| `export-logs` | Service nội bộ | Ghi log export, chưa có controller export |
+| `common/upload` | Có API | Serve private profile uploads |
 
 ## 7. API thực tế
 
@@ -235,59 +258,91 @@ GET  /auth/me
 POST /auth/change-password
 ```
 
-### Users
+### Users, students, lecturers
 
 ```text
-GET /users/me
-GET /users
+GET   /users/me
+GET   /users
+GET   /users/:id
+PATCH /users/:id
+PATCH /users/:id/deactivate
+PATCH /users/:id/reactivate
+PATCH /users/:id/reset-password
+
+GET   /students
+POST  /students
+POST  /students/import
+GET   /students/:id
+PATCH /students/:id
+PATCH /students/:id/deactivate
+PATCH /students/:id/reactivate
+
+GET   /lecturers
+POST  /lecturers
+GET   /lecturers/:id
+PATCH /lecturers/:id
+PATCH /lecturers/:id/deactivate
+PATCH /lecturers/:id/reactivate
 ```
 
-### Catalog
+### Catalog and career configuration
 
 ```text
-GET    /skill-categories
-POST   /skill-categories
-GET    /skill-categories/:id
-PATCH  /skill-categories/:id
-DELETE /skill-categories/:id
+GET|POST /skill-categories
+GET|PATCH|DELETE /skill-categories/:id
 
-GET    /skills
-POST   /skills
-GET    /skills/:id
-PATCH  /skills/:id
-DELETE /skills/:id
+GET|POST /skills
+GET|PATCH|DELETE /skills/:id
+
+GET|POST /career-goals
+GET|PATCH|DELETE /career-goals/:id
+GET|POST /career-goals/:careerGoalId/required-skills
+PATCH|DELETE /career-goals/:careerGoalId/required-skills/:requiredSkillId
+
+GET /career-goals/:careerGoalId/specializations
+
+GET    /admin/specializations
+GET    /admin/specializations/:id
+GET    /admin/career-goals/:careerGoalId/specializations
+POST   /admin/specializations
+PATCH  /admin/specializations/:id
+DELETE /admin/specializations/:id
+GET    /admin/specializations/:specializationId/required-skills
+POST   /admin/specializations/:specializationId/required-skills
+PATCH  /admin/specializations/:specializationId/required-skills/:id
+DELETE /admin/specializations/:specializationId/required-skills/:id
 ```
 
-### Career goals
+### Resources, templates, assignments, reviews
 
 ```text
-GET    /career-goals
-POST   /career-goals
-GET    /career-goals/:id
-PATCH  /career-goals/:id
-DELETE /career-goals/:id
+GET|POST /learning-resources
+GET|PATCH|DELETE /learning-resources/:id
+PATCH /learning-resources/:id/progress
+POST /learning-resources/:id/skills
+PATCH|DELETE /learning-resources/:id/skills/:skillId
 
-GET    /career-goals/:careerGoalId/required-skills
-POST   /career-goals/:careerGoalId/required-skills
-PATCH  /career-goals/:careerGoalId/required-skills/:requiredSkillId
-DELETE /career-goals/:careerGoalId/required-skills/:requiredSkillId
+GET|POST /recommendation-templates
+GET|PATCH|DELETE /recommendation-templates/:id
+GET|POST /recommendation-templates/:id/resources
+DELETE /recommendation-templates/:id/resources/:resourceId
+
+GET|POST /advisor-assignments
+GET|PATCH|DELETE /advisor-assignments/:id
+
+POST /advisor-reviews/students/:studentId
+GET  /advisor-reviews/me
+GET  /advisor-reviews
+GET  /advisor-reviews/students/:studentId
+GET  /advisor-reviews/:id
 ```
 
-### Assessment question bank
+### Assessment
 
 ```text
-GET    /assessment-questions
-POST   /assessment-questions
-GET    /assessment-questions/:id
-PATCH  /assessment-questions/:id
-DELETE /assessment-questions/:id
-```
+GET|POST /assessment-questions
+GET|PATCH|DELETE /assessment-questions/:id
 
-`DELETE` không xóa vật lý mà chuyển `status` sang `INACTIVE`.
-
-### Assessments
-
-```text
 POST /assessments/start
 POST /assessments/:id/submit
 ```
@@ -299,40 +354,25 @@ GET   /profiles/me
 PATCH /profiles/me
 POST  /profiles/me/avatar
 
-GET    /profiles/me/skills
-POST   /profiles/me/skills
-GET    /profiles/me/skills/:id
-PATCH  /profiles/me/skills/:id
-DELETE /profiles/me/skills/:id
-POST   /profiles/me/skills/:id/evidences
+GET|POST /profiles/me/skills
+GET|PATCH|DELETE /profiles/me/skills/:id
+POST /profiles/me/skills/:id/evidences
 
-GET    /profiles/me/projects
-POST   /profiles/me/projects
-GET    /profiles/me/projects/:id
-PATCH  /profiles/me/projects/:id
-DELETE /profiles/me/projects/:id
-POST   /profiles/me/projects/:id/evidences
+GET|POST /profiles/me/projects
+GET|PATCH|DELETE /profiles/me/projects/:id
+POST /profiles/me/projects/:id/evidences
 
-GET    /profiles/me/certificates
-POST   /profiles/me/certificates
-GET    /profiles/me/certificates/:id
-PATCH  /profiles/me/certificates/:id
-DELETE /profiles/me/certificates/:id
-POST   /profiles/me/certificates/:id/evidences
+GET|POST /profiles/me/certificates
+GET|PATCH|DELETE /profiles/me/certificates/:id
+POST /profiles/me/certificates/:id/evidences
 
-GET    /profiles/me/activities
-POST   /profiles/me/activities
-GET    /profiles/me/activities/:id
-PATCH  /profiles/me/activities/:id
-DELETE /profiles/me/activities/:id
-POST   /profiles/me/activities/:id/evidences
+GET|POST /profiles/me/activities
+GET|PATCH|DELETE /profiles/me/activities/:id
+POST /profiles/me/activities/:id/evidences
 
-GET    /profiles/me/experiences
-POST   /profiles/me/experiences
-GET    /profiles/me/experiences/:id
-PATCH  /profiles/me/experiences/:id
-DELETE /profiles/me/experiences/:id
-POST   /profiles/me/experiences/:id/evidences
+GET|POST /profiles/me/experiences
+GET|PATCH|DELETE /profiles/me/experiences/:id
+POST /profiles/me/experiences/:id/evidences
 
 GET /profiles/:studentId
 GET /profiles/:studentId/skills
@@ -342,7 +382,7 @@ GET /profiles/:studentId/activities
 GET /profiles/:studentId/experiences
 ```
 
-### Evidences
+### Evidence, competency, recommendations, roadmaps
 
 ```text
 POST  /evidences
@@ -352,29 +392,20 @@ GET   /evidences
 GET   /evidences/:id
 PATCH /evidences/:id/verify
 PATCH /evidences/:id/reject
-```
 
-### Competency analysis
-
-Controller hỗ trợ hai alias base path: `/competency-analysis` và `/competency`.
-
-```text
 POST /competency/analyze/me
 GET  /competency/analysis-history/me
 GET  /competency/analysis-results/:id
 POST /competency/students/:studentId/analyze
-```
 
-### Recommendations
+POST /competency-analysis/analyze/me
+GET  /competency-analysis/analysis-history/me
+GET  /competency-analysis/analysis-results/:id
+POST /competency-analysis/students/:studentId/analyze
 
-```text
 GET   /recommendations/me
 PATCH /recommendations/:id/status
-```
 
-### Roadmaps
-
-```text
 POST  /roadmaps/generate/me
 GET   /roadmaps/me
 GET   /roadmaps/history/me
@@ -384,39 +415,22 @@ PATCH /roadmaps/items/:id/status
 POST  /roadmaps/students/:studentId/generate
 ```
 
-`GET /roadmaps/me` trả về active roadmap hoặc `null`, không trả paginated list.
-
-### Notifications
+### Notifications, uploads, dashboard
 
 ```text
 GET   /notifications/me
 GET   /notifications/me/unread-count
 PATCH /notifications/:id/read
 PATCH /notifications/read-all
-```
 
-### Dashboard
+GET /uploads/profiles/:filename
 
-```text
 GET /dashboard/student
 GET /dashboard/lecturer
 GET /dashboard/admin
 ```
 
-## 8. API chưa có trong code hiện tại
-
-Các phần sau có model hoặc placeholder UI/tài liệu cũ, nhưng chưa có controller/API hoàn chỉnh:
-
-- CRUD `students`.
-- CRUD `lecturers`.
-- CRUD/create/update/delete `users`.
-- CRUD `specializations`.
-- CRUD `recommendation-templates`.
-- API `advisor-reviews`.
-- API `exports` PDF/Excel.
-- API `activity-logs`.
-
-## 9. Luồng nghiệp vụ chính
+## 8. Luồng nghiệp vụ chính
 
 ### Assessment
 
@@ -424,44 +438,33 @@ Các phần sau có model hoặc placeholder UI/tài liệu cũ, nhưng chưa c�
 Admin
   -> tạo Skill/Skill Category
   -> tạo Career Goal
-  -> cấu hình Required Skills
+  -> cấu hình Required Skills và optional Specialization Required Skills
   -> tạo Assessment Questions theo Skill
 
 Student
-  -> chọn Career Goal trong Profile
+  -> chọn Career Goal/Specialization trong Profile
   -> POST /assessments/start
-  -> nhận danh sách câu hỏi theo required skills
-  -> submit tất cả answer
+  -> nhận câu hỏi theo required skills của profile context
+  -> submit tất cả answer trong 60 phút
   -> hệ thống chấm điểm, tạo AssessmentSkillResult
-  -> upsert StudentSkill.currentLevel
+  -> upsert StudentSkill.currentLevel nếu kết quả cao hơn level hiện có
 ```
 
-Quy tắc chọn câu hỏi:
+Assessment có tối đa 3 lần hoàn thành trong cùng career goal/specialization, cooldown 30 phút và tự cancel assessment đang làm đã hết hạn.
 
-- Lấy required skills `isRequired = true` theo career goal.
-- Mỗi skill chọn tối đa 6 câu.
-- Số câu mong muốn bằng `min(6, max(requiredLevel * 2, requiredLevel))`.
-- Chỉ chọn câu `ACTIVE` và `level <= requiredLevel`.
-- Ưu tiên phủ các level từ thấp đến cao, sau đó bổ sung câu còn thiếu.
-
-Quy tắc tính level:
-
-- Mỗi level cần đạt tối thiểu 60% số câu đúng.
-- Level hiện tại tăng liên tiếp từ level 1; nếu một level không đạt thì dừng.
-
-### Competency analysis and roadmap
+### Competency analysis, recommendation and roadmap
 
 ```text
-Student Profile + Student Skills
+Student Profile + Student Skills + Scoped Evidence
         |
         v
 POST /competency/analyze/me
         |
         v
-CompetencyAnalysisResult + Details
+CompetencyAnalysisResult(CURRENT) + Details
         |
         v
-StudentRecommendation
+StudentRecommendation + StudentRecommendationResource snapshots
         |
         v
 POST /roadmaps/generate/me
@@ -470,7 +473,7 @@ POST /roadmaps/generate/me
 DevelopmentRoadmap + RoadmapItems
 ```
 
-Roadmap được sinh từ kết quả phân tích mới nhất và recommendation thuộc chính kết quả đó. Khi sinh roadmap mới, active roadmap hiện tại được archive mặc định.
+Roadmap được sinh từ analysis `CURRENT` mới nhất và recommendation thuộc chính kết quả đó. Khi sinh roadmap mới, active roadmap hiện tại được archive mặc định. Resource progress có thể tự complete recommendation và roadmap item tương ứng.
 
 ### Evidence review
 
@@ -478,18 +481,36 @@ Roadmap được sinh từ kết quả phân tích mới nhất và recommendati
 Student uploads evidence
         |
         v
-Evidence PENDING + resource verification PENDING
+Evidence PENDING + resource verification status recalculated
         |
         v
 Lecturer/Admin verify or reject
         |
         v
-Evidence VERIFIED/REJECTED + resource status updated
+Evidence VERIFIED/REJECTED + resource status recalculated
 ```
 
 Lecturer chỉ được review evidence của sinh viên đang được phân công active.
 
-## 10. Chuẩn response và lỗi
+### Catalog invalidation
+
+```text
+Career/Skill catalog or required skill changes
+        |
+        v
+CatalogContextInvalidationService
+        |
+        v
+CURRENT analyses -> OBSOLETE
+actionable recommendations -> OBSOLETE
+ACTIVE roadmaps -> ARCHIVED
+IN_PROGRESS assessments -> CANCELLED
+profile match/risk analysis fields -> reset
+```
+
+Mục tiêu là không để analysis, recommendation, roadmap hoặc assessment cũ tiếp tục đại diện cho catalog đã đổi.
+
+## 9. Chuẩn response và lỗi
 
 Response thành công mặc định:
 
@@ -529,18 +550,18 @@ Response lỗi:
 }
 ```
 
-## 11. Phân quyền
+## 10. Phân quyền
 
 | Vai trò | Quyền chính |
 |---|---|
-| `STUDENT` | Quản lý profile/resource/evidence của chính mình, làm assessment, xem analysis/recommendation/roadmap/notification của mình |
-| `LECTURER` | Xem dashboard lecturer, xem profile/analysis/roadmap của sinh viên được phân công, duyệt evidence pending của sinh viên được phân công |
-| `ADMIN` | Quản lý catalog, career goals, question bank, advisor assignments, xem dashboard admin, duyệt evidence toàn hệ thống |
+| `STUDENT` | Quản lý profile/resource/evidence của chính mình, làm assessment, xem analysis/recommendation/roadmap/notification/advisor review của mình, cập nhật resource progress |
+| `LECTURER` | Xem dashboard lecturer, xem student/profile/analysis/roadmap/review trong phạm vi assignment active, duyệt evidence pending, tạo advisor review |
+| `ADMIN` | Quản lý user/student/lecturer/catalog/career/specialization/question/resource/template/assignment, xem dashboard admin, duyệt evidence toàn hệ thống, xem toàn bộ advisor reviews |
 
-## 12. Ghi chú hiện trạng codebase
+## 11. Ghi chú hiện trạng codebase
 
-- Dự án hiện chưa khai báo script test tự động trong `backend/package.json` hoặc `frontend/package.json`.
-- `frontend/src/features/student/WorkflowPages.tsx` đang gọi `GET /roadmaps/me` như paginated list, trong khi backend trả về object/null. Tài liệu API ở trên theo backend source of truth.
-- Frontend student profile/skills cần danh sách `career-goals` và `skills` để chọn option, nhưng backend hiện khóa các controller catalog này theo `ADMIN`; cần thêm read-only endpoint hoặc nới role cho list/detail phù hợp.
-- Một số trang frontend là placeholder để giữ sitemap theo vai trò.
-- Các model `Specialization`, `RecommendationTemplate`, `ActivityLog`, `ExportLog` đã có trong Prisma nhưng chưa có UI/API quản trị riêng.
+- Backend có script `npm test` dùng Node test runner + `tsx` cho `src/**/*.spec.ts`.
+- Frontend `npm run lint` đang trỏ `next lint`, trong Next.js 15 cần kiểm tra lại khi chạy thực tế.
+- Một số frontend type có giá trị legacy không tồn tại trong Prisma enum hiện tại, ví dụ `VERIFIED_WITH_PENDING_CHANGES`.
+- Chưa có controller đọc `ActivityLog` hoặc endpoint export PDF/Excel, dù schema/service đã có.
+- Nhiều API quản trị mới chưa có UI tương ứng trong frontend.

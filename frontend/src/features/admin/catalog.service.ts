@@ -27,8 +27,6 @@ export interface SkillCategoryPayload extends BaseCatalogPayload {
 export interface SkillPayload extends BaseCatalogPayload {
   categoryId?: string | null;
   type?: SkillType;
-  defaultRequiredLevel?: number;
-  defaultWeight?: number;
 }
 
 export type CareerGoalPayload = BaseCatalogPayload;
@@ -53,9 +51,9 @@ export interface SpecializationPayload {
 export const adminCatalogService = {
   listCatalog<TRecord extends CatalogRecord>(
     kind: CatalogKind,
-    params: { search?: string; limit?: number } = {},
+    params: { search?: string; page?: number; limit?: number } = {},
   ): Promise<Paginated<TRecord>> {
-    return getPage<TRecord>(`/${kind}`, { limit: 50, ...params });
+    return getPage<TRecord>(`/${kind}`, { limit: 10, ...params });
   },
   saveCatalog(kind: CatalogKind, payload: CatalogPayload, id?: string) {
     return id

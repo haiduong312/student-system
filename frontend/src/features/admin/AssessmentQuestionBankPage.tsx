@@ -47,6 +47,8 @@ const skillTypeOptions: Array<{ value: SkillType; label: string }> = [
   { value: 'CAREER_SPECIFIC', label: 'CAREER_SPECIFIC' },
 ];
 
+const DEFAULT_TABLE_PAGE_SIZE = 10;
+
 interface QuestionFilters {
   skillId?: string;
   skillType?: SkillType;
@@ -64,14 +66,23 @@ export function AssessmentQuestionBankPage() {
   const [filters, setFilters] = useState<QuestionFilters>({});
   const [editing, setEditing] = useState<AssessmentQuestion | null>(null);
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
   const [form] = Form.useForm<QuestionFormValues>();
   const questionType = Form.useWatch('questionType', form) as QuestionType | undefined;
 
+  const updateFilters = (nextFilters: Partial<QuestionFilters>) => {
+    setPage(1);
+    setFilters((current) => ({ ...current, ...nextFilters }));
+  };
+
   const questions = useQuery({
-    queryKey: ['assessment-questions', search, filters],
+    queryKey: ['assessment-questions', search, filters, page, pageSize],
     queryFn: () =>
       assessmentQuestionService.listQuestions({
         search,
+        page,
+        limit: pageSize,
         ...filters,
       }),
   });
@@ -167,7 +178,10 @@ export function AssessmentQuestionBankPage() {
     <QueryState loading={questions.isLoading} error={questions.error}>
       <PageHeader title="Assessment Question Bank" />
       <SearchBar
-        onSearch={setSearch}
+        onSearch={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
         onRefresh={() => questions.refetch()}
         extra={
           <>
@@ -179,7 +193,7 @@ export function AssessmentQuestionBankPage() {
               style={{ width: 220 }}
               value={filters.skillId}
               options={skillOptions}
-              onChange={(skillId) => setFilters((current) => ({ ...current, skillId }))}
+              onChange={(skillId) => updateFilters({ skillId })}
             />
             <Select
               allowClear
@@ -187,7 +201,7 @@ export function AssessmentQuestionBankPage() {
               style={{ width: 170 }}
               value={filters.skillType}
               options={skillTypeOptions}
-              onChange={(skillType) => setFilters((current) => ({ ...current, skillType }))}
+              onChange={(skillType) => updateFilters({ skillType })}
             />
             <Select
               allowClear
@@ -195,7 +209,7 @@ export function AssessmentQuestionBankPage() {
               style={{ width: 110 }}
               value={filters.level}
               options={[1, 2, 3].map((level) => ({ value: level, label: `Level ${level}` }))}
-              onChange={(level) => setFilters((current) => ({ ...current, level }))}
+              onChange={(level) => updateFilters({ level })}
             />
             <Select
               allowClear
@@ -203,7 +217,9 @@ export function AssessmentQuestionBankPage() {
               style={{ width: 170 }}
               value={filters.questionType}
               options={questionTypeOptions}
-              onChange={(nextType) => setFilters((current) => ({ ...current, questionType: nextType }))}
+              onChange={(questionTypeFilter) =>
+                updateFilters({ questionType: questionTypeFilter })
+              }
             />
             <Select
               allowClear
@@ -211,7 +227,7 @@ export function AssessmentQuestionBankPage() {
               style={{ width: 130 }}
               value={filters.status}
               options={questionStatusOptions}
-              onChange={(status) => setFilters((current) => ({ ...current, status }))}
+              onChange={(status) => updateFilters({ status })}
             />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>
               Add
@@ -222,7 +238,16 @@ export function AssessmentQuestionBankPage() {
       <Table<AssessmentQuestion>
         rowKey="id"
         dataSource={questions.data?.data ?? []}
-        pagination={{ pageSize: 10, total: questions.data?.meta.total }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: questions.data?.meta.total ?? 0,
+          showSizeChanger: true,
+        }}
+        onChange={(pagination) => {
+          setPage(pagination.current ?? 1);
+          setPageSize(pagination.pageSize ?? DEFAULT_TABLE_PAGE_SIZE);
+        }}
         columns={[
           { title: 'Question', dataIndex: 'questionText', ellipsis: true },
           { title: 'Skill', render: (_: unknown, row: AssessmentQuestion) => row.skill?.name ?? row.skillId },
