@@ -29,10 +29,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
 import type {
-  CareerGoal,
   ProjectStatus,
   Skill,
-  Specialization,
   StudentProfile,
   VerificationStatus,
 } from '@/types/domain';
@@ -199,7 +197,9 @@ export function StudentProfilePageView() {
 
   useEffect(() => {
     if (!selectedCareerGoalId) {
-      form.setFieldValue('specializationId', GENERAL_SPECIALIZATION_VALUE);
+      form.setFieldsValue({
+        specializationId: GENERAL_SPECIALIZATION_VALUE,
+      });
       return;
     }
     if (!specializations.data) {
@@ -217,7 +217,9 @@ export function StudentProfilePageView() {
         currentSpecializationId !== GENERAL_SPECIALIZATION_VALUE &&
         !hasCurrentSpecialization)
     ) {
-      form.setFieldValue('specializationId', GENERAL_SPECIALIZATION_VALUE);
+      form.setFieldsValue({
+        specializationId: GENERAL_SPECIALIZATION_VALUE,
+      });
     }
   }, [form, selectedCareerGoalId, specializationOptions, specializations.data]);
 
@@ -258,10 +260,9 @@ export function StudentProfilePageView() {
               allowClear
               loading={careers.isLoading}
               onChange={() =>
-                form.setFieldValue(
-                  'specializationId',
-                  GENERAL_SPECIALIZATION_VALUE,
-                )
+                form.setFieldsValue({
+                  specializationId: GENERAL_SPECIALIZATION_VALUE,
+                })
               }
               options={(careers.data?.data ?? []).map((goal) => ({
                 label: goal.name,

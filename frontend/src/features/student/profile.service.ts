@@ -2,7 +2,6 @@ import { api } from '@/lib/api';
 import { getData, getPage, patchData, postData } from '@/lib/request';
 import type {
   CareerGoal,
-  Paginated,
   Skill,
   Specialization,
   StudentProfile,

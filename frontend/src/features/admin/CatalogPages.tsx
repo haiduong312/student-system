@@ -31,7 +31,6 @@ import type {
   CatalogStatus,
   RoadmapPhase,
   Skill,
-  SkillCategory,
   SkillType,
   Specialization,
 } from '@/types/domain';

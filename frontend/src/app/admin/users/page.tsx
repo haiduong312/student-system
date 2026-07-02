@@ -1,10 +1,5 @@
-import { PlaceholderPage } from "@/components/ui/PlaceholderPage";
+import { UserManagementPage } from '@/features/admin/users/UserManagementPage';
 
 export default function AdminUsersPage() {
-    return (
-        <PlaceholderPage
-            title="Users"
-            description="Manage user accounts and access status."
-        />
-    );
+  return <UserManagementPage />;
 }

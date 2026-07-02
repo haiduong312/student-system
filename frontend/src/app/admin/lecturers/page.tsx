@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { LecturerManagementPage } from '@/features/admin/lecturers/LecturerManagementPage';
 
 export default function AdminLecturersPage() {
-  return <PlaceholderPage title="Lecturers" description="Manage lecturers and academic advisors." />;
+  return <LecturerManagementPage />;
 }

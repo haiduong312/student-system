@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { LecturerReviewsPage } from '@/features/lecturer/reviews/LecturerReviewsPage';
 
-export default function LecturerReviewsPage() {
-  return <PlaceholderPage title="Reviews" description="Advisor comments and suggestions." />;
+export default function LecturerReviewsRoute() {
+  return <LecturerReviewsPage />;
 }

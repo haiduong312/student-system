@@ -13,8 +13,6 @@ import type {
   AnalysisHistoryItem,
   AdminDashboard,
   DashboardMissingSkill,
-  LecturerDashboard,
-  StudentDashboard,
 } from '@/types/domain';
 import { ANALYSIS_CURRENT_STATUS } from '@/types/domain';
 import {

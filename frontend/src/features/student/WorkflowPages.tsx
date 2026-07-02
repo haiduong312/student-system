@@ -623,10 +623,11 @@ export function AnalysisView() {
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
+  const resetAnalysis = analyze.reset;
 
   useEffect(() => {
-    analyze.reset();
-  }, [context.careerGoalId, context.specializationId]);
+    resetAnalysis();
+  }, [context.careerGoalId, context.specializationId, resetAnalysis]);
 
   return (
     <QueryState

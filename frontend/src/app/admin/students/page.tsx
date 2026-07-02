@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { StudentManagementPage } from '@/features/admin/students/StudentManagementPage';
 
 export default function AdminStudentsPage() {
-  return <PlaceholderPage title="Students" description="Manage student records." />;
+  return <StudentManagementPage />;
 }
