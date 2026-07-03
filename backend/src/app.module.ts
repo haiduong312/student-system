@@ -21,6 +21,7 @@ import { CareerGoalsModule } from './career-goals/career-goals.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { EvidencesModule } from './evidences/evidences.module';
 import { ExportLogsModule } from './export-logs/export-logs.module';
+import { ExportsModule } from './exports/exports.module';
 import { CompetencyAnalysisModule } from './competency-analysis/competency-analysis.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { RecommendationTemplatesModule } from './recommendation-templates/recommendation-templates.module';
@@ -41,6 +42,7 @@ import { PrivateUploadsModule } from './common/upload/private-uploads.module';
     PrismaModule,
     ActivityLogsModule,
     ExportLogsModule,
+    ExportsModule,
     AuthModule,
     UsersModule,
     StudentsModule,

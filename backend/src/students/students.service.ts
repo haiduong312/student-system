@@ -10,6 +10,8 @@ import {
   AssignmentStatus,
   CatalogStatus,
   Prisma,
+  RoadmapStatus,
+  StudentRecommendationStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -58,6 +60,147 @@ type ImportValidationResult =
   | { valid: true; record: ImportStudentRecordDto }
   | { valid: false; reason: string };
 
+export interface StudentExportRecord {
+  studentCode: string;
+  className: string | null;
+  major: string | null;
+  academicYear: string | null;
+  user: {
+    fullName: string;
+    email: string;
+    status: UserStatus;
+  };
+}
+
+const STUDENT_PORTFOLIO_SNAPSHOT_SELECT = {
+  id: true,
+  studentCode: true,
+  className: true,
+  major: true,
+  academicYear: true,
+  phone: true,
+  dateOfBirth: true,
+  avatarUrl: true,
+  user: {
+    select: {
+      fullName: true,
+      email: true,
+      status: true,
+    },
+  },
+  profile: {
+    select: {
+      summary: true,
+      githubUrl: true,
+      linkedinUrl: true,
+      portfolioUrl: true,
+      completionPercent: true,
+      matchPercent: true,
+      riskScore: true,
+      lastAnalyzedAt: true,
+      careerGoal: { select: { name: true } },
+      specialization: { select: { name: true } },
+    },
+  },
+  skills: {
+    orderBy: [{ updatedAt: 'desc' as const }],
+    select: {
+      currentLevel: true,
+      description: true,
+      evidenceStatus: true,
+      verifiedAt: true,
+      skill: {
+        select: {
+          name: true,
+          type: true,
+          category: { select: { name: true } },
+        },
+      },
+    },
+  },
+  evidences: {
+    orderBy: [{ createdAt: 'desc' as const }],
+    select: {
+      relatedEntityType: true,
+      fileUrl: true,
+      evidenceUrl: true,
+      note: true,
+      status: true,
+      reviewedAt: true,
+      createdAt: true,
+    },
+  },
+  analysisResults: {
+    where: { status: AnalysisResultStatus.CURRENT },
+    orderBy: [{ analyzedAt: 'desc' as const }],
+    take: 1,
+    select: {
+      id: true,
+      completionPercent: true,
+      matchPercent: true,
+      riskScore: true,
+      matchLevel: true,
+      status: true,
+      analyzedAt: true,
+      careerGoal: { select: { name: true } },
+      specialization: { select: { name: true } },
+      recommendations: {
+        where: {
+          status: {
+            notIn: [
+              StudentRecommendationStatus.DISMISSED,
+              StudentRecommendationStatus.OBSOLETE,
+            ],
+          },
+        },
+        orderBy: [{ priorityScore: 'desc' as const }],
+        select: {
+          title: true,
+          description: true,
+          reason: true,
+          roadmapPhase: true,
+          priorityScore: true,
+          status: true,
+          skill: { select: { name: true } },
+        },
+      },
+    },
+  },
+  roadmaps: {
+    where: {
+      status: { in: [RoadmapStatus.ACTIVE, RoadmapStatus.COMPLETED] },
+    },
+    orderBy: [{ version: 'desc' as const }, { createdAt: 'desc' as const }],
+    take: 1,
+    select: {
+      title: true,
+      description: true,
+      version: true,
+      progressPercent: true,
+      status: true,
+      createdAt: true,
+      careerGoal: { select: { name: true } },
+      specialization: { select: { name: true } },
+      items: {
+        orderBy: [{ orderIndex: 'asc' as const }],
+        select: {
+          title: true,
+          description: true,
+          itemType: true,
+          roadmapPhase: true,
+          deadline: true,
+          status: true,
+          skill: { select: { name: true } },
+        },
+      },
+    },
+  },
+} satisfies Prisma.StudentSelect;
+
+export type StudentPortfolioSnapshot = Prisma.StudentGetPayload<{
+  select: typeof STUDENT_PORTFOLIO_SNAPSHOT_SELECT;
+}>;
+
 @Injectable()
 export class StudentsService {
   constructor(
@@ -88,6 +231,57 @@ export class StudentsService {
       page,
       limit,
     );
+  }
+
+  async findAllForExport(
+    user: AuthenticatedUser,
+    query: StudentQueryDto,
+  ): Promise<StudentExportRecord[]> {
+    const where = await this.buildStudentWhere(user, query);
+    const orderBy = this.buildStudentOrderBy(query);
+
+    return this.prisma.student.findMany({
+      where,
+      orderBy,
+      select: {
+        studentCode: true,
+        className: true,
+        major: true,
+        academicYear: true,
+        user: {
+          select: {
+            fullName: true,
+            email: true,
+            status: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findPortfolioForExport(
+    user: AuthenticatedUser,
+    requestedStudentId?: string,
+  ): Promise<StudentPortfolioSnapshot> {
+    const studentId = await this.resolvePortfolioStudentId(
+      user,
+      requestedStudentId,
+    );
+    await this.studentAccessPolicy.assertCanAccessStudent(
+      user,
+      studentId,
+      'You do not have permission to export this student portfolio',
+    );
+
+    const snapshot = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: STUDENT_PORTFOLIO_SNAPSHOT_SELECT,
+    });
+    if (!snapshot) {
+      throw new NotFoundException('Student not found');
+    }
+
+    return snapshot;
   }
 
   async create(dto: CreateStudentDto, actorUserId?: string) {
@@ -630,6 +824,42 @@ export class StudentsService {
     if (!exists) {
       throw new NotFoundException('Student not found');
     }
+  }
+
+  private async resolvePortfolioStudentId(
+    user: AuthenticatedUser,
+    requestedStudentId?: string,
+  ) {
+    if (user.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      if (!student) {
+        throw new ForbiddenException('Current user is not a student');
+      }
+      if (requestedStudentId && requestedStudentId !== student.id) {
+        throw new ForbiddenException(
+          'Students can only export their own portfolio',
+        );
+      }
+
+      return student.id;
+    }
+
+    if (user.role === UserRole.LECTURER || user.role === UserRole.ADMIN) {
+      if (!requestedStudentId) {
+        throw new BadRequestException(
+          'studentId is required for lecturer and admin portfolio exports',
+        );
+      }
+
+      return requestedStudentId;
+    }
+
+    throw new ForbiddenException(
+      'You do not have permission to export student portfolios',
+    );
   }
 
   private async getUserIdByStudentId(id: string) {

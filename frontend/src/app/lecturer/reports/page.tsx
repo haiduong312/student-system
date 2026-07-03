@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { LecturerReportsPage } from '@/features/exports/LecturerReportsPage';
 
-export default function LecturerReportsPage() {
-  return <PlaceholderPage title="Reports" description="Reports for assigned students." />;
+export default function LecturerReportsRoute() {
+  return <LecturerReportsPage />;
 }

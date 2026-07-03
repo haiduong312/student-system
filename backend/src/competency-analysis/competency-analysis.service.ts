@@ -7,6 +7,7 @@ import {
 import {
     AnalysisResultStatus,
     AnalysisSkillStatus,
+    AssignmentStatus,
     CatalogStatus,
     EvidenceEntityType,
     EvidenceStatus,
@@ -18,6 +19,7 @@ import {
     SkillLevel,
     StudentRecommendationStatus,
     TemplateStatus,
+    UserRole,
 } from "@prisma/client";
 import { ActivityLogsService } from "../activity-logs/activity-logs.service";
 import { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface";
@@ -29,6 +31,7 @@ import { StudentAccessPolicyService } from "../common/student-access/student-acc
 import { PrismaService } from "../prisma/prisma.service";
 import { AnalysisHistoryQueryDto } from "./dto/analysis-query.dto";
 import { AnalyzeCompetencyDto } from "./dto/analyze-competency.dto";
+import { CompetencyAnalysisExportQueryDto } from "./dto/competency-analysis-export-query.dto";
 import {
     AnalyzedSkillResponseDto,
     CompetencyAnalysisResponseDto,
@@ -36,6 +39,70 @@ import {
 } from "./dto/competency-analysis-response.dto";
 import { AnalysisDetailOutput } from "./domain/competency-analysis.types";
 import { CompetencyAnalysisEngine } from "./domain/competency-analysis.engine";
+
+const COMPETENCY_EXPORT_SELECT = {
+    id: true,
+    studentId: true,
+    careerGoalId: true,
+    specializationId: true,
+    completionPercent: true,
+    matchPercent: true,
+    riskScore: true,
+    matchLevel: true,
+    status: true,
+    analyzedAt: true,
+    student: {
+        select: {
+            studentCode: true,
+            className: true,
+            major: true,
+            user: { select: { fullName: true, email: true } },
+        },
+    },
+    careerGoal: { select: { name: true } },
+    specialization: { select: { name: true } },
+    details: {
+        orderBy: [{ priorityScore: "desc" as const }],
+        select: {
+            id: true,
+            skillId: true,
+            currentLevel: true,
+            requiredLevel: true,
+            gap: true,
+            weight: true,
+            achievedScore: true,
+            priorityScore: true,
+            status: true,
+            skill: {
+                select: {
+                    name: true,
+                    category: { select: { name: true } },
+                },
+            },
+        },
+    },
+    recommendations: {
+        orderBy: [{ priorityScore: "desc" as const }],
+        select: {
+            id: true,
+            skillId: true,
+            roadmapPhase: true,
+            title: true,
+            description: true,
+            reason: true,
+            priorityScore: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            skill: { select: { name: true } },
+        },
+    },
+} satisfies Prisma.CompetencyAnalysisResultSelect;
+
+export type CompetencyAnalysisExportRecord =
+    Prisma.CompetencyAnalysisResultGetPayload<{
+        select: typeof COMPETENCY_EXPORT_SELECT;
+    }>;
 
 type RecommendationSource =
     | "SPECIALIZATION_CAREER_SKILL_TEMPLATE"
@@ -209,6 +276,32 @@ export class CompetencyAnalysisService {
         ]);
 
         return buildPaginatedResult(data, total, page, limit);
+    }
+
+    async findForExport(
+        user: AuthenticatedUser,
+        query: CompetencyAnalysisExportQueryDto =
+            new CompetencyAnalysisExportQueryDto(),
+    ): Promise<CompetencyAnalysisExportRecord[]> {
+        const analyzedAt = this.buildExportDateFilter(query);
+        const scopeWhere = await this.buildExportScopeWhere(user, query.studentId);
+        const where: Prisma.CompetencyAnalysisResultWhereInput = {
+            ...scopeWhere,
+            ...(query.careerGoalId
+                ? { careerGoalId: query.careerGoalId }
+                : {}),
+            ...(query.specializationId
+                ? { specializationId: query.specializationId }
+                : {}),
+            ...(query.status ? { status: query.status } : {}),
+            ...(analyzedAt ? { analyzedAt } : {}),
+        };
+
+        return this.prisma.competencyAnalysisResult.findMany({
+            where,
+            orderBy: { analyzedAt: "desc" },
+            select: COMPETENCY_EXPORT_SELECT,
+        });
     }
 
     async getResult(user: AuthenticatedUser, id: string) {
@@ -883,6 +976,105 @@ export class CompetencyAnalysisService {
         }
 
         return student.id;
+    }
+
+    private async buildExportScopeWhere(
+        user: AuthenticatedUser,
+        requestedStudentId?: string,
+    ): Promise<Prisma.CompetencyAnalysisResultWhereInput> {
+        if (user.role === UserRole.STUDENT) {
+            const studentId = await this.getStudentIdByUserId(user.id);
+            if (requestedStudentId && requestedStudentId !== studentId) {
+                throw new ForbiddenException(
+                    "Students can only export their own competency analyses",
+                );
+            }
+
+            return { studentId };
+        }
+
+        if (user.role === UserRole.LECTURER) {
+            const lecturer = await this.prisma.lecturer.findUnique({
+                where: { userId: user.id },
+                select: { id: true },
+            });
+            if (!lecturer) {
+                throw new ForbiddenException(
+                    "Lecturer profile was not found for current user",
+                );
+            }
+            if (requestedStudentId) {
+                await this.studentAccessPolicy.assertCanAccessStudent(
+                    user,
+                    requestedStudentId,
+                    "Lecturers can only export competency analyses for actively assigned students",
+                );
+                return { studentId: requestedStudentId };
+            }
+
+            return {
+                student: {
+                    advisorAssignments: {
+                        some: {
+                            lecturerId: lecturer.id,
+                            status: AssignmentStatus.ACTIVE,
+                        },
+                    },
+                },
+            };
+        }
+
+        if (user.role === UserRole.ADMIN) {
+            if (requestedStudentId) {
+                await this.studentAccessPolicy.assertCanAccessStudent(
+                    user,
+                    requestedStudentId,
+                );
+                return { studentId: requestedStudentId };
+            }
+
+            return {};
+        }
+
+        throw new ForbiddenException(
+            "You do not have permission to export competency analyses",
+        );
+    }
+
+    private buildExportDateFilter(
+        query: CompetencyAnalysisExportQueryDto,
+    ): Prisma.DateTimeFilter | undefined {
+        const fromDate = query.fromDate
+            ? this.parseExportDate(query.fromDate, false)
+            : undefined;
+        const toDate = query.toDate
+            ? this.parseExportDate(query.toDate, true)
+            : undefined;
+        if (fromDate && toDate && fromDate > toDate) {
+            throw new BadRequestException(
+                "fromDate must be earlier than or equal to toDate",
+            );
+        }
+        if (!fromDate && !toDate) {
+            return undefined;
+        }
+
+        return {
+            ...(fromDate ? { gte: fromDate } : {}),
+            ...(toDate ? { lte: toDate } : {}),
+        };
+    }
+
+    private parseExportDate(value: string, inclusiveEndOfDay: boolean) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            throw new BadRequestException("Invalid export date filter");
+        }
+        if (inclusiveEndOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            date.setUTCHours(23, 59, 59, 999);
+        }
+
+        return date;
     }
 
 }

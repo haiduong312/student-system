@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { AdminReportsPage } from '@/features/exports/AdminReportsPage';
 
-export default function AdminReportsPage() {
-  return <PlaceholderPage title="Reports" description="Export and inspect system reports." />;
+export default function AdminReportsRoute() {
+  return <AdminReportsPage />;
 }

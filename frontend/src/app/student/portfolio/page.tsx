@@ -1,5 +1,5 @@
-import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
+import { StudentPortfolioPage } from '@/features/exports/StudentPortfolioPage';
 
-export default function StudentPortfolioPage() {
-  return <PlaceholderPage title="Portfolio" description="Prepare and export your portfolio." />;
+export default function StudentPortfolioRoute() {
+  return <StudentPortfolioPage />;
 }
