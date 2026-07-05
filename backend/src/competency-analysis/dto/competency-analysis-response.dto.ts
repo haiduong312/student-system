@@ -96,6 +96,12 @@ export class CompetencyAnalysisResponseDto {
   @ApiProperty()
   matchPercent: number;
 
+  @ApiProperty()
+  completionPercent: number;
+
+  @ApiProperty()
+  riskScore: number;
+
   @ApiProperty({ enum: MatchLevel })
   matchLevel: MatchLevel;
 

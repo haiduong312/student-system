@@ -551,7 +551,9 @@ export interface CompetencyAnalysis {
   analysisResultId: string;
   careerGoal: string;
   specialization?: string | null;
+  completionPercent: number;
   matchPercent: number;
+  riskScore: number;
   matchLevel: MatchLevel;
   totalWeight: number;
   totalSkillScore: number;

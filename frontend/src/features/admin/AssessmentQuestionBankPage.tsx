@@ -186,6 +186,7 @@ export function AssessmentQuestionBankPage() {
         extra={
           <>
             <Select
+              aria-label="Skill filter"
               allowClear
               showSearch
               optionFilterProp="label"
@@ -196,6 +197,7 @@ export function AssessmentQuestionBankPage() {
               onChange={(skillId) => updateFilters({ skillId })}
             />
             <Select
+              aria-label="Skill Type filter"
               allowClear
               placeholder="Skill Type"
               style={{ width: 170 }}
@@ -204,6 +206,7 @@ export function AssessmentQuestionBankPage() {
               onChange={(skillType) => updateFilters({ skillType })}
             />
             <Select
+              aria-label="Level filter"
               allowClear
               placeholder="Level"
               style={{ width: 110 }}
@@ -212,6 +215,7 @@ export function AssessmentQuestionBankPage() {
               onChange={(level) => updateFilters({ level })}
             />
             <Select
+              aria-label="Question Type filter"
               allowClear
               placeholder="Type"
               style={{ width: 170 }}
@@ -222,6 +226,7 @@ export function AssessmentQuestionBankPage() {
               }
             />
             <Select
+              aria-label="Status filter"
               allowClear
               placeholder="Status"
               style={{ width: 130 }}
@@ -329,7 +334,9 @@ export function AssessmentQuestionBankPage() {
                       valuePropName="checked"
                       initialValue={false}
                     >
-                      <Checkbox>Correct</Checkbox>
+                      <Checkbox aria-label={`Option ${index + 1} correct`}>
+                        Correct
+                      </Checkbox>
                     </Form.Item>
                     <Form.Item
                       {...field}

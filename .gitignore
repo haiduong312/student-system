@@ -28,6 +28,10 @@ playwright-report/
 .env.*
 !.env.example
 !.env.sample
+!frontend/.env.e2e.example
+
+# Playwright authentication state contains session credentials
+frontend/playwright/.auth/
 
 # Logs
 *.log
@@ -55,4 +59,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-

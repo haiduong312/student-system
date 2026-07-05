@@ -9,7 +9,6 @@ import {
     Descriptions,
     Empty,
     List,
-    Modal,
     Progress,
     Radio,
     Row,
@@ -42,7 +41,7 @@ import {
 } from "./assessment.service";
 
 export function StudentAssessmentPage() {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const router = useRouter();
     const queryClient = useQueryClient();
     const [started, setStarted] = useState<AssessmentStartResponse | null>(
@@ -170,7 +169,7 @@ export function StudentAssessmentPage() {
                             return;
                         }
 
-                        Modal.confirm({
+                        modal.confirm({
                             title: "Submit assessment?",
                             content:
                                 "Your answers will be graded and used to update your skill levels.",
@@ -417,6 +416,8 @@ function QuestionCard({
 }) {
     return (
         <Card
+            role="group"
+            aria-label={`Question ${index + 1}: ${question.questionText}`}
             title={
                 <Space wrap>
                     <span>Question {index + 1}</span>

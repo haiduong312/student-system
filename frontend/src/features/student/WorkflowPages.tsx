@@ -8,7 +8,6 @@ import {
   Descriptions,
   Input,
   List,
-  Modal,
   Progress,
   Select,
   Space,
@@ -117,7 +116,7 @@ export function StudentEvidencesView() {
 }
 
 export function LecturerEvidenceReviewView() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: studentQueryKeys.evidencesPending,
@@ -148,7 +147,7 @@ export function LecturerEvidenceReviewView() {
     }
 
     let currentLevel: number | undefined;
-    Modal.confirm({
+    modal.confirm({
       title: 'Verify skill evidence',
       content: (
         <Select<number>
@@ -203,7 +202,7 @@ export function LecturerEvidenceReviewView() {
                   loading={reject.isPending}
                   onClick={() => {
                     let reviewerNote = '';
-                    Modal.confirm({
+                    modal.confirm({
                       title: 'Reject evidence',
                       content: (
                         <Input.TextArea
@@ -346,7 +345,7 @@ export function RecommendationsView() {
 }
 
 export function RoadmapView() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const context = useCurrentProfileContext();
   const roadmap = useQuery({
@@ -419,7 +418,7 @@ export function RoadmapView() {
     }
 
     if (activeRoadmap) {
-      Modal.confirm({
+      modal.confirm({
         title: 'Generate a new roadmap?',
         content: 'The current active roadmap will be archived.',
         okText: 'Generate',
@@ -441,7 +440,7 @@ export function RoadmapView() {
       status === ROADMAP_ITEM_IN_PROGRESS_STATUS
     ) {
       let note = '';
-      Modal.confirm({
+      modal.confirm({
         title: 'Move item back to in progress?',
         content: (
           <Input.TextArea
@@ -478,6 +477,7 @@ export function RoadmapView() {
       <PageHeader title="Roadmap" />
       <Space style={{ marginBottom: 16 }}>
         <Button
+          aria-label="Generate roadmap from toolbar"
           type="primary"
           onClick={handleGenerate}
           loading={generate.isPending}
@@ -520,7 +520,12 @@ export function RoadmapView() {
       ) : (
         <Card>
           <EmptyState description="No active roadmap.">
-            <Button type="primary" loading={generate.isPending} onClick={handleGenerate}>
+            <Button
+              aria-label="Generate roadmap from empty state"
+              type="primary"
+              loading={generate.isPending}
+              onClick={handleGenerate}
+            >
               Generate Roadmap
             </Button>
           </EmptyState>
@@ -733,7 +738,11 @@ function AnalysisResultDetails({
         <Descriptions.Item label="Specialization">
           {analysis.specialization ?? 'General'}
         </Descriptions.Item>
+        <Descriptions.Item label="Completion">
+          {analysis.completionPercent}%
+        </Descriptions.Item>
         <Descriptions.Item label="Match">{analysis.matchPercent}%</Descriptions.Item>
+        <Descriptions.Item label="Risk Score">{analysis.riskScore}</Descriptions.Item>
         <Descriptions.Item label="Level">{analysis.matchLevel}</Descriptions.Item>
       </Descriptions>
       <Table<AnalysisSkill>
@@ -767,9 +776,13 @@ function AnalysisResultDetailView({ analysis }: { analysis: AnalysisResultDetail
         <Descriptions.Item label="Specialization">
           {analysis.specialization?.name ?? 'General'}
         </Descriptions.Item>
+        <Descriptions.Item label="Completion">
+          {Number(analysis.completionPercent)}%
+        </Descriptions.Item>
         <Descriptions.Item label="Match">
           {Number(analysis.matchPercent)}%
         </Descriptions.Item>
+        <Descriptions.Item label="Risk Score">{analysis.riskScore}</Descriptions.Item>
         <Descriptions.Item label="Level">{analysis.matchLevel}</Descriptions.Item>
         <Descriptions.Item label="Analyzed At">
           {formatDateTime(analysis.analyzedAt)}
@@ -904,6 +917,7 @@ function RecommendationList({
         <List.Item
           actions={[
             <Select<StudentRecommendationStatus>
+              aria-label={`Recommendation status for ${item.title}`}
               key="status"
               value={item.status}
               loading={updatingStatus}
@@ -984,6 +998,7 @@ function RoadmapTimeline({
         <List.Item
           actions={[
             <Select<RoadmapItemStatus>
+              aria-label={`Roadmap item status for ${item.title}`}
               key="status"
               value={item.status}
               loading={updatingItem}
@@ -1055,6 +1070,7 @@ function LearningResourceList({
         <List.Item
           actions={[
             <Select<ResourceProgressStatus>
+              aria-label={`Resource progress for ${resource.title}`}
               key="progress"
               value={resource.progressStatus}
               loading={updating}

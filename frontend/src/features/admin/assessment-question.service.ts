@@ -42,7 +42,7 @@ export const assessmentQuestionService = {
     });
   },
   listSkills() {
-    return getPage<Skill>('/skills', { limit: 200, status: 'ACTIVE' });
+    return getPage<Skill>('/skills', { limit: 100, status: 'ACTIVE' });
   },
   saveQuestion(payload: AssessmentQuestionPayload, id?: string) {
     return id

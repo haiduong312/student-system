@@ -70,7 +70,7 @@ export const adminCatalogService = {
     });
   },
   listSkills(params: Record<string, unknown> = {}) {
-    return getPage<Skill>('/skills', { limit: 200, ...params });
+    return getPage<Skill>('/skills', { limit: 100, ...params });
   },
   listRequiredSkills(endpoint: string, limit = 100) {
     return getPage<CareerRequiredSkill>(endpoint, { limit });

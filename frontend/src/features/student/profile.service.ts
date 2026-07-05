@@ -51,6 +51,13 @@ export const profileService = {
   createProfileResource<TResource, TPayload extends object>(endpoint: string, payload: TPayload) {
     return postData<TResource, TPayload>(endpoint, payload);
   },
+  updateProfileResource<TResource, TPayload extends object>(
+    endpoint: string,
+    id: string,
+    payload: TPayload,
+  ) {
+    return patchData<TResource, TPayload>(`${endpoint}/${id}`, payload);
+  },
   async uploadProfileEvidence(endpoint: string, payload: EvidenceUploadPayload) {
     const formData = new FormData();
     if (payload.file) {

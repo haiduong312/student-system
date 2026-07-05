@@ -403,7 +403,7 @@ function RequiredSkillsManager({
     queryKey: ['skills', 'career-specific-options'],
     queryFn: () =>
       adminCatalogService.listSkills({
-        limit: 200,
+        limit: 100,
         status: 'ACTIVE',
         type: 'CAREER_SPECIFIC',
       }),

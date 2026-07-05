@@ -67,6 +67,7 @@ interface StudentSkillResource extends StudentResourceBase {
   skillId: string;
   skill?: Skill | null;
   currentLevel: number;
+  description?: string | null;
   evidenceStatus: VerificationStatus;
 }
 
@@ -342,6 +343,7 @@ export function StudentSkillsPageView() {
   return (
     <StudentResourcePage<StudentSkillResource, SkillFormValues>
       title="Skills"
+      itemLabel="Skill"
       endpoint="/profiles/me/skills"
       fields={[
         <Form.Item
@@ -361,6 +363,11 @@ export function StudentSkillsPageView() {
           <Input.TextArea rows={3} />
         </Form.Item>,
       ]}
+      editFields={[
+        <Form.Item key="description" name="description" label="Description">
+          <Input.TextArea rows={3} />
+        </Form.Item>,
+      ]}
       columns={[
         {
           title: 'Skill',
@@ -376,6 +383,7 @@ export function StudentProjectsPageView() {
   return (
     <StudentResourcePage<StudentProjectResource, ProjectFormValues>
       title="Projects"
+      itemLabel="Project"
       endpoint="/profiles/me/projects"
       fields={projectFields()}
       columns={[
@@ -390,6 +398,7 @@ export function StudentCertificatesPageView() {
   return (
     <StudentResourcePage<StudentCertificateResource, CertificateFormValues>
       title="Certificates"
+      itemLabel="Certificate"
       endpoint="/profiles/me/certificates"
       fields={certificateFields()}
       columns={[
@@ -404,6 +413,7 @@ export function StudentActivitiesPageView() {
   return (
     <StudentResourcePage<StudentActivityResource, ActivityFormValues>
       title="Activities"
+      itemLabel="Activity"
       endpoint="/profiles/me/activities"
       fields={activityFields()}
       columns={[
@@ -418,6 +428,7 @@ export function StudentExperiencesPageView() {
   return (
     <StudentResourcePage<StudentExperienceResource, ExperienceFormValues>
       title="Experiences"
+      itemLabel="Experience"
       endpoint="/profiles/me/experiences"
       fields={experienceFields()}
       columns={[
@@ -430,17 +441,23 @@ export function StudentExperiencesPageView() {
 
 function StudentResourcePage<TResource extends StudentResourceBase, TFormValues extends object>({
   title,
+  itemLabel,
   endpoint,
   fields,
+  editFields = fields,
   columns,
 }: {
   title: string;
+  itemLabel: string;
   endpoint: string;
   fields: ReactNode[];
+  editFields?: ReactNode[];
   columns: TableColumnsType<TResource>;
 }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const [editForm] = Form.useForm<TFormValues>();
+  const [editing, setEditing] = useState<TResource | null>(null);
   const data = useQuery({
     queryKey: [endpoint],
     queryFn: () => profileService.listProfileResources<TResource>(endpoint),
@@ -455,12 +472,38 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
+  const update = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: TFormValues }) =>
+      profileService.updateProfileResource<TResource, TFormValues>(
+        endpoint,
+        id,
+        values,
+      ),
+    onSuccess: () => {
+      message.success('Updated');
+      setEditing(null);
+      editForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAfterResourceChange(queryClient);
+    },
+    onError: (error) => message.error(getApiErrorMessage(error)),
+  });
+
+  useEffect(() => {
+    if (editing) {
+      editForm.setFieldsValue(editing as unknown as TFormValues);
+    }
+  }, [editForm, editing]);
 
   return (
     <QueryState loading={data.isLoading} error={data.error}>
       <PageHeader title={title} />
       <Card style={{ marginBottom: 16 }}>
-        <Form<TFormValues> layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form<TFormValues>
+          name={`${itemLabel.toLowerCase()}-create`}
+          layout="vertical"
+          onFinish={(values) => save.mutate(values)}
+        >
           {fields}
           <Button type="primary" htmlType="submit" loading={save.isPending}>
             Add
@@ -478,6 +521,12 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
             render: (_value, row) => tag(row.verificationStatus ?? row.evidenceStatus),
           },
           {
+            title: 'Actions',
+            render: (_value, row) => (
+              <Button onClick={() => setEditing(row)}>Edit</Button>
+            ),
+          },
+          {
             title: 'Evidence',
             render: (_value, row) => (
               <EvidenceUpload
@@ -492,6 +541,28 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
           },
         ]}
       />
+      <Modal
+        title={`Edit ${itemLabel}`}
+        open={Boolean(editing)}
+        okText="Save"
+        confirmLoading={update.isPending}
+        onCancel={() => {
+          setEditing(null);
+          editForm.resetFields();
+        }}
+        onOk={() => editForm.submit()}
+      >
+        <Form<TFormValues>
+          name={`${itemLabel.toLowerCase()}-edit`}
+          form={editForm}
+          layout="vertical"
+          onFinish={(values) => {
+            if (editing) update.mutate({ id: editing.id, values });
+          }}
+        >
+          {editFields}
+        </Form>
+      </Modal>
     </QueryState>
   );
 }
