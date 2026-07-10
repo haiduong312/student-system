@@ -71,7 +71,7 @@ export class StudentResourcePage extends PageObject {
     const dialog = this.dialog('Upload evidence');
     await dialog.getByPlaceholder('https://...').fill(evidenceUrl);
     await dialog.getByRole('textbox', { name: 'Note' }).fill(note);
-    await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
+    await dialog.getByTestId('evidence-submit-button').click();
     await this.expectMessage('Evidence uploaded and pending review');
   }
 

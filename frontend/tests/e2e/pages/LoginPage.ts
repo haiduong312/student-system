@@ -11,13 +11,10 @@ export class LoginPage extends PageObject {
   constructor(page: Page) {
     super(page);
     this.title = this.heading('Student Competency Profile');
-    // Form.Item does not currently associate these labels with their controls.
-    this.emailInput = page.locator('input[autocomplete="email"]');
-    this.passwordInput = page.locator(
-      'input[autocomplete="current-password"]',
-    );
-    this.submitButton = page.getByRole('button', { name: 'Login' });
-    this.loginError = page.getByText('Login failed', { exact: true });
+    this.emailInput = page.getByTestId('login-email-input');
+    this.passwordInput = page.getByTestId('login-password-input');
+    this.submitButton = page.getByTestId('login-submit-button');
+    this.loginError = page.getByTestId('login-error-alert');
   }
 
   async goto() {

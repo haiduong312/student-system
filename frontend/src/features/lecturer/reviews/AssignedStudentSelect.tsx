@@ -37,6 +37,7 @@ export function AssignedStudentSelect({
         allowClear
         showSearch
         filterOption={false}
+        data-testid="advisor-review-student-select"
         value={student?.id}
         placeholder="Search and select an assigned student"
         style={{ maxWidth: 560, width: '100%' }}

@@ -915,6 +915,7 @@ function RecommendationList({
       dataSource={recommendations}
       renderItem={(item) => (
         <List.Item
+          data-testid="recommendation-card"
           actions={[
             <Select<StudentRecommendationStatus>
               aria-label={`Recommendation status for ${item.title}`}
@@ -996,6 +997,7 @@ function RoadmapTimeline({
       style={{ marginTop: 16 }}
       renderItem={(item) => (
         <List.Item
+          data-testid="roadmap-item"
           actions={[
             <Select<RoadmapItemStatus>
               aria-label={`Roadmap item status for ${item.title}`}

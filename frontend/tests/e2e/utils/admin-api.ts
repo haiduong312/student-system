@@ -48,6 +48,63 @@ export interface ApiCareerRequiredSkill {
   skill?: ApiSkill;
 }
 
+export interface ApiUserAccount {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'ADMIN' | 'STUDENT' | 'LECTURER';
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface ApiStudent {
+  id: string;
+  userId: string;
+  studentCode: string;
+  className?: string | null;
+  major?: string | null;
+  academicYear?: string | null;
+  user: ApiUserAccount;
+}
+
+export interface ApiLecturer {
+  id: string;
+  userId: string;
+  lecturerCode: string;
+  department?: string | null;
+  academicTitle?: string | null;
+  user: ApiUserAccount;
+}
+
+export interface ApiAdvisorAssignment {
+  id: string;
+  lecturerId: string;
+  studentId: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  lecturer: ApiLecturer;
+  student: ApiStudent;
+}
+
+export interface ApiAdvisorAssignmentSnapshot {
+  assignment: ApiAdvisorAssignment;
+  created: boolean;
+  previousStatus: ApiAdvisorAssignment['status'] | null;
+}
+
+export interface ApiCreateStudentPayload {
+  email: string;
+  fullName: string;
+  password: string;
+  studentCode: string;
+  className?: string | null;
+  major?: string | null;
+  academicYear?: string | null;
+  phone?: string | null;
+  summary?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+}
+
 export class AdminApiClient {
   private accessToken = '';
   private readonly apiBaseURL = getTestEnvironment().E2E_API_BASE_URL.replace(
@@ -130,6 +187,113 @@ export class AdminApiClient {
         { optionText: 'Incorrect E2E answer', isCorrect: false, orderIndex: 2 },
       ],
     });
+  }
+
+  createStudent(payload: ApiCreateStudentPayload) {
+    return this.post<ApiStudent>('/students', payload);
+  }
+
+  deactivateStudent(id: string) {
+    return this.patch<unknown>(`/students/${id}/deactivate`, {});
+  }
+
+  async listStudents(params: Record<string, string | number> = {}) {
+    return this.getPage<ApiStudent>('/students', { limit: 100, ...params });
+  }
+
+  async findStudentByEmail(email: string) {
+    const students = await this.listStudents({ search: email });
+    return students.find((student) => student.user.email === email);
+  }
+
+  async listLecturers(params: Record<string, string | number> = {}) {
+    return this.getPage<ApiLecturer>('/lecturers', { limit: 100, ...params });
+  }
+
+  async findLecturerByEmail(email: string) {
+    const lecturers = await this.listLecturers({ search: email });
+    return lecturers.find((lecturer) => lecturer.user.email === email);
+  }
+
+  createAdvisorAssignment(
+    lecturerId: string,
+    studentId: string,
+    status: ApiAdvisorAssignment['status'] = 'ACTIVE',
+  ) {
+    return this.post<ApiAdvisorAssignment>('/advisor-assignments', {
+      lecturerId,
+      studentId,
+      status,
+    });
+  }
+
+  updateAdvisorAssignment(
+    id: string,
+    payload: Partial<Pick<ApiAdvisorAssignment, 'lecturerId' | 'studentId' | 'status'>>,
+  ) {
+    return this.patch<ApiAdvisorAssignment>(`/advisor-assignments/${id}`, payload);
+  }
+
+  async deleteAdvisorAssignment(id: string) {
+    await this.delete(`/advisor-assignments/${id}`);
+  }
+
+  async findAdvisorAssignment(lecturerId: string, studentId: string) {
+    const assignments = await this.getPage<ApiAdvisorAssignment>(
+      '/advisor-assignments',
+      {
+        lecturerId,
+        studentId,
+        limit: 100,
+      },
+    );
+    return assignments.find(
+      (assignment) =>
+        assignment.lecturerId === lecturerId && assignment.studentId === studentId,
+    );
+  }
+
+  async ensureAdvisorAssignment(
+    lecturerId: string,
+    studentId: string,
+    status: ApiAdvisorAssignment['status'] = 'ACTIVE',
+  ): Promise<ApiAdvisorAssignmentSnapshot> {
+    const existing = await this.findAdvisorAssignment(lecturerId, studentId);
+    if (!existing) {
+      return {
+        assignment: await this.createAdvisorAssignment(lecturerId, studentId, status),
+        created: true,
+        previousStatus: null,
+      };
+    }
+
+    if (existing.status === status) {
+      return { assignment: existing, created: false, previousStatus: existing.status };
+    }
+
+    return {
+      assignment: await this.updateAdvisorAssignment(existing.id, { status }),
+      created: false,
+      previousStatus: existing.status,
+    };
+  }
+
+  async restoreAdvisorAssignment(snapshot?: ApiAdvisorAssignmentSnapshot) {
+    if (!snapshot) return;
+
+    if (snapshot.created) {
+      await this.deleteAdvisorAssignment(snapshot.assignment.id);
+      return;
+    }
+
+    if (
+      snapshot.previousStatus &&
+      snapshot.assignment.status !== snapshot.previousStatus
+    ) {
+      await this.updateAdvisorAssignment(snapshot.assignment.id, {
+        status: snapshot.previousStatus,
+      });
+    }
   }
 
   async listCareerRequiredSkills(careerGoalId: string) {

@@ -235,6 +235,7 @@ function StartAssessmentView({
                                 size="large"
                                 loading={loading}
                                 disabled={!isContextReady}
+                                data-testid="assessment-start-button"
                                 onClick={onStart}
                             >
                                 Bắt đầu đánh giá
@@ -391,6 +392,7 @@ function AssessmentQuizView({
                                     !canSubmit ||
                                     answeredCount < assessment.questions.length
                                 }
+                                data-testid="assessment-submit-button"
                                 onClick={onSubmit}
                             >
                                 Submit Assessment

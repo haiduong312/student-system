@@ -35,4 +35,14 @@ export class LecturerDashboardPage extends PageObject {
     await this.page.getByRole('menuitem', { name: 'Evidences' }).click();
     await this.expectPath('/lecturer/evidences');
   }
+
+  async goToAssignedStudents() {
+    await this.page.getByRole('menuitem', { name: 'Students' }).click();
+    await this.expectPath('/lecturer/students');
+  }
+
+  async goToAdvisorReviews() {
+    await this.page.getByRole('menuitem', { name: 'Reviews' }).click();
+    await this.expectPath('/lecturer/reviews');
+  }
 }

@@ -15,8 +15,8 @@ export class AssessmentPage extends PageObject {
     this.startTitle = this.heading('Assessment');
     this.quizTitle = this.heading('Assessment Quiz');
     this.resultTitle = this.heading('Assessment Result');
-    this.startButton = page.getByRole('button', { name: 'Bắt đầu đánh giá' });
-    this.submitButton = page.getByRole('button', { name: 'Submit Assessment' });
+    this.startButton = page.getByTestId('assessment-start-button');
+    this.submitButton = page.getByTestId('assessment-submit-button');
   }
 
   async goto() {

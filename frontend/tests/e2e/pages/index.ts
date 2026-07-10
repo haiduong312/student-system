@@ -1,10 +1,12 @@
 export { AdminDashboardPage } from './AdminDashboardPage';
+export { AdvisorReviewsPage } from './AdvisorReviewsPage';
 export { AnalysisPage } from './AnalysisPage';
 export { AppShellPage } from './AppShellPage';
 export { AssessmentPage } from './AssessmentPage';
 export { CatalogManagementPage } from './CatalogManagementPage';
 export { EvidencePage } from './EvidencePage';
 export { LecturerDashboardPage } from './LecturerDashboardPage';
+export { LecturerStudentsPage } from './LecturerStudentsPage';
 export { LoginPage } from './LoginPage';
 export { QuestionBankPage } from './QuestionBankPage';
 export { RecommendationPage } from './RecommendationPage';
@@ -20,6 +22,8 @@ export type {
   SpecializationForm,
 } from './CatalogManagementPage';
 export type { EvidencePageMode } from './EvidencePage';
+export type { AdvisorReviewStudentOption } from './AdvisorReviewsPage';
+export type { LecturerStudentSeed } from './LecturerStudentsPage';
 export type {
   QuestionFilters,
   QuestionForm,

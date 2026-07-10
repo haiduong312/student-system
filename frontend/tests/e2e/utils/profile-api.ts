@@ -1,5 +1,10 @@
 import type { APIRequestContext, APIResponse, Page } from '@playwright/test';
-import { getRoleCredentials, getTestEnvironment, type TestRole } from './test-env';
+import {
+  getRoleCredentials,
+  getTestEnvironment,
+  type RoleCredentials,
+  type TestRole,
+} from './test-env';
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -107,10 +112,27 @@ export class ProfileApiClient {
     private readonly page: Page,
     private readonly request: APIRequestContext,
     private readonly role: TestRole,
+    private readonly credentials: RoleCredentials,
   ) {}
 
   static async fromPage(page: Page, role: TestRole = 'STUDENT') {
-    const client = new ProfileApiClient(page, page.request, role);
+    const client = new ProfileApiClient(
+      page,
+      page.request,
+      role,
+      getRoleCredentials(role),
+    );
+    await client.authenticate();
+    await client.authorizeBrowserRequests();
+    return client;
+  }
+
+  static async fromCredentials(
+    page: Page,
+    credentials: RoleCredentials,
+    role: TestRole = 'STUDENT',
+  ) {
+    const client = new ProfileApiClient(page, page.request, role, credentials);
     await client.authenticate();
     await client.authorizeBrowserRequests();
     return client;
@@ -163,6 +185,17 @@ export class ProfileApiClient {
 
   async deleteResource(resource: string, id: string) {
     await this.delete(`/profiles/me/${resource}/${id}`);
+  }
+
+  uploadEvidence(
+    resource: string,
+    id: string,
+    payload: { evidenceUrl?: string | null; note?: string | null },
+  ) {
+    return this.postMultipart<ApiEvidence>(
+      `/profiles/me/${resource}/${id}/evidences`,
+      payload,
+    );
   }
 
   async findEvidence(
@@ -229,6 +262,38 @@ export class ProfileApiClient {
     return this.get<ApiRoadmap[]>('/roadmaps/history/me');
   }
 
+  createAdvisorReview(
+    studentId: string,
+    payload: {
+      reviewContent: string;
+      suggestion?: string | null;
+      rating?: number | null;
+    },
+  ) {
+    return this.post(`/advisor-reviews/students/${studentId}`, payload);
+  }
+
+  async getStatus(path: string) {
+    const response = await this.request.get(this.url(path), {
+      headers: this.headers(),
+    });
+    return {
+      status: response.status(),
+      body: await response.text(),
+    };
+  }
+
+  async postStatus(path: string, data: unknown) {
+    const response = await this.request.post(this.url(path), {
+      headers: this.headers(),
+      data,
+    });
+    return {
+      status: response.status(),
+      body: await response.text(),
+    };
+  }
+
   async submitAssessmentRaw(
     assessmentId: string,
     answers: Array<{ questionId: string; selectedOptionId: string }>,
@@ -245,7 +310,7 @@ export class ProfileApiClient {
 
   private async authenticate() {
     const response = await this.request.post(this.url('/auth/login'), {
-      data: getRoleCredentials(this.role),
+      data: this.credentials,
     });
     const session = await this.parse<{ accessToken: string }>(
       response,
@@ -292,6 +357,22 @@ export class ProfileApiClient {
     const response = await this.request.post(this.url(path), {
       headers: this.headers(),
       data,
+    });
+    return this.parse<T>(response, `POST ${path}`);
+  }
+
+  private async postMultipart<T>(
+    path: string,
+    data: Record<string, string | null | undefined>,
+  ) {
+    const multipart = Object.fromEntries(
+      Object.entries(data).flatMap(([key, value]) =>
+        value === undefined || value === null ? [] : [[key, value]],
+      ),
+    );
+    const response = await this.request.post(this.url(path), {
+      headers: this.headers(),
+      multipart,
     });
     return this.parse<T>(response, `POST ${path}`);
   }

@@ -619,6 +619,7 @@ function EvidenceUpload({
         open={open}
         okText="Upload"
         confirmLoading={uploading}
+        okButtonProps={{ 'data-testid': 'evidence-submit-button' }}
         onCancel={reset}
         onOk={() => form.submit()}
       >

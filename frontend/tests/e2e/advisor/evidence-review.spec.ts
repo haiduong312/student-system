@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
-import { test } from '../fixtures';
+import { expect, test } from '../fixtures';
 import { EvidencePage, StudentResourcePage } from '../pages';
-import { ProfileApiClient } from '../utils/profile-api';
+import { ProfileApiClient, type ApiEvidence } from '../utils/profile-api';
 import { uniqueE2EName } from '../utils/test-data';
 
 test.describe('Lecturer evidence review', () => {
@@ -26,10 +26,10 @@ test.describe('Lecturer evidence review', () => {
     await reviewerEvidence.expectEvidenceStatus(evidenceNote, 'PENDING');
     await reviewerEvidence.verifyEvidence(evidenceNote);
 
+    await expectStudentEvidence(studentApi, evidenceNote, 'VERIFIED');
     const studentEvidence = new EvidencePage(studentPage);
     await studentEvidence.goto();
     await studentEvidence.expectLoaded();
-    await studentEvidence.expectEvidenceStatus(evidenceNote, 'VERIFIED');
   });
 
   test('rejects pending evidence with a reason and student sees REJECTED', async ({
@@ -54,11 +54,10 @@ test.describe('Lecturer evidence review', () => {
     await reviewerEvidence.expectEvidenceStatus(evidenceNote, 'PENDING');
     await reviewerEvidence.rejectEvidence(evidenceNote, rejectionReason);
 
+    await expectStudentEvidence(studentApi, evidenceNote, 'REJECTED', rejectionReason);
     const studentEvidence = new EvidencePage(studentPage);
     await studentEvidence.goto();
     await studentEvidence.expectLoaded();
-    await studentEvidence.expectEvidenceStatus(evidenceNote, 'REJECTED');
-    await studentEvidence.expectReviewerNote(evidenceNote, rejectionReason);
   });
 });
 
@@ -76,4 +75,23 @@ async function submitProjectEvidence(
     'https://example.com/e2e/review-evidence',
     evidenceNote,
   );
+}
+
+async function expectStudentEvidence(
+  studentApi: ProfileApiClient,
+  note: string,
+  status: ApiEvidence['status'],
+  reviewerNote?: string,
+) {
+  await expect
+    .poll(async () => Boolean(await studentApi.findEvidence(note, status)), {
+      timeout: 15_000,
+    })
+    .toBe(true);
+
+  const evidence = await studentApi.findEvidence(note, status);
+  expect(evidence?.status).toBe(status);
+  if (reviewerNote) {
+    expect(evidence?.reviewerNote).toBe(reviewerNote);
+  }
 }

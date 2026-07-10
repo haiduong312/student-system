@@ -64,7 +64,7 @@ export class RoadmapPage extends PageObject {
   }
 
   roadmapItem(title: string) {
-    return this.page.getByRole('listitem').filter({ hasText: title });
+    return this.page.getByTestId('roadmap-item').filter({ hasText: title });
   }
 
   async expectItem(

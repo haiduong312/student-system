@@ -24,7 +24,7 @@ export class RecommendationPage extends PageObject {
   }
 
   recommendation(title: string) {
-    return this.listItem(title);
+    return this.page.getByTestId('recommendation-card').filter({ hasText: title });
   }
 
   async openTab(tab: RecommendationTab) {
