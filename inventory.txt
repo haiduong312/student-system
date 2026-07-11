@@ -1,0 +1,550 @@
+P|112|Heading 1|5. Use Case toàn hệ thống
+P|113|Normal|Chương này mở rộng danh sách use case thành mô hình toàn hệ thống. Mỗi use case chính được gắn với chức năng, dữ liệu, API và nhóm kiểm thử để tránh dừng ở mô tả ý tưởng.
+P|114|Heading 2|5.1. Use Case Diagram UML
+P|116|Caption|Hình 2. Actor, use case chính và quan hệ include của toàn hệ thống
+P|117|Heading 2|5.2. Danh mục use case
+P|118|Caption|Bảng 12. Danh mục use case toàn hệ thống
+TABLE|block=119|chapter_table=1|rows=26|cols=4
+  R0: Mã || Use case || Actor || Chức năng
+  R1: UC-ACC-01 || Đăng nhập || Người dùng || F1.1
+  R2: UC-ACC-02 || Quên và đặt lại mật khẩu || Người dùng || F1.2
+  R3: UC-ACC-03 || Khóa hoặc mở tài khoản || Quản trị viên || F1.3
+  R4: UC-ACC-04 || Quản lý phân công cố vấn || Quản trị viên || F1.4
+  R5: UC-CAT-01 || Quản lý nhóm và kỹ năng || Quản trị viên || F2.1
+  R6: UC-CAT-02 || Quản lý mục tiêu, chuyên sâu và kỹ năng yêu cầu || Quản trị viên || F2.2
+  R7: UC-PRO-01 || Cập nhật hồ sơ chính || Sinh viên || F3.1
+  R8: UC-PRO-02 || Quản lý kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm || Sinh viên || F3.2
+  R9: UC-EVD-01 || Nộp hoặc nộp lại minh chứng || Sinh viên || F3.3
+  R10: UC-EVD-02 || Xác minh hoặc từ chối minh chứng || Cố vấn/Quản trị viên || F3.3
+  R11: UC-ASM-01 || Quản lý ngân hàng câu hỏi || Quản trị viên || F4.1
+  R12: UC-ASM-02 || Bắt đầu bài đánh giá || Sinh viên || F4.2
+  R13: UC-ASM-03 || Nộp và chấm bài || Sinh viên/Hệ thống || F4.3
+  R14: UC-ASM-04 || Xem lịch sử bài đánh giá || Sinh viên/Cố vấn || F4.3
+  R15: UC-ENG-01 || Phân tích năng lực || Sinh viên/Hệ thống || F5
+  R16: UC-REC-01 || Xem và cập nhật gợi ý || Sinh viên || F6.2
+  R17: UC-REC-02 || Cập nhật tiến độ tài nguyên || Sinh viên || F6.3
+  R18: UC-ROA-01 || Sinh lộ trình || Sinh viên/Quản trị viên || F7.1
+  R19: UC-ROA-02 || Cập nhật trạng thái mục lộ trình || Sinh viên || F7.2
+  R20: UC-ADV-01 || Xem sinh viên được phân công và ghi nhận xét || Cố vấn || F8
+  R21: UC-DSH-01 || Xem dashboard theo vai trò || Mọi vai trò || F9
+  R22: UC-NOT-01 || Xem và đánh dấu thông báo || Người dùng || F10
+  R23: UC-EXP-01 || Xuất portfolio PDF || Sinh viên || F11.1
+  R24: UC-EXP-02 || Xuất báo cáo Excel || Cố vấn/Quản trị viên || F11.2
+  R25: UC-AUD-01 || Tra cứu nhật ký hoạt động || Quản trị viên || F12.1
+P|121|Heading 2|5.3. Quan hệ giữa các use case
+P|122|Caption|Bảng 13. Quan hệ include và extend
+TABLE|block=123|chapter_table=2|rows=8|cols=4
+  R0: Use case nguồn || Quan hệ || Use case đích || Ý nghĩa
+  R1: UC-ASM-02 Bắt đầu/làm bài || include || UC-ASM-03 Nộp và chấm bài || Kết thúc một lần đánh giá.
+  R2: UC-ENG-01 Phân tích || include || Tính gap, match, priority, risk || Các phép tính bắt buộc của Engine.
+  R3: UC-ROA-01 Sinh lộ trình || include || UC-REC-01 Chọn gợi ý || Lộ trình chỉ tiêu thụ gợi ý hợp lệ.
+  R4: UC-PRO-02 Quản lý tài nguyên || extend || UC-EVD-01 Nộp minh chứng || Minh chứng là bước tùy chọn để xác minh.
+  R5: UC-EVD-02 Xác minh || include || UC-NOT-01 Thông báo || Sinh viên nhận kết quả xử lý.
+  R6: UC-ADV-01 Nhận xét || include || UC-NOT-01 Thông báo || Sinh viên được báo có review mới.
+  R7: UC-EXP-01/02 Xuất dữ liệu || include || Ghi ExportLog || Mọi lần xuất đều truy vết được.
+P|125|Heading 2|5.4. Đặc tả chi tiết use case chính
+P|126|Heading 3|5.4.1. UC-ACC-01 - Đăng nhập
+P|127|Caption|Bảng 14. Đặc tả UC-ACC-01
+TABLE|block=128|chapter_table=3|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ACC-01
+  R2: Tên use case || Đăng nhập
+  R3: Actor || Người dùng
+  R4: Mục tiêu || Cho phép người dùng thực hiện đăng nhập với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có tài khoản ACTIVE.
+  R6: Hậu điều kiện || Tạo access token và refresh cookie.
+  R7: Luồng chính || Nhập email, mật khẩu; kiểm tra trạng thái; xác thực mật khẩu; phát hành phiên; điều hướng theo vai trò.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Sai thông tin trả 401; tài khoản INACTIVE trả 403; ghi nhận thời điểm đăng nhập.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến User.
+  R11: Dữ liệu ra || Tạo access token và refresh cookie.
+  R12: Business rule liên quan || BR-ACC-01...08
+  R13: API liên quan || POST /api/auth/login
+  R14: Test case liên quan || TC-AUTH-01...04
+P|130|Heading 3|5.4.2. UC-ACC-02 - Quên và đặt lại mật khẩu
+P|131|Caption|Bảng 15. Đặc tả UC-ACC-02
+TABLE|block=132|chapter_table=4|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ACC-02
+  R2: Tên use case || Quên và đặt lại mật khẩu
+  R3: Actor || Người dùng
+  R4: Mục tiêu || Cho phép người dùng thực hiện quên và đặt lại mật khẩu với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Email tồn tại hoặc không; không tiết lộ sự tồn tại tài khoản.
+  R6: Hậu điều kiện || Tạo token đặt lại có hạn và vô hiệu sau sử dụng.
+  R7: Luồng chính || Nhập email; tạo yêu cầu; gửi liên kết; nhập mật khẩu mới; thu hồi phiên cũ.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Luôn trả thông điệp trung tính; giới hạn tần suất; token hết hạn trả 400.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến User, PasswordResetToken.
+  R11: Dữ liệu ra || Tạo token đặt lại có hạn và vô hiệu sau sử dụng.
+  R12: Business rule liên quan || BR-ACC-01...08
+  R13: API liên quan || POST /api/auth/forgot-password; POST /api/auth/reset-password
+  R14: Test case liên quan || TC-AUTH-05...08
+P|134|Heading 3|5.4.3. UC-ACC-03 - Khóa hoặc mở tài khoản
+P|135|Caption|Bảng 16. Đặc tả UC-ACC-03
+TABLE|block=136|chapter_table=5|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ACC-03
+  R2: Tên use case || Khóa hoặc mở tài khoản
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện khóa hoặc mở tài khoản với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Đã đăng nhập với quyền ADMIN.
+  R6: Hậu điều kiện || User chuyển ACTIVE/INACTIVE; phiên bị thu hồi khi khóa.
+  R7: Luồng chính || Tìm user; xem chi tiết; khóa hoặc mở; nhập lý do; ghi activity log.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không tự khóa tài khoản cuối cùng có quyền quản trị; thao tác lặp phải idempotent.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến User, ActivityLog.
+  R11: Dữ liệu ra || User chuyển ACTIVE/INACTIVE; phiên bị thu hồi khi khóa.
+  R12: Business rule liên quan || BR-ACC-01...08
+  R13: API liên quan || PATCH /api/users/:id/deactivate|reactivate
+  R14: Test case liên quan || TC-USR-01...04
+P|138|Heading 3|5.4.4. UC-ACC-04 - Quản lý phân công cố vấn
+P|139|Caption|Bảng 17. Đặc tả UC-ACC-04
+TABLE|block=140|chapter_table=6|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ACC-04
+  R2: Tên use case || Quản lý phân công cố vấn
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện quản lý phân công cố vấn với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Student và Lecturer hợp lệ.
+  R6: Hậu điều kiện || Phân công duy nhất được tạo/cập nhật.
+  R7: Luồng chính || Chọn cố vấn; chọn sinh viên; đặt trạng thái; kiểm tra trùng; lưu; thông báo các bên.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Cặp trùng trả 409; đối tượng inactive trả 400.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến AdvisorAssignment, Student, Lecturer.
+  R11: Dữ liệu ra || Phân công duy nhất được tạo/cập nhật.
+  R12: Business rule liên quan || BR-ACC-01...08
+  R13: API liên quan || /api/advisor-assignments
+  R14: Test case liên quan || TC-ADV-01...04
+P|142|Heading 3|5.4.5. UC-CAT-01 - Quản lý nhóm và kỹ năng
+P|143|Caption|Bảng 18. Đặc tả UC-CAT-01
+TABLE|block=144|chapter_table=7|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-CAT-01
+  R2: Tên use case || Quản lý nhóm và kỹ năng
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện quản lý nhóm và kỹ năng với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có quyền quản trị catalog.
+  R6: Hậu điều kiện || Catalog hợp lệ; dữ liệu dẫn xuất được đánh dấu cũ khi cần.
+  R7: Luồng chính || Tạo/sửa nhóm hoặc kỹ năng; kiểm tra trùng; lưu; chạy invalidation theo phạm vi.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không xóa cứng bản ghi đang được dùng; chuyển INACTIVE và ghi log.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến SkillCategory, Skill.
+  R11: Dữ liệu ra || Catalog hợp lệ; dữ liệu dẫn xuất được đánh dấu cũ khi cần.
+  R12: Business rule liên quan || BR-CAT-01....10
+  R13: API liên quan || /api/skill-categories; /api/skills
+  R14: Test case liên quan || TC-CAT-01...06
+P|146|Heading 3|5.4.6. UC-CAT-02 - Quản lý mục tiêu, chuyên sâu và kỹ năng yêu cầu
+P|147|Caption|Bảng 19. Đặc tả UC-CAT-02
+TABLE|block=148|chapter_table=8|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-CAT-02
+  R2: Tên use case || Quản lý mục tiêu, chuyên sâu và kỹ năng yêu cầu
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện quản lý mục tiêu, chuyên sâu và kỹ năng yêu cầu với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Skill active đã tồn tại.
+  R6: Hậu điều kiện || Goal/spec/required skill nhất quán.
+  R7: Luồng chính || Tạo goal; tạo specialization; cấu hình level, weight, learningOrder, phase; mô phỏng ảnh hưởng; kích hoạt.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Specialization phải thuộc goal; skill không trùng trong cùng scope; tổng trọng số > 0.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến CareerGoal, Specialization, CareerRequiredSkill.
+  R11: Dữ liệu ra || Goal/spec/required skill nhất quán.
+  R12: Business rule liên quan || BR-CAT-01....10
+  R13: API liên quan || /api/career-goals; /api/admin/specializations
+  R14: Test case liên quan || TC-CAR-01...08
+P|150|Heading 3|5.4.7. UC-PRO-01 - Cập nhật hồ sơ chính
+P|151|Caption|Bảng 20. Đặc tả UC-PRO-01
+TABLE|block=152|chapter_table=9|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-PRO-01
+  R2: Tên use case || Cập nhật hồ sơ chính
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện cập nhật hồ sơ chính với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có user và student profile.
+  R6: Hậu điều kiện || Thông tin hồ sơ và context nghề nghiệp được cập nhật.
+  R7: Luồng chính || Mở hồ sơ; sửa trường; chọn goal/spec; validate URL; lưu; đánh dấu analysis cũ nếu context đổi.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không nhận studentId từ body; specialization phải thuộc goal.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến StudentProfile.
+  R11: Dữ liệu ra || Thông tin hồ sơ và context nghề nghiệp được cập nhật.
+  R12: Business rule liên quan || BR-PRO-01....08
+  R13: API liên quan || PATCH /api/profiles/me
+  R14: Test case liên quan || TC-PRO-01...05
+P|154|Heading 3|5.4.8. UC-PRO-02 - Quản lý kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm
+P|155|Caption|Bảng 21. Đặc tả UC-PRO-02
+TABLE|block=156|chapter_table=10|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-PRO-02
+  R2: Tên use case || Quản lý kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện quản lý kỹ năng, dự án, chứng chỉ, hoạt động, kinh nghiệm với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Đã đăng nhập.
+  R6: Hậu điều kiện || Tài nguyên hồ sơ được CRUD theo chủ sở hữu.
+  R7: Luồng chính || Chọn loại tài nguyên; nhập dữ liệu; validate; tạo/sửa/xóa; cập nhật completion.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không sửa dữ liệu người khác; không xóa cứng nếu cần giữ lịch sử.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến StudentSkill/Project/Certificate/Activity/Experience.
+  R11: Dữ liệu ra || Tài nguyên hồ sơ được CRUD theo chủ sở hữu.
+  R12: Business rule liên quan || BR-PRO-01....08
+  R13: API liên quan || /api/profiles/me/*
+  R14: Test case liên quan || TC-PRO-06...14
+P|158|Heading 3|5.4.9. UC-EVD-01 - Nộp hoặc nộp lại minh chứng
+P|159|Caption|Bảng 22. Đặc tả UC-EVD-01
+TABLE|block=160|chapter_table=11|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-EVD-01
+  R2: Tên use case || Nộp hoặc nộp lại minh chứng
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện nộp hoặc nộp lại minh chứng với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Tài nguyên liên quan thuộc chính sinh viên.
+  R6: Hậu điều kiện || Evidence PENDING được tạo; nguồn chuyển PENDING.
+  R7: Luồng chính || Chọn nguồn; tải file hoặc URL; nhập ghi chú; quét loại/kích thước; lưu; gửi xác minh.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không có file lẫn URL trả 400; URL/file nguy hiểm bị từ chối; bản REJECTED có thể nộp lại bằng phiên bản mới.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Evidence và tài nguyên liên quan.
+  R11: Dữ liệu ra || Evidence PENDING được tạo; nguồn chuyển PENDING.
+  R12: Business rule liên quan || BR-EVD-01....10
+  R13: API liên quan || POST /api/evidences hoặc nested profile endpoint
+  R14: Test case liên quan || TC-EVD-01...06
+P|162|Heading 3|5.4.10. UC-EVD-02 - Xác minh hoặc từ chối minh chứng
+P|163|Caption|Bảng 23. Đặc tả UC-EVD-02
+TABLE|block=164|chapter_table=12|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-EVD-02
+  R2: Tên use case || Xác minh hoặc từ chối minh chứng
+  R3: Actor || Cố vấn/Quản trị viên
+  R4: Mục tiêu || Cho phép cố vấn/quản trị viên thực hiện xác minh hoặc từ chối minh chứng với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Evidence PENDING; cố vấn có assignment ACTIVE.
+  R6: Hậu điều kiện || Evidence VERIFIED hoặc REJECTED; nguồn được tính lại.
+  R7: Luồng chính || Mở hàng đợi; xem file an toàn; xác minh hoặc từ chối; nhập nhận xét; cập nhật mức nếu là skill; thông báo sinh viên.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không tự xác minh dữ liệu ngoài phạm vi; thao tác sau trạng thái cuối trả 409.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Evidence, StudentSkill, Notification, ActivityLog.
+  R11: Dữ liệu ra || Evidence VERIFIED hoặc REJECTED; nguồn được tính lại.
+  R12: Business rule liên quan || BR-EVD-01....10
+  R13: API liên quan || PATCH /api/evidences/:id/verify|reject
+  R14: Test case liên quan || TC-EVD-07...12
+P|166|Heading 3|5.4.11. UC-ASM-01 - Quản lý ngân hàng câu hỏi
+P|167|Caption|Bảng 24. Đặc tả UC-ASM-01
+TABLE|block=168|chapter_table=13|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ASM-01
+  R2: Tên use case || Quản lý ngân hàng câu hỏi
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện quản lý ngân hàng câu hỏi với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Skill active tồn tại.
+  R6: Hậu điều kiện || Câu hỏi hợp lệ và có trạng thái rõ ràng.
+  R7: Luồng chính || Nhập nội dung, type, level, options, giải thích; kiểm tra đúng một đáp án; lưu; theo dõi coverage.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || TRUE_FALSE đúng hai lựa chọn; SINGLE_CHOICE ít nhất hai; deactivate làm hủy bài đang dùng.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến AssessmentQuestion, AssessmentOption.
+  R11: Dữ liệu ra || Câu hỏi hợp lệ và có trạng thái rõ ràng.
+  R12: Business rule liên quan || BR-ASM-01....16
+  R13: API liên quan || /api/assessment-questions
+  R14: Test case liên quan || TC-ASM-01...08
+P|170|Heading 3|5.4.12. UC-ASM-02 - Bắt đầu bài đánh giá
+P|171|Caption|Bảng 25. Đặc tả UC-ASM-02
+TABLE|block=172|chapter_table=14|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ASM-02
+  R2: Tên use case || Bắt đầu bài đánh giá
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện bắt đầu bài đánh giá với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Profile có goal; đủ coverage; không vi phạm attempt/cooldown.
+  R6: Hậu điều kiện || Assessment IN_PROGRESS với snapshot câu hỏi.
+  R7: Luồng chính || Đọc context từ profile; hợp nhất required skill; kiểm tra coverage; chọn ngẫu nhiên; tạo item; trả expiresAt.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Tối đa 3 lần; cooldown 30 phút; 60 phút; thiếu level bất kỳ thì chặn.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Assessment, AssessmentQuestionItem.
+  R11: Dữ liệu ra || Assessment IN_PROGRESS với snapshot câu hỏi.
+  R12: Business rule liên quan || BR-ASM-01....16
+  R13: API liên quan || POST /api/assessments/start
+  R14: Test case liên quan || TC-ASM-09...16
+P|174|Heading 3|5.4.13. UC-ASM-03 - Nộp và chấm bài
+P|175|Caption|Bảng 26. Đặc tả UC-ASM-03
+TABLE|block=176|chapter_table=15|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ASM-03
+  R2: Tên use case || Nộp và chấm bài
+  R3: Actor || Sinh viên/Hệ thống
+  R4: Mục tiêu || Cho phép sinh viên/hệ thống thực hiện nộp và chấm bài với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Assessment còn hạn và thuộc sinh viên.
+  R6: Hậu điều kiện || Bài GRADED, answer và skill result được lưu nguyên tử.
+  R7: Luồng chính || Kiểm tra đủ câu; chấm đáp án; tổng hợp theo level; áp dụng ngưỡng liên tiếp 60%; cập nhật StudentSkill nếu cao hơn.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Thiếu/trùng answer, option sai câu, quá hạn hoặc đã nộp đều bị từ chối.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến AssessmentAnswer, AssessmentSkillResult, StudentSkill.
+  R11: Dữ liệu ra || Bài GRADED, answer và skill result được lưu nguyên tử.
+  R12: Business rule liên quan || BR-ASM-01....16
+  R13: API liên quan || POST /api/assessments/:id/submit
+  R14: Test case liên quan || TC-ASM-17...28
+P|178|Heading 3|5.4.14. UC-ASM-04 - Xem lịch sử bài đánh giá
+P|179|Caption|Bảng 27. Đặc tả UC-ASM-04
+TABLE|block=180|chapter_table=16|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ASM-04
+  R2: Tên use case || Xem lịch sử bài đánh giá
+  R3: Actor || Sinh viên/Cố vấn
+  R4: Mục tiêu || Cho phép sinh viên/cố vấn thực hiện xem lịch sử bài đánh giá với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có quyền trên sinh viên.
+  R6: Hậu điều kiện || Hiển thị lịch sử theo phạm vi và không lộ đáp án đúng khi chưa được phép.
+  R7: Luồng chính || Lọc theo status, goal, thời gian; mở chi tiết; xem breakdown; so sánh tiến bộ.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Cố vấn chỉ xem sinh viên được phân công; bài IN_PROGRESS không lộ isCorrect.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Assessment và các bảng con.
+  R11: Dữ liệu ra || Hiển thị lịch sử theo phạm vi và không lộ đáp án đúng khi chưa được phép.
+  R12: Business rule liên quan || BR-ASM-01....16
+  R13: API liên quan || GET /api/assessments/me
+  R14: Test case liên quan || TC-ASM-29...33
+P|182|Heading 3|5.4.15. UC-ENG-01 - Phân tích năng lực
+P|183|Caption|Bảng 28. Đặc tả UC-ENG-01
+TABLE|block=184|chapter_table=17|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ENG-01
+  R2: Tên use case || Phân tích năng lực
+  R3: Actor || Sinh viên/Hệ thống
+  R4: Mục tiêu || Cho phép sinh viên/hệ thống thực hiện phân tích năng lực với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Context và required skills hợp lệ.
+  R6: Hậu điều kiện || Analysis CURRENT, details và recommendations được lưu.
+  R7: Luồng chính || Chuẩn hóa đầu vào; tính gap/match/priority/risk; giải thích; lưu snapshot; đánh dấu kết quả cũ; sinh gợi ý.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Theo đặc tả chi tiết Chương 7; lỗi ENG-001...008.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến CompetencyAnalysisResult/Detail.
+  R11: Dữ liệu ra || Analysis CURRENT, details và recommendations được lưu.
+  R12: Business rule liên quan || BR-ENG-01....2
+  R13: API liên quan || POST /api/competency-analysis/analyze/me
+  R14: Test case liên quan || ENG-AC-01...12
+P|186|Heading 3|5.4.16. UC-REC-01 - Xem và cập nhật gợi ý
+P|187|Caption|Bảng 29. Đặc tả UC-REC-01
+TABLE|block=188|chapter_table=18|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-REC-01
+  R2: Tên use case || Xem và cập nhật gợi ý
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện xem và cập nhật gợi ý với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có gợi ý trong context hiện tại.
+  R6: Hậu điều kiện || Trạng thái gợi ý chuyển hợp lệ.
+  R7: Luồng chính || Lọc gợi ý; xem lý do và snapshot tài nguyên; lưu/bắt đầu/hoàn thành/bỏ qua; ghi feedback.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Tuân thủ state machine; gợi ý OBSOLETE chỉ đọc; feedback là dữ liệu riêng.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến StudentRecommendation, RecommendationFeedback.
+  R11: Dữ liệu ra || Trạng thái gợi ý chuyển hợp lệ.
+  R12: Business rule liên quan || BR-REC-01....12
+  R13: API liên quan || GET /api/recommendations/me; PATCH /:id/status
+  R14: Test case liên quan || TC-REC-01...09
+P|190|Heading 3|5.4.17. UC-REC-02 - Cập nhật tiến độ tài nguyên
+P|191|Caption|Bảng 30. Đặc tả UC-REC-02
+TABLE|block=192|chapter_table=19|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-REC-02
+  R2: Tên use case || Cập nhật tiến độ tài nguyên
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện cập nhật tiến độ tài nguyên với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Resource active hoặc đã nằm trong snapshot.
+  R6: Hậu điều kiện || Progress cập nhật và đồng bộ gợi ý/lộ trình.
+  R7: Luồng chính || Bắt đầu; ghi lần truy cập; hoàn thành hoặc bỏ qua; nếu mọi resource hoàn thành thì đóng gợi ý và item tương ứng.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || COMPLETED là trạng thái cuối; SKIPPED có thể quay lại IN_PROGRESS.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến StudentResourceProgress.
+  R11: Dữ liệu ra || Progress cập nhật và đồng bộ gợi ý/lộ trình.
+  R12: Business rule liên quan || BR-REC-01....12
+  R13: API liên quan || PATCH /api/learning-resources/:id/progress
+  R14: Test case liên quan || TC-REC-10...16
+P|194|Heading 3|5.4.18. UC-ROA-01 - Sinh lộ trình
+P|195|Caption|Bảng 31. Đặc tả UC-ROA-01
+TABLE|block=196|chapter_table=20|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ROA-01
+  R2: Tên use case || Sinh lộ trình
+  R3: Actor || Sinh viên/Quản trị viên
+  R4: Mục tiêu || Cho phép sinh viên/quản trị viên thực hiện sinh lộ trình với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có analysis CURRENT và gợi ý actionable.
+  R6: Hậu điều kiện || Roadmap ACTIVE mới có version; bản cũ archive.
+  R7: Luồng chính || Chọn best recommendation; xếp phase/order/priority; áp dụng dependency; tạo snapshot; tính tổng weight.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không có analysis hoặc gap trả 400; không archive khi đã có active trả 409.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến DevelopmentRoadmap, RoadmapItem.
+  R11: Dữ liệu ra || Roadmap ACTIVE mới có version; bản cũ archive.
+  R12: Business rule liên quan || BR-ROA-01....12
+  R13: API liên quan || POST /api/roadmaps/generate/me
+  R14: Test case liên quan || TC-ROA-01...09
+P|198|Heading 3|5.4.19. UC-ROA-02 - Cập nhật trạng thái mục lộ trình
+P|199|Caption|Bảng 32. Đặc tả UC-ROA-02
+TABLE|block=200|chapter_table=21|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ROA-02
+  R2: Tên use case || Cập nhật trạng thái mục lộ trình
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện cập nhật trạng thái mục lộ trình với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Item thuộc roadmap của mình.
+  R6: Hậu điều kiện || Status/progress và history đồng bộ.
+  R7: Luồng chính || Chuyển TODO→IN_PROGRESS→DONE; ghi note; tính lại progress; đồng bộ recommendation/resource.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Mở lại DONE bắt buộc note; CANCELLED là cuối; dependency chưa đạt thì chặn bắt đầu.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến RoadmapItem, StudentRoadmapProgress.
+  R11: Dữ liệu ra || Status/progress và history đồng bộ.
+  R12: Business rule liên quan || BR-ROA-01....12
+  R13: API liên quan || PATCH /api/roadmap-items/:id/status
+  R14: Test case liên quan || TC-ROA-10...18
+P|202|Heading 3|5.4.20. UC-ADV-01 - Xem sinh viên được phân công và ghi nhận xét
+P|203|Caption|Bảng 33. Đặc tả UC-ADV-01
+TABLE|block=204|chapter_table=22|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ADV-01
+  R2: Tên use case || Xem sinh viên được phân công và ghi nhận xét
+  R3: Actor || Cố vấn
+  R4: Mục tiêu || Cho phép cố vấn thực hiện xem sinh viên được phân công và ghi nhận xét với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Assignment ACTIVE.
+  R6: Hậu điều kiện || Nhận xét được lưu và sinh thông báo.
+  R7: Luồng chính || Mở danh sách; chọn sinh viên; xem hồ sơ/analysis/roadmap; nhập review/rating; gửi.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không xem ngoài assignment; rating 1-5; nội dung bắt buộc.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến AdvisorReview, Notification.
+  R11: Dữ liệu ra || Nhận xét được lưu và sinh thông báo.
+  R12: Business rule liên quan || BR-ADV-01....06
+  R13: API liên quan || /api/advisor-reviews
+  R14: Test case liên quan || TC-ADV-05...10
+P|206|Heading 3|5.4.21. UC-DSH-01 - Xem dashboard theo vai trò
+P|207|Caption|Bảng 34. Đặc tả UC-DSH-01
+TABLE|block=208|chapter_table=23|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-DSH-01
+  R2: Tên use case || Xem dashboard theo vai trò
+  R3: Actor || Mọi vai trò
+  R4: Mục tiêu || Cho phép mọi vai trò thực hiện xem dashboard theo vai trò với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Đăng nhập hợp lệ.
+  R6: Hậu điều kiện || Trả đúng tập chỉ số theo vai trò và context hiện tại.
+  R7: Luồng chính || Xác định vai trò; tổng hợp chỉ số; lọc CURRENT; trả cards, lists và links hành động.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không trộn goal/spec cũ; dashboard cố vấn áp dụng assignment; cache ngắn có scope.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Projection từ nhiều bảng.
+  R11: Dữ liệu ra || Trả đúng tập chỉ số theo vai trò và context hiện tại.
+  R12: Business rule liên quan || BR-DSH-01....08
+  R13: API liên quan || GET /api/dashboard/{student|lecturer|admin}
+  R14: Test case liên quan || TC-DSH-01...09
+P|210|Heading 3|5.4.22. UC-NOT-01 - Xem và đánh dấu thông báo
+P|211|Caption|Bảng 35. Đặc tả UC-NOT-01
+TABLE|block=212|chapter_table=24|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-NOT-01
+  R2: Tên use case || Xem và đánh dấu thông báo
+  R3: Actor || Người dùng
+  R4: Mục tiêu || Cho phép người dùng thực hiện xem và đánh dấu thông báo với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Đăng nhập hợp lệ.
+  R6: Hậu điều kiện || Thông báo của chính user được đọc/cập nhật.
+  R7: Luồng chính || Lọc; xem unread; mở chi tiết; mark one/all; điều hướng tới entity liên quan.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Không sửa thông báo người khác; createOnce chống trùng theo cửa sổ thời gian.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến Notification, NotificationLog.
+  R11: Dữ liệu ra || Thông báo của chính user được đọc/cập nhật.
+  R12: Business rule liên quan || BR-NOT-01....08
+  R13: API liên quan || /api/notifications/me
+  R14: Test case liên quan || TC-NOT-01...07
+P|214|Heading 3|5.4.23. UC-EXP-01 - Xuất portfolio PDF
+P|215|Caption|Bảng 36. Đặc tả UC-EXP-01
+TABLE|block=216|chapter_table=25|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-EXP-01
+  R2: Tên use case || Xuất portfolio PDF
+  R3: Actor || Sinh viên
+  R4: Mục tiêu || Cho phép sinh viên thực hiện xuất portfolio pdf với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có profile; quyền xuất chính mình.
+  R6: Hậu điều kiện || ExportJob hoàn thành và file có thời hạn.
+  R7: Luồng chính || Chọn nội dung; tạo job; snapshot dữ liệu; sinh PDF; lưu checksum và URL; thông báo hoàn tất.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Ẩn dữ liệu nhạy cảm; giới hạn tần suất; file hết hạn; ghi ExportLog.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến ExportJob, ExportLog.
+  R11: Dữ liệu ra || ExportJob hoàn thành và file có thời hạn.
+  R12: Business rule liên quan || BR-EXP-01....10
+  R13: API liên quan || POST /api/exports/portfolio
+  R14: Test case liên quan || TC-EXP-01...06
+P|218|Heading 3|5.4.24. UC-EXP-02 - Xuất báo cáo Excel
+P|219|Caption|Bảng 37. Đặc tả UC-EXP-02
+TABLE|block=220|chapter_table=26|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-EXP-02
+  R2: Tên use case || Xuất báo cáo Excel
+  R3: Actor || Cố vấn/Quản trị viên
+  R4: Mục tiêu || Cho phép cố vấn/quản trị viên thực hiện xuất báo cáo excel với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có quyền và bộ lọc hợp lệ.
+  R6: Hậu điều kiện || Excel đúng scope, cột và định dạng.
+  R7: Luồng chính || Chọn báo cáo, filter, cột; tạo job nền; kiểm tra scope; sinh file; ghi log.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || Cố vấn chỉ xuất assigned students; giới hạn số dòng; mã hóa file nếu chứa PII.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến ExportJob, ExportLog.
+  R11: Dữ liệu ra || Excel đúng scope, cột và định dạng.
+  R12: Business rule liên quan || BR-EXP-01....10
+  R13: API liên quan || POST /api/exports/report
+  R14: Test case liên quan || TC-EXP-07...12
+P|222|Heading 3|5.4.25. UC-AUD-01 - Tra cứu nhật ký hoạt động
+P|223|Caption|Bảng 38. Đặc tả UC-AUD-01
+TABLE|block=224|chapter_table=27|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-AUD-01
+  R2: Tên use case || Tra cứu nhật ký hoạt động
+  R3: Actor || Quản trị viên
+  R4: Mục tiêu || Cho phép quản trị viên thực hiện tra cứu nhật ký hoạt động với kết quả có thể kiểm tra và truy vết.
+  R5: Tiền điều kiện || Có quyền AUDIT_READ.
+  R6: Hậu điều kiện || Nhật ký chỉ đọc được trả theo filter.
+  R7: Luồng chính || Lọc actor/action/entity/time; phân trang; mở detail; xuất nếu được phép.
+  R8: Luồng thay thế || Nếu bản ghi hoặc kết quả hợp lệ đã tồn tại, hệ thống trả dữ liệu hiện hành hoặc yêu cầu actor xác nhận thay thế; actor có thể hủy trước bước xác nhận cuối.
+  R9: Luồng ngoại lệ || ActivityLog bất biến; ẩn secret/token; truy cập cũng phải ghi audit.
+  R10: Dữ liệu vào || Payload/query và định danh liên quan đến ActivityLog.
+  R11: Dữ liệu ra || Nhật ký chỉ đọc được trả theo filter.
+  R12: Business rule liên quan || BR-AUD-01....08
+  R13: API liên quan || GET /api/activity-logs
+  R14: Test case liên quan || TC-AUD-01...05
+P|227|Heading 2|5.5. Use case bổ sung cho luồng phân tích và thông báo
+P|228|Heading 3|5.5.1. UC-ENG-02 - Xem kết quả phân tích hiện hành
+P|229|Caption|Bảng 39. Đặc tả UC-ENG-02
+TABLE|block=230|chapter_table=28|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-ENG-02
+  R2: Tên use case || Xem kết quả phân tích hiện hành
+  R3: Actor || Sinh viên/Cố vấn
+  R4: Mục tiêu || Trình bày match, coverage, risk, gap và giải thích theo đúng context.
+  R5: Tiền điều kiện || Có AnalysisResult CURRENT; cố vấn có assignment ACTIVE.
+  R6: Hậu điều kiện || Kết quả snapshot được hiển thị mà không chạy lại Engine.
+  R7: Luồng chính || Xác định scope; tải result và details; kiểm tra context; trả biểu đồ, giải thích và liên kết gợi ý.
+  R8: Luồng thay thế || Nếu không có CURRENT, hiển thị hành động hoàn thiện hồ sơ hoặc chạy phân tích.
+  R9: Luồng ngoại lệ || Ngoài scope trả 404 an toàn; dữ liệu snapshot thiếu trả ENG-007.
+  R10: Dữ liệu vào || studentId từ phiên hoặc assignment; include options.
+  R11: Dữ liệu ra || CompetencyAnalysisView.
+  R12: Business rule liên quan || BR-ENG-09...12
+  R13: API liên quan || GET /api/competency-analysis/current/me
+  R14: Test case liên quan || ENG-AC-09...12
+P|232|Heading 3|5.5.2. UC-REC-03 - Sinh gợi ý phát triển
+P|233|Caption|Bảng 40. Đặc tả UC-REC-03
+TABLE|block=234|chapter_table=29|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-REC-03
+  R2: Tên use case || Sinh gợi ý phát triển
+  R3: Actor || Hệ thống
+  R4: Mục tiêu || Chuyển các gap có ưu tiên thành hành động và tài nguyên phù hợp.
+  R5: Tiền điều kiện || Có AnalysisResult CURRENT và RecommendationTemplate ACTIVE.
+  R6: Hậu điều kiện || StudentRecommendation NEW được tạo theo snapshot.
+  R7: Luồng chính || Lọc detail GAP; xếp priority; match template theo skill/context/level; snapshot resource; lưu kết quả.
+  R8: Luồng thay thế || Nếu không có template theo skill, dùng template category rồi template chung.
+  R9: Luồng ngoại lệ || Không tạo gợi ý trùng fingerprint; không dùng template INACTIVE.
+  R10: Dữ liệu vào || AnalysisResult, detail, template, resource.
+  R11: Dữ liệu ra || Danh sách StudentRecommendation NEW.
+  R12: Business rule liên quan || BR-REC-01...06
+  R13: API liên quan || Side effect của POST /api/competency-analysis/analyze/me
+  R14: Test case liên quan || TC-REC-04
+P|236|Heading 3|5.5.3. UC-NOT-02 - Phát thông báo từ sự kiện miền
+P|237|Caption|Bảng 41. Đặc tả UC-NOT-02
+TABLE|block=238|chapter_table=30|rows=15|cols=2
+  R0: Thuộc tính || Đặc tả
+  R1: Mã use case || UC-NOT-02
+  R2: Tên use case || Phát thông báo từ sự kiện miền
+  R3: Actor || Hệ thống
+  R4: Mục tiêu || Tạo thông báo đúng người nhận, không trùng và có liên kết hành động.
+  R5: Tiền điều kiện || Sự kiện miền hợp lệ; người nhận tồn tại.
+  R6: Hậu điều kiện || Notification UNREAD và NotificationLog được ghi.
+  R7: Luồng chính || Nhận event; xác định recipient; áp dụng preference/dedup; render nội dung; lưu; gửi theo channel.
+  R8: Luồng thay thế || Nếu channel ngoài ứng dụng thất bại, giữ IN_APP và đưa log vào retry.
+  R9: Luồng ngoại lệ || Event thiếu entity hoặc recipient bị bỏ và ghi lỗi vận hành; không tạo bản sao trong dedup window.
+  R10: Dữ liệu vào || eventType, recipient, entity, template data.
+  R11: Dữ liệu ra || Notification và delivery log.
+  R12: Business rule liên quan || BR-NOT-01....08
+  R13: API liên quan || Domain event nội bộ; GET/PATCH /api/notifications/* để đọc
+  R14: Test case liên quan || TC-NOT-01...02
