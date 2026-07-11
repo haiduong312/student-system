@@ -21,14 +21,12 @@ export type EvidenceEntityType =
 export type EvidenceStatus =
   | 'PENDING'
   | 'VERIFIED'
-  | 'REJECTED'
-  | 'VERIFIED_WITH_PENDING_CHANGES';
+  | 'REJECTED';
 export type VerificationStatus =
   | 'NO_EVIDENCE'
   | 'PENDING'
   | 'VERIFIED'
-  | 'REJECTED'
-  | 'VERIFIED_WITH_PENDING_CHANGES';
+  | 'REJECTED';
 export type ProjectStatus =
   | 'PLANNED'
   | 'IN_PROGRESS'

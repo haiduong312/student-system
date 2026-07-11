@@ -11,6 +11,8 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
+  Typography,
   Upload,
   App,
 } from 'antd';
@@ -47,6 +49,12 @@ import {
 } from './profile.service';
 
 const GENERAL_SPECIALIZATION_VALUE = '__GENERAL_SPECIALIZATION__';
+const PROJECT_STATUS_OPTIONS: Array<{ label: string; value: ProjectStatus }> = [
+  { label: 'Planned', value: 'PLANNED' },
+  { label: 'In progress', value: 'IN_PROGRESS' },
+  { label: 'Completed', value: 'COMPLETED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+];
 
 interface ProfileFormValues {
   careerGoalId?: string | null;
@@ -99,6 +107,7 @@ interface ProjectFormValues {
   title: string;
   roleInProject?: string;
   description?: string;
+  status: ProjectStatus;
 }
 
 interface CertificateFormValues {
@@ -343,8 +352,12 @@ export function StudentSkillsPageView() {
   return (
     <StudentResourcePage<StudentSkillResource, SkillFormValues>
       title="Skills"
+      description="Track the skills in your profile, add a short note about your experience, and attach supporting evidence. Current level is updated through assessment or evidence review."
       itemLabel="Skill"
+      editActionLabel="Edit note"
+      editModalTitle="Edit skill note"
       endpoint="/profiles/me/skills"
+      tableScrollX={1040}
       fields={[
         <Form.Item
           key="skillId"
@@ -359,13 +372,29 @@ export function StudentSkillsPageView() {
             }))}
           />
         </Form.Item>,
-        <Form.Item key="description" name="description" label="Description">
-          <Input.TextArea rows={3} />
+        <Form.Item
+          key="description"
+          name="description"
+          label="Experience note"
+          extra="Optional: describe where and how you have used this skill."
+        >
+          <Input.TextArea
+            rows={3}
+            placeholder="For example: Used in a course project, internship, or personal project."
+          />
         </Form.Item>,
       ]}
       editFields={[
-        <Form.Item key="description" name="description" label="Description">
-          <Input.TextArea rows={3} />
+        <Form.Item
+          key="description"
+          name="description"
+          label="Experience note"
+          extra="This note is shown in the skills table and does not change your assessed level."
+        >
+          <Input.TextArea
+            rows={3}
+            placeholder="Describe your experience using this skill."
+          />
         </Form.Item>,
       ]}
       columns={[
@@ -373,7 +402,23 @@ export function StudentSkillsPageView() {
           title: 'Skill',
           render: (_value, row) => row.skill?.name ?? row.skillId,
         },
-        { title: 'Current Level', dataIndex: 'currentLevel' },
+        {
+          title: 'Experience note',
+          dataIndex: 'description',
+          width: 360,
+          ellipsis: { showTitle: false },
+          render: (value: string | null | undefined) =>
+            value ? (
+              <Tooltip title={value}>
+                <Typography.Text ellipsis style={{ display: 'block', maxWidth: 320 }}>
+                  {value}
+                </Typography.Text>
+              </Tooltip>
+            ) : (
+              <Typography.Text type="secondary">No note added</Typography.Text>
+            ),
+        },
+        { title: 'Current Level', dataIndex: 'currentLevel', width: 130 },
       ]}
     />
   );
@@ -441,15 +486,23 @@ export function StudentExperiencesPageView() {
 
 function StudentResourcePage<TResource extends StudentResourceBase, TFormValues extends object>({
   title,
+  description,
   itemLabel,
+  editActionLabel = 'Edit',
+  editModalTitle,
   endpoint,
+  tableScrollX,
   fields,
   editFields = fields,
   columns,
 }: {
   title: string;
+  description?: string;
   itemLabel: string;
+  editActionLabel?: string;
+  editModalTitle?: string;
   endpoint: string;
+  tableScrollX?: number;
   fields: ReactNode[];
   editFields?: ReactNode[];
   columns: TableColumnsType<TResource>;
@@ -497,7 +550,7 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
 
   return (
     <QueryState loading={data.isLoading} error={data.error}>
-      <PageHeader title={title} />
+      <PageHeader title={title} description={description} />
       <Card style={{ marginBottom: 16 }}>
         <Form<TFormValues>
           name={`${itemLabel.toLowerCase()}-create`}
@@ -514,6 +567,7 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
       <Table<TResource>
         rowKey="id"
         dataSource={data.data?.data ?? []}
+        scroll={tableScrollX ? { x: tableScrollX } : undefined}
         columns={[
           ...columns,
           {
@@ -523,7 +577,7 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
           {
             title: 'Actions',
             render: (_value, row) => (
-              <Button onClick={() => setEditing(row)}>Edit</Button>
+              <Button onClick={() => setEditing(row)}>{editActionLabel}</Button>
             ),
           },
           {
@@ -542,7 +596,7 @@ function StudentResourcePage<TResource extends StudentResourceBase, TFormValues 
         ]}
       />
       <Modal
-        title={`Edit ${itemLabel}`}
+        title={editModalTitle ?? `Edit ${itemLabel}`}
         open={Boolean(editing)}
         okText="Save"
         confirmLoading={update.isPending}
@@ -692,6 +746,14 @@ function projectFields() {
     </Form.Item>,
     <Form.Item key="roleInProject" name="roleInProject" label="Role">
       <Input />
+    </Form.Item>,
+    <Form.Item
+      key="status"
+      name="status"
+      label="Status"
+      initialValue="IN_PROGRESS"
+    >
+      <Select<ProjectStatus> options={PROJECT_STATUS_OPTIONS} />
     </Form.Item>,
     <Form.Item key="description" name="description" label="Description">
       <Input.TextArea rows={3} />

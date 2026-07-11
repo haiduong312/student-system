@@ -24,7 +24,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { invalidateStudentCurrentContextQueries } from '@/features/student/profile-context';
 import type {
   CareerGoal,
   CareerRequiredSkill,
@@ -982,12 +981,9 @@ function getCountLine(value: unknown, label: string) {
 }
 
 function invalidateCatalogImpactQueries(queryClient: QueryClient) {
-  invalidateStudentCurrentContextQueries(queryClient);
-  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-  queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-  queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
-  queryClient.invalidateQueries({ queryKey: ['analysis'] });
-  queryClient.invalidateQueries({ queryKey: ['assessment'] });
+  void queryClient.invalidateQueries({
+    queryKey: ['dashboard', 'admin'],
+  });
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

@@ -72,6 +72,21 @@ export class NotificationsService {
     });
   }
 
+  async markAsUnread(userId: string, id: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    return this.prisma.notification.update({
+      where: { id },
+      data: { isRead: false },
+    });
+  }
+
   async markAllAsRead(userId: string) {
     const result = await this.prisma.notification.updateMany({
       where: { userId, isRead: false },

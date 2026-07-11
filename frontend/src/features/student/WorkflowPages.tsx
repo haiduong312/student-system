@@ -3,9 +3,11 @@
 import {
   Alert,
   App,
+  Badge,
   Button,
   Card,
   Descriptions,
+  Grid,
   Input,
   List,
   Progress,
@@ -14,8 +16,10 @@ import {
   Table,
   Tag,
   Tabs,
+  theme,
   Typography,
 } from 'antd';
+import { CheckOutlined, ClockCircleOutlined, UndoOutlined } from '@ant-design/icons';
 import {
   useMutation,
   useQuery,
@@ -80,6 +84,23 @@ import { roadmapService } from './roadmap.service';
 
 type AnalysisSkill = CompetencyAnalysis['skills'][number];
 type RecommendationFilter = 'active' | 'done' | 'dismissed';
+type NotificationTypePresentation = {
+  color: string;
+  label: string;
+};
+
+const NOTIFICATION_TYPE_PRESENTATION: Record<
+  NotificationItem['notificationType'],
+  NotificationTypePresentation
+> = {
+  PROFILE_REMINDER: { color: 'blue', label: 'Profile reminder' },
+  EVIDENCE_VERIFIED: { color: 'green', label: 'Evidence verified' },
+  EVIDENCE_REJECTED: { color: 'red', label: 'Evidence rejected' },
+  ROADMAP_REMINDER: { color: 'orange', label: 'Roadmap reminder' },
+  ADVISOR_REVIEW: { color: 'purple', label: 'Advisor review' },
+  WEAK_PROFILE_ALERT: { color: 'volcano', label: 'Profile alert' },
+  SYSTEM: { color: 'cyan', label: 'System' },
+};
 
 interface LearningResourceProgressItem {
   key: string;
@@ -558,41 +579,112 @@ export function RoadmapView() {
 }
 
 export function NotificationsView() {
+  const { message } = App.useApp();
+  const { token } = theme.useToken();
+  const screens = Grid.useBreakpoint();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: studentQueryKeys.notificationsMe,
     queryFn: () => getPage<NotificationItem>('/notifications/me', { limit: 50 }),
   });
-  const read = useMutation({
-    mutationFn: (id: string) => patchData(`/notifications/${id}/read`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: studentQueryKeys.notificationsMe }),
+  const updateReadState = useMutation({
+    mutationFn: ({ id, markAsRead }: { id: string; markAsRead: boolean }) =>
+      patchData(`/notifications/${id}/${markAsRead ? 'read' : 'unread'}`, {}),
+    onSuccess: (_data, variables) => {
+      message.success(
+        variables.markAsRead
+          ? 'Notification marked as read.'
+          : 'Notification marked as unread.',
+      );
+      return queryClient.invalidateQueries({ queryKey: studentQueryKeys.notificationsMe });
+    },
+    onError: (error) => message.error(getApiErrorMessage(error)),
   });
+  const notifications = query.data?.data ?? [];
+
   return (
     <QueryState loading={query.isLoading} error={query.error}>
-      <PageHeader title="Notifications" />
-      <List
-        dataSource={query.data?.data ?? []}
-        renderItem={(item) => (
-          <List.Item
-            actions={
-              !item.isRead
-                ? [<Button key="read" onClick={() => read.mutate(item.id)}>Mark read</Button>]
-                : []
-            }
-          >
-            <List.Item.Meta
-              title={
-                <Space>
-                  {item.title}
-                  <Tag>{item.notificationType}</Tag>
-                  {item.isRead ? <Tag>READ</Tag> : null}
-                </Space>
-              }
-              description={item.content}
-            />
-          </List.Item>
-        )}
+      <PageHeader
+        title="Notifications"
+        description="Stay up to date with profile reminders, evidence reviews, roadmap activity, and system updates."
       />
+      <Card title="Recent notifications" styles={{ body: { padding: 0 } }}>
+        <List
+          itemLayout="horizontal"
+          dataSource={notifications}
+          locale={{
+            emptyText: (
+              <EmptyState description="You do not have any notifications yet." />
+            ),
+          }}
+          renderItem={(item) => {
+            const presentation = NOTIFICATION_TYPE_PRESENTATION[item.notificationType];
+            const isUpdating =
+              updateReadState.isPending && updateReadState.variables?.id === item.id;
+            const actionLabel = item.isRead ? 'Mark as unread' : 'Mark as read';
+            const isCompact = !screens.sm;
+            const readStateAction = (
+              <Button
+                key="read-state"
+                type={item.isRead ? 'default' : 'primary'}
+                size="small"
+                block={isCompact}
+                icon={item.isRead ? <UndoOutlined /> : <CheckOutlined />}
+                loading={isUpdating}
+                disabled={updateReadState.isPending && !isUpdating}
+                aria-label={`${actionLabel}: ${item.title}`}
+                onClick={() =>
+                  updateReadState.mutate({
+                    id: item.id,
+                    markAsRead: !item.isRead,
+                  })
+                }
+              >
+                {actionLabel}
+              </Button>
+            );
+
+            return (
+              <List.Item
+                style={{
+                  background: item.isRead ? token.colorBgContainer : token.colorPrimaryBg,
+                  borderInlineStart: `3px solid ${
+                    item.isRead ? 'transparent' : token.colorPrimary
+                  }`,
+                  padding: '16px 20px',
+                }}
+                actions={isCompact ? undefined : [readStateAction]}
+              >
+                <List.Item.Meta
+                  style={{ minWidth: 0 }}
+                  title={
+                    <Space size={[8, 8]} wrap>
+                      <Badge status={item.isRead ? 'default' : 'processing'} />
+                      <Typography.Text strong={!item.isRead}>{item.title}</Typography.Text>
+                      <Tag color={presentation.color}>{presentation.label}</Tag>
+                      <Tag color={item.isRead ? 'default' : 'processing'}>
+                        {item.isRead ? 'Read' : 'Unread'}
+                      </Tag>
+                    </Space>
+                  }
+                  description={
+                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                      <Typography.Paragraph style={{ margin: 0 }}>
+                        {item.content}
+                      </Typography.Paragraph>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        <ClockCircleOutlined style={{ marginInlineEnd: 6 }} />
+                        {formatDateTime(item.createdAt)}
+                      </Typography.Text>
+                      {isCompact ? readStateAction : null}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Card>
     </QueryState>
   );
 }
@@ -1298,7 +1390,6 @@ function sortEvidencesPendingFirst(evidences: Evidence[]) {
 function getEvidenceStatusRank(status: EvidenceStatus) {
   switch (status) {
     case 'PENDING':
-    case 'VERIFIED_WITH_PENDING_CHANGES':
       return 0;
     case 'REJECTED':
       return 1;

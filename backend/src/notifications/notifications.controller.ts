@@ -32,6 +32,12 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(user.id, id);
   }
 
+  @ApiOkResponse({ description: 'Notification marked as unread' })
+  @Patch(':id/unread')
+  markAsUnread(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.notificationsService.markAsUnread(user.id, id);
+  }
+
   @ApiOkResponse({ description: 'All current user notifications marked as read' })
   @Patch('read-all')
   markAllAsRead(@CurrentUser() user: AuthenticatedUser) {

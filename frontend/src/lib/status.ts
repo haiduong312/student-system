@@ -73,7 +73,6 @@ export function getStatusColor(status: StatusBadgeValue) {
       return 'blue';
     case 'IN_PROGRESS':
     case 'PENDING':
-    case 'VERIFIED_WITH_PENDING_CHANGES':
       return 'processing';
     case 'NO_EVIDENCE':
     case 'INACTIVE':
