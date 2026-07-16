@@ -1,8 +1,9 @@
 'use client';
 
-import { Button, Space, Table, Typography } from 'antd';
+import { Space, Table, Typography } from 'antd';
 import type { TableColumnsType, TablePaginationConfig } from 'antd';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Student } from '@/types/management';
 
@@ -30,7 +31,12 @@ export function LecturerStudentTable({
       width: 260,
       render: (_value, student) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{student.user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View details for student ${student.user.fullName}`}
+            onClick={() => onView(student)}
+          >
+            {student.user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">{student.user.email}</Typography.Text>
         </Space>
       ),
@@ -50,17 +56,6 @@ export function LecturerStudentTable({
       key: 'status',
       width: 110,
       render: (_value, student) => <StatusBadge status={student.user.status} />,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      fixed: 'right',
-      width: 100,
-      render: (_value, student) => (
-        <Button size="small" onClick={() => onView(student)}>
-          View
-        </Button>
-      ),
     },
   ];
 

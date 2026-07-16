@@ -276,6 +276,7 @@ export function AssessmentQuestionBankPage() {
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
+        okText="Save"
         confirmLoading={save.isPending}
         width={760}
       >

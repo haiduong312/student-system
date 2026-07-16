@@ -3,6 +3,7 @@
 import { Button, Space, Table, Typography } from 'antd';
 import type { TableColumnsType, TablePaginationConfig } from 'antd';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Lecturer } from '@/types/management';
 
@@ -37,7 +38,12 @@ export function LecturerTable({
       width: 250,
       render: (_value, lecturer) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{lecturer.user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View details for lecturer ${lecturer.user.fullName}`}
+            onClick={() => onView(lecturer)}
+          >
+            {lecturer.user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">{lecturer.user.email}</Typography.Text>
         </Space>
       ),
@@ -56,16 +62,13 @@ export function LecturerTable({
       title: 'Actions',
       key: 'actions',
       fixed: 'right',
-      width: 250,
+      width: 200,
       render: (_value, lecturer) => {
         const isActive = lecturer.user.status === 'ACTIVE';
         const isChangingStatus = changingStatusId === lecturer.id;
 
         return (
           <Space size="small">
-            <Button size="small" onClick={() => onView(lecturer)}>
-              View
-            </Button>
             <Button size="small" onClick={() => onEdit(lecturer)}>
               Edit
             </Button>

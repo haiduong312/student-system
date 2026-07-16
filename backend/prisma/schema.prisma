@@ -105,7 +105,6 @@ enum QuestionStatus {
 
 enum AssessmentStatus {
   IN_PROGRESS
-  SUBMITTED
   GRADED
   CANCELLED
 }

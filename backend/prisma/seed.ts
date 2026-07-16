@@ -1860,67 +1860,150 @@ async function seedAssessmentQuestions(
   skills: Map<string, Awaited<ReturnType<typeof prisma.skill.create>>>,
 ) {
   for (const skill of skills.values()) {
-    const questionText = `Which answer best reflects practical use of ${skill.name}?`;
-    const existing = await prisma.assessmentQuestion.findFirst({
-      where: {
-        skillId: skill.id,
-        questionText,
-      },
-    });
-    const data = {
-      skillId: skill.id,
-      questionText,
-      questionType: QuestionType.SINGLE_CHOICE,
-      level: Math.max(1, Math.min(skill.defaultRequiredLevel, 3)),
-      explanation: `${skill.name} should be demonstrated through practical work, not only memorized definitions.`,
-      status: QuestionStatus.ACTIVE,
-    };
-    const question = existing
-      ? await prisma.assessmentQuestion.update({ where: { id: existing.id }, data })
-      : await prisma.assessmentQuestion.create({ data });
+    const defaultLevel = Math.max(1, Math.min(skill.defaultRequiredLevel, 3));
 
-    await upsertAssessmentOptions(question.id, [
-      {
-        optionText: `Apply ${skill.name} in a small real or simulated project task and explain the result.`,
-        isCorrect: true,
-        orderIndex: 1,
-      },
-      {
-        optionText: `Only memorize the term ${skill.name} without using it in practice.`,
-        isCorrect: false,
-        orderIndex: 2,
-      },
-      {
-        optionText: `Avoid feedback because ${skill.name} cannot be improved through review.`,
-        isCorrect: false,
-        orderIndex: 3,
-      },
-      {
-        optionText: `Use ${skill.name} only after a project has already been completed.`,
-        isCorrect: false,
-        orderIndex: 4,
-      },
-    ]);
+    for (const level of [1, 2, 3]) {
+      const practicalBehavior = getAssessmentPracticalBehavior(skill.name, level);
+      const singleChoiceText =
+        level === defaultLevel
+          ? `Which answer best reflects practical use of ${skill.name}?`
+          : `Level ${level}: Which activity best demonstrates ${skill.name} proficiency?`;
+      const singleChoiceExplanation =
+        level === defaultLevel
+          ? `${skill.name} should be demonstrated through practical work, not only memorized definitions.`
+          : `${skill.name} at level ${level} must be demonstrated through observable practical work.`;
+      const singleChoiceOptions =
+        level === defaultLevel
+          ? [
+              {
+                optionText: `Apply ${skill.name} in a small real or simulated project task and explain the result.`,
+                isCorrect: true,
+                orderIndex: 1,
+              },
+              {
+                optionText: `Only memorize the term ${skill.name} without using it in practice.`,
+                isCorrect: false,
+                orderIndex: 2,
+              },
+              {
+                optionText: `Avoid feedback because ${skill.name} cannot be improved through review.`,
+                isCorrect: false,
+                orderIndex: 3,
+              },
+              {
+                optionText: `Use ${skill.name} only after a project has already been completed.`,
+                isCorrect: false,
+                orderIndex: 4,
+              },
+            ]
+          : [
+              {
+                optionText: practicalBehavior,
+                isCorrect: true,
+                orderIndex: 1,
+              },
+              {
+                optionText: `Only memorize the definition of ${skill.name} without applying it.`,
+                isCorrect: false,
+                orderIndex: 2,
+              },
+              {
+                optionText: `Claim proficiency in ${skill.name} without showing a result or receiving feedback.`,
+                isCorrect: false,
+                orderIndex: 3,
+              },
+              {
+                optionText: `Use an unrelated artifact as evidence of ${skill.name}.`,
+                isCorrect: false,
+                orderIndex: 4,
+              },
+            ];
+
+      await upsertSeedAssessmentQuestion({
+        skillId: skill.id,
+        questionText: singleChoiceText,
+        questionType: QuestionType.SINGLE_CHOICE,
+        level,
+        explanation: singleChoiceExplanation,
+        options: singleChoiceOptions,
+      });
+
+      await upsertSeedAssessmentQuestion({
+        skillId: skill.id,
+        questionText: `Level ${level}: A learner demonstrates ${skill.name} proficiency by completing the expected practical work and explaining the result.`,
+        questionType: QuestionType.TRUE_FALSE,
+        level,
+        explanation: `Practical evidence and an explanation are required to demonstrate ${skill.name} at level ${level}.`,
+        options: [
+          {
+            optionText: 'True',
+            isCorrect: true,
+            orderIndex: 1,
+          },
+          {
+            optionText: 'False',
+            isCorrect: false,
+            orderIndex: 2,
+          },
+        ],
+      });
+    }
   }
 }
 
-async function upsertAssessmentOptions(
+function getAssessmentPracticalBehavior(skillName: string, level: number) {
+  if (level === 1) {
+    return `Complete a guided basic task using ${skillName} and explain the main steps.`;
+  }
+  if (level === 2) {
+    return `Apply ${skillName} independently in a realistic task and justify the key decisions.`;
+  }
+
+  return `Use ${skillName} to solve a complex case, evaluate trade-offs, and improve the final result.`;
+}
+
+async function upsertSeedAssessmentQuestion(input: {
+  skillId: string;
+  questionText: string;
+  questionType: QuestionType;
+  level: number;
+  explanation: string;
+  options: Array<{ optionText: string; isCorrect: boolean; orderIndex: number }>;
+}) {
+  const existing = await prisma.assessmentQuestion.findFirst({
+    where: {
+      skillId: input.skillId,
+      questionText: input.questionText,
+    },
+  });
+  const data = {
+    skillId: input.skillId,
+    questionText: input.questionText,
+    questionType: input.questionType,
+    level: input.level,
+    explanation: input.explanation,
+    status: QuestionStatus.ACTIVE,
+  };
+  const question = existing
+    ? await prisma.assessmentQuestion.update({ where: { id: existing.id }, data })
+    : await prisma.assessmentQuestion.create({ data });
+
+  await syncSeedAssessmentOptions(question.id, input.options);
+}
+
+async function syncSeedAssessmentOptions(
   questionId: string,
   options: Array<{ optionText: string; isCorrect: boolean; orderIndex: number }>,
 ) {
-  for (const option of options) {
-    const existing = await prisma.assessmentOption.findFirst({
-      where: {
-        questionId,
-        optionText: option.optionText,
-      },
-    });
+  const existingOptions = await prisma.assessmentOption.findMany({
+    where: { questionId },
+    orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+  });
 
+  for (const [index, option] of options.entries()) {
+    const existing = existingOptions[index];
     if (existing) {
-      await prisma.assessmentOption.update({
-        where: { id: existing.id },
-        data: option,
-      });
+      await prisma.assessmentOption.update({ where: { id: existing.id }, data: option });
     } else {
       await prisma.assessmentOption.create({
         data: {
@@ -1929,6 +2012,13 @@ async function upsertAssessmentOptions(
         },
       });
     }
+  }
+
+  const obsoleteOptions = existingOptions.slice(options.length);
+  if (obsoleteOptions.length) {
+    await prisma.assessmentOption.deleteMany({
+      where: { id: { in: obsoleteOptions.map((option) => option.id) } },
+    });
   }
 }
 

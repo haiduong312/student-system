@@ -1,9 +1,10 @@
 'use client';
 
-import { Button, Rate, Space, Table, Typography } from 'antd';
+import { Rate, Space, Table, Typography } from 'antd';
 import type { TableColumnsType, TablePaginationConfig } from 'antd';
 import dayjs from 'dayjs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import type { AdvisorReview } from '@/types/management';
 
 export function ReviewList({
@@ -30,7 +31,12 @@ export function ReviewList({
       width: 220,
       render: (_value, review) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{review.lecturer.user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View review details from ${review.lecturer.user.fullName}`}
+            onClick={() => onView(review)}
+          >
+            {review.lecturer.user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">{review.lecturer.lecturerCode}</Typography.Text>
         </Space>
       ),
@@ -53,17 +59,6 @@ export function ReviewList({
       dataIndex: 'createdAt',
       width: 170,
       render: (value: string) => dayjs(value).format('DD/MM/YYYY HH:mm'),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      fixed: 'right',
-      width: 90,
-      render: (_value, review) => (
-        <Button size="small" onClick={() => onView(review)}>
-          View
-        </Button>
-      ),
     },
   ];
 

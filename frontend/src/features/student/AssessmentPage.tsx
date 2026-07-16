@@ -9,6 +9,7 @@ import {
     Descriptions,
     Empty,
     List,
+    Pagination,
     Progress,
     Radio,
     Row,
@@ -18,7 +19,7 @@ import {
     Typography,
 } from "antd";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getApiErrorMessage } from "@/lib/errors";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -39,6 +40,8 @@ import {
     type AssessmentStartResponse,
     type AssessmentSubmitResponse,
 } from "./assessment.service";
+
+const ASSESSMENT_QUESTIONS_PER_PAGE = 20;
 
 export function StudentAssessmentPage() {
     const { message, modal } = App.useApp();
@@ -275,6 +278,8 @@ function AssessmentQuizView({
     onAnswer: (questionId: string, selectedOptionId: string) => void;
     onSubmit: () => void;
 }) {
+    const [currentPage, setCurrentPage] = useState(1);
+    const questionListTopRef = useRef<HTMLDivElement>(null);
     const answeredCount = assessment.questions.filter(
         (question) => answers[question.id],
     ).length;
@@ -287,6 +292,22 @@ function AssessmentQuizView({
         () => groupQuestionsBySkillType(assessment.questions),
         [assessment.questions],
     );
+    const pageStartIndex =
+        (currentPage - 1) * ASSESSMENT_QUESTIONS_PER_PAGE;
+    const visibleQuestions = assessment.questions.slice(
+        pageStartIndex,
+        pageStartIndex + ASSESSMENT_QUESTIONS_PER_PAGE,
+    );
+
+    const changePage = (page: number) => {
+        setCurrentPage(page);
+        requestAnimationFrame(() => {
+            questionListTopRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            });
+        });
+    };
 
     return (
         <>
@@ -366,15 +387,21 @@ function AssessmentQuizView({
                     </Card>
                 </Col>
                 <Col xs={24} lg={17}>
+                    <div ref={questionListTopRef} />
                     <Space
                         direction="vertical"
                         size={16}
                         style={{ width: "100%" }}
                     >
-                        {assessment.questions.map((question, index) => (
+                        <AssessmentQuestionPagination
+                            currentPage={currentPage}
+                            totalQuestions={assessment.questions.length}
+                            onChange={changePage}
+                        />
+                        {visibleQuestions.map((question, index) => (
                             <QuestionCard
                                 key={question.id}
-                                index={index}
+                                index={pageStartIndex + index}
                                 question={question}
                                 value={answers[question.id]}
                                 onChange={(selectedOptionId) =>
@@ -382,6 +409,11 @@ function AssessmentQuizView({
                                 }
                             />
                         ))}
+                        <AssessmentQuestionPagination
+                            currentPage={currentPage}
+                            totalQuestions={assessment.questions.length}
+                            onChange={changePage}
+                        />
                         <Card>
                             <Button
                                 type="primary"
@@ -402,6 +434,36 @@ function AssessmentQuizView({
                 </Col>
             </Row>
         </>
+    );
+}
+
+function AssessmentQuestionPagination({
+    currentPage,
+    totalQuestions,
+    onChange,
+}: {
+    currentPage: number;
+    totalQuestions: number;
+    onChange: (page: number) => void;
+}) {
+    if (totalQuestions <= ASSESSMENT_QUESTIONS_PER_PAGE) {
+        return null;
+    }
+
+    return (
+        <Card size="small">
+            <Pagination
+                current={currentPage}
+                pageSize={ASSESSMENT_QUESTIONS_PER_PAGE}
+                total={totalQuestions}
+                showSizeChanger={false}
+                responsive
+                showTotal={(total, range) =>
+                    `Questions ${range[0]}-${range[1]} of ${total}`
+                }
+                onChange={onChange}
+            />
+        </Card>
     );
 }
 

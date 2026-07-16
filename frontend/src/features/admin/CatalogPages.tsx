@@ -22,6 +22,7 @@ import { useState } from 'react';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { QueryState } from '@/components/ui/QueryState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type {
@@ -178,7 +179,21 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
           setPageSize(pagination.pageSize ?? DEFAULT_TABLE_PAGE_SIZE);
         }}
         columns={[
-          { title: 'Name', dataIndex: 'name' },
+          {
+            title: 'Name',
+            dataIndex: 'name',
+            render: (name: string, record: CatalogRecord) =>
+              kind === 'career-goals' ? (
+                <RecordDetailLink
+                  ariaLabel={`Manage career goal ${name}`}
+                  onClick={() => setSelectedCareerGoal(record as CareerGoal)}
+                >
+                  {name}
+                </RecordDetailLink>
+              ) : (
+                name
+              ),
+          },
           ...(kind === 'skills'
             ? [
                 {
@@ -218,11 +233,6 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
             title: 'Actions',
             render: (_value: unknown, record: CatalogRecord) => (
               <Space>
-                {kind === 'career-goals' ? (
-                  <Button onClick={() => setSelectedCareerGoal(record as CareerGoal)}>
-                    Manage
-                  </Button>
-                ) : null}
                 <Button onClick={() => openForm(record)}>Edit</Button>
                 <Button danger onClick={() => remove.mutate(record.id)}>
                   Delete
@@ -237,6 +247,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
+        okText="Save"
         confirmLoading={save.isPending}
       >
         <Form<CatalogFormValues>
@@ -593,6 +604,7 @@ function RequiredSkillsManager({
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={() => form.submit()}
+        okText="Save"
         confirmLoading={save.isPending}
       >
         <Form<RequiredSkillFormValues>
@@ -830,6 +842,7 @@ function SpecializationsTab({
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={() => form.submit()}
+        okText="Save"
         confirmLoading={save.isPending}
       >
         <Form<SpecializationFormValues>

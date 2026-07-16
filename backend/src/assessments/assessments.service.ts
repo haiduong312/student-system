@@ -19,6 +19,7 @@ import { StartAssessmentDto } from './dto/start-assessment.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 
 const MAX_QUESTIONS_PER_SKILL = 6;
+const MIN_ACTIVE_QUESTIONS_PER_LEVEL = 2;
 const LEVEL_PASS_THRESHOLD = 60;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
 const ASSESSMENT_COOLDOWN_MINUTES = 30;
@@ -554,7 +555,7 @@ export class AssessmentsService {
       .join('; ');
 
     throw new BadRequestException(
-      `Assessment cannot be started because required skill ${firstMissingSkill.skillName} is missing active questions for level(s): ${firstMissingSkill.missingLevels.join(', ')}. Missing coverage: ${missingSkillList}`,
+      `Assessment cannot be started because required skill ${firstMissingSkill.skillName} has fewer than ${MIN_ACTIVE_QUESTIONS_PER_LEVEL} eligible ACTIVE questions for level(s): ${firstMissingSkill.missingLevels.join(', ')}. Missing coverage: ${missingSkillList}`,
     );
   }
 
@@ -562,11 +563,20 @@ export class AssessmentsService {
     questions: QuestionWithOptions[],
     requiredLevel: number,
   ) {
-    const availableLevels = new Set(questions.map((question) => question.level));
+    const activeQuestionCountByLevel = new Map<number, number>();
+    for (const question of questions) {
+      activeQuestionCountByLevel.set(
+        question.level,
+        (activeQuestionCountByLevel.get(question.level) ?? 0) + 1,
+      );
+    }
     const missingLevels: number[] = [];
 
     for (let level = 1; level <= requiredLevel; level += 1) {
-      if (!availableLevels.has(level)) {
+      if (
+        (activeQuestionCountByLevel.get(level) ?? 0) <
+        MIN_ACTIVE_QUESTIONS_PER_LEVEL
+      ) {
         missingLevels.push(level);
       }
     }

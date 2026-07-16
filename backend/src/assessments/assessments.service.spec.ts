@@ -144,6 +144,23 @@ const validQuestion = (input: {
   ],
 });
 
+const validQuestionPair = (input: {
+  prefix: string;
+  skillId: string;
+  level: number;
+}) => [
+  validQuestion({
+    id: `${input.prefix}-a`,
+    skillId: input.skillId,
+    level: input.level,
+  }),
+  validQuestion({
+    id: `${input.prefix}-b`,
+    skillId: input.skillId,
+    level: input.level,
+  }),
+];
+
 const requiredSkill = (input: {
   skillId: string;
   skillName: string;
@@ -229,39 +246,12 @@ describe('AssessmentsService specialization scope', () => {
         ],
       },
       assessmentQuestion: {
-        findMany: async () => [
-          {
-            id: 'question-1',
+        findMany: async () =>
+          validQuestionPair({
+            prefix: 'react-level-1',
             skillId: 'skill-1',
-            questionText: 'React question',
-            questionType: QuestionType.SINGLE_CHOICE,
             level: 1,
-            status: QuestionStatus.ACTIVE,
-            explanation: null,
-            createdAt: startedAt,
-            updatedAt: startedAt,
-            options: [
-              {
-                id: 'option-1',
-                questionId: 'question-1',
-                optionText: 'A',
-                isCorrect: true,
-                orderIndex: 1,
-                createdAt: startedAt,
-                updatedAt: startedAt,
-              },
-              {
-                id: 'option-2',
-                questionId: 'question-1',
-                optionText: 'B',
-                isCorrect: false,
-                orderIndex: 2,
-                createdAt: startedAt,
-                updatedAt: startedAt,
-              },
-            ],
-          },
-        ],
+          }),
       },
       $transaction: async (callback: any) =>
         callback({
@@ -525,7 +515,7 @@ describe('AssessmentsService specialization scope', () => {
 });
 
 describe('AssessmentsService question coverage', () => {
-  it('creates an assessment when each required skill has active questions for every level through requiredLevel', async () => {
+  it('creates an assessment when each required skill has two active questions for every level through requiredLevel', async () => {
     let createArgs: any;
     const service = new AssessmentsService(
       coveragePrisma({
@@ -540,8 +530,16 @@ describe('AssessmentsService question coverage', () => {
           },
         ],
         questions: [
-          validQuestion({ id: 'question-level-1', skillId: 'skill-1', level: 1 }),
-          validQuestion({ id: 'question-level-2', skillId: 'skill-1', level: 2 }),
+          ...validQuestionPair({
+            prefix: 'question-level-1',
+            skillId: 'skill-1',
+            level: 1,
+          }),
+          ...validQuestionPair({
+            prefix: 'question-level-2',
+            skillId: 'skill-1',
+            level: 2,
+          }),
         ],
         onCreate: (args) => {
           createArgs = args;
@@ -560,9 +558,14 @@ describe('AssessmentsService question coverage', () => {
     assert.equal(createArgs.data.specializationId, 'backend-1');
     assert.deepEqual(
       createArgs.data.items.create.map((item: any) => item.questionId).sort(),
-      ['question-level-1', 'question-level-2'],
+      [
+        'question-level-1-a',
+        'question-level-1-b',
+        'question-level-2-a',
+        'question-level-2-b',
+      ],
     );
-    assert.equal(result.questions.length, 2);
+    assert.equal(result.questions.length, 4);
   });
 
   it('throws BadRequestException when any level up to requiredLevel is missing', async () => {
@@ -578,9 +581,11 @@ describe('AssessmentsService question coverage', () => {
             }),
           },
         ],
-        questions: [
-          validQuestion({ id: 'question-level-1', skillId: 'skill-1', level: 1 }),
-        ],
+        questions: validQuestionPair({
+          prefix: 'question-level-1',
+          skillId: 'skill-1',
+          level: 1,
+        }),
       }) as any,
     );
 
@@ -591,11 +596,11 @@ describe('AssessmentsService question coverage', () => {
           careerGoalId: 'goal-1',
           specializationId: 'backend-1',
         }),
-      /NestJS.*missing active questions for level\(s\): 2/,
+      /NestJS.*fewer than 2 eligible ACTIVE questions for level\(s\): 2/,
     );
   });
 
-  it('treats inactive questions as missing coverage', async () => {
+  it('treats one active plus one inactive question as insufficient coverage', async () => {
     const service = new AssessmentsService(
       coveragePrisma({
         requiredSkills: [
@@ -609,7 +614,12 @@ describe('AssessmentsService question coverage', () => {
           },
         ],
         questions: [
-          validQuestion({ id: 'question-level-1', skillId: 'skill-1', level: 1 }),
+          ...validQuestionPair({
+            prefix: 'question-level-1',
+            skillId: 'skill-1',
+            level: 1,
+          }),
+          validQuestion({ id: 'active-question-level-2', skillId: 'skill-1', level: 2 }),
           validQuestion({
             id: 'inactive-question-level-2',
             skillId: 'skill-1',
@@ -627,7 +637,7 @@ describe('AssessmentsService question coverage', () => {
           careerGoalId: 'goal-1',
           specializationId: 'backend-1',
         }),
-      /NestJS.*missing active questions for level\(s\): 2/,
+      /NestJS.*fewer than 2 eligible ACTIVE questions for level\(s\): 2/,
     );
   });
 
@@ -655,15 +665,15 @@ describe('AssessmentsService question coverage', () => {
           },
         ],
         questions: [
-          validQuestion({ id: 'nestjs-level-1', skillId: 'skill-ok', level: 1 }),
-          validQuestion({ id: 'nestjs-level-2', skillId: 'skill-ok', level: 2 }),
-          validQuestion({
-            id: 'postgres-level-1',
+          ...validQuestionPair({ prefix: 'nestjs-level-1', skillId: 'skill-ok', level: 1 }),
+          ...validQuestionPair({ prefix: 'nestjs-level-2', skillId: 'skill-ok', level: 2 }),
+          ...validQuestionPair({
+            prefix: 'postgres-level-1',
             skillId: 'skill-missing',
             level: 1,
           }),
-          validQuestion({
-            id: 'postgres-level-3',
+          ...validQuestionPair({
+            prefix: 'postgres-level-3',
             skillId: 'skill-missing',
             level: 3,
           }),
@@ -678,7 +688,7 @@ describe('AssessmentsService question coverage', () => {
           careerGoalId: 'goal-1',
           specializationId: 'backend-1',
         }),
-      /PostgreSQL.*missing active questions for level\(s\): 2/,
+      /PostgreSQL.*fewer than 2 eligible ACTIVE questions for level\(s\): 2/,
     );
   });
 
@@ -696,8 +706,16 @@ describe('AssessmentsService question coverage', () => {
           },
         ],
         questions: [
-          validQuestion({ id: 'question-level-1', skillId: 'skill-1', level: 1 }),
-          validQuestion({ id: 'question-level-2', skillId: 'skill-1', level: 2 }),
+          ...validQuestionPair({
+            prefix: 'question-level-1',
+            skillId: 'skill-1',
+            level: 1,
+          }),
+          ...validQuestionPair({
+            prefix: 'question-level-2',
+            skillId: 'skill-1',
+            level: 2,
+          }),
         ],
       }) as any,
     );

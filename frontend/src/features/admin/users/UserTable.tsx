@@ -4,6 +4,7 @@ import { Button, Space, Table, Tag, Typography } from 'antd';
 import type { TableColumnsType, TablePaginationConfig } from 'antd';
 import dayjs from 'dayjs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { User } from '@/types/management';
 
@@ -42,7 +43,12 @@ export function UserTable({
       width: 250,
       render: (_value, user) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View details for user ${user.fullName}`}
+            onClick={() => onView(user)}
+          >
+            {user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">{user.email}</Typography.Text>
         </Space>
       ),
@@ -71,14 +77,13 @@ export function UserTable({
       title: 'Actions',
       key: 'actions',
       fixed: 'right',
-      width: 380,
+      width: 330,
       render: (_value, user) => {
         const isActive = user.status === 'ACTIVE';
         const isChangingStatus = changingStatusId === user.id;
         const isResetting = resettingId === user.id;
         return (
           <Space size="small">
-            <Button size="small" onClick={() => onView(user)}>Detail</Button>
             <Button size="small" onClick={() => onEdit(user)}>Edit</Button>
             <Button
               danger={isActive}

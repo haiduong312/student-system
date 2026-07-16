@@ -4,6 +4,7 @@ import { Button, Space, Table, Typography } from 'antd';
 import type { TableColumnsType, TablePaginationConfig } from 'antd';
 import dayjs from 'dayjs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { RecordDetailLink } from '@/components/ui/RecordDetailLink';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { AdvisorAssignment } from '@/types/management';
 
@@ -37,7 +38,12 @@ export function AdvisorAssignmentTable({
       width: 260,
       render: (_value, assignment) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{assignment.lecturer.user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View details for advisor assignment ${assignment.lecturer.user.fullName}`}
+            onClick={() => onView(assignment)}
+          >
+            {assignment.lecturer.user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">
             {assignment.lecturer.lecturerCode} · {assignment.lecturer.department || 'No department'}
           </Typography.Text>
@@ -50,7 +56,12 @@ export function AdvisorAssignmentTable({
       width: 260,
       render: (_value, assignment) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{assignment.student.user.fullName}</Typography.Text>
+          <RecordDetailLink
+            ariaLabel={`View advisor assignment for student ${assignment.student.user.fullName}`}
+            onClick={() => onView(assignment)}
+          >
+            {assignment.student.user.fullName}
+          </RecordDetailLink>
           <Typography.Text type="secondary">
             {assignment.student.studentCode} · {assignment.student.className || 'No class'}
           </Typography.Text>
@@ -79,12 +90,11 @@ export function AdvisorAssignmentTable({
       title: 'Actions',
       key: 'actions',
       fixed: 'right',
-      width: 210,
+      width: 160,
       render: (_value, assignment) => {
         const isDeleting = deletingId === assignment.id;
         return (
           <Space size="small">
-            <Button size="small" onClick={() => onView(assignment)}>View</Button>
             <Button size="small" onClick={() => onEdit(assignment)}>Edit</Button>
             <Button
               danger

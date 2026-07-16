@@ -44,7 +44,7 @@ export class AssessmentPage extends PageObject {
   async expectInProgress(questionCount: number) {
     await expect(this.page.getByText('IN_PROGRESS', { exact: true })).toBeVisible();
     await expect(this.page.getByRole('group', { name: /^Question \d+:/ })).toHaveCount(
-      questionCount,
+      Math.min(questionCount, 20),
     );
   }
 
