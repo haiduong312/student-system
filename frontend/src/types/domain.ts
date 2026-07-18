@@ -60,6 +60,7 @@ export type ResourceProgressStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'SKIPPED';
+export type TemplateStatus = 'ACTIVE' | 'INACTIVE';
 export type RoadmapItemType =
   | 'LEARN'
   | 'PRACTICE'
@@ -418,6 +419,44 @@ export interface LearningResource {
     recommendationLinks?: number;
     progress?: number;
   };
+}
+
+export interface RecommendationTemplateResourceLink {
+  id: string;
+  templateId: string;
+  resourceId: string;
+  orderIndex: number;
+  priority: number;
+  isRequired?: boolean;
+  note?: string | null;
+  resource?: LearningResource;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecommendationTemplate {
+  id: string;
+  skillId?: string | null;
+  skillCategoryId?: string | null;
+  careerGoalId?: string | null;
+  specializationId?: string | null;
+  level?: SkillLevel | null;
+  recommendationType: RecommendationType;
+  title: string;
+  description?: string | null;
+  difficultyLevel?: DifficultyLevel | null;
+  estimatedDuration?: string | null;
+  resourceUrl?: string | null;
+  priority: number;
+  roadmapPhase?: RoadmapPhase | null;
+  status: TemplateStatus;
+  skill?: Skill | null;
+  skillCategory?: SkillCategory | null;
+  careerGoal?: CareerGoal | null;
+  specialization?: Specialization | null;
+  resourceLinks?: RecommendationTemplateResourceLink[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StudentResourceProgress {
