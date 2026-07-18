@@ -112,20 +112,9 @@
 
 .itemHeader {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
-}
-
-.itemOrder {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: #eaf3ff;
-  color: #1668c9;
-  font-weight: 800;
 }
 
 .itemTitleBlock {
@@ -137,14 +126,18 @@
 }
 
 .itemDescription {
-  margin: 12px 0 0 42px !important;
+  margin: 12px 0 0 !important;
   color: #43566b;
 }
 
 .resourceSection {
-  margin: 14px 0 0 42px;
+  margin: 14px 0 0;
   border-top: 1px solid #edf1f6;
   padding-top: 12px;
+}
+
+.statusSelect {
+  width: 150px;
 }
 
 .resourceList {
@@ -193,6 +186,14 @@
   padding: 52px 20px;
 }
 
+.history {
+  margin-top: 28px;
+}
+
+.historyTitle {
+  margin-bottom: 12px !important;
+}
+
 @media (max-width: 760px) {
   .summary {
     grid-template-columns: 1fr;
@@ -222,17 +223,15 @@
   }
 
   .itemHeader {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .itemHeader > :last-child {
-    grid-column: 2;
     justify-self: start;
   }
 
-  .itemDescription,
-  .resourceSection {
-    margin-left: 0 !important;
+  .statusSelect {
+    width: 100%;
   }
 
   .resourceItem {

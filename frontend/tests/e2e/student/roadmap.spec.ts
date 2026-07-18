@@ -63,6 +63,13 @@ test.describe('Student development roadmap', () => {
           ?.status,
       ).toBe('DONE');
 
+      await expect
+        .poll(async () =>
+          (await studentApi.listRecommendations('DONE')).some(
+            (record) => record.skillId === workflowSkill.skill.id,
+          ),
+        )
+        .toBe(true);
       await expect.poll(() => studentApi.getActiveRoadmap()).toBeNull();
       await roadmapPage.expectHistory(completedRoadmap.title, 'COMPLETED', 100);
     } finally {

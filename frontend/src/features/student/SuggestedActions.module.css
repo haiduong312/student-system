@@ -1,0 +1,30 @@
+.list {
+  width: 100%;
+}
+
+.item {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start !important;
+  gap: 12px;
+  padding: 12px 0 !important;
+}
+
+.item > :global(.ant-checkbox-wrapper),
+.item > :global(.ant-checkbox) {
+  margin-top: 3px;
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.meta {
+  min-width: 0;
+}
+
+.reason {
+  margin: 2px 0 0 !important;
+}

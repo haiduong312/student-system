@@ -62,14 +62,14 @@ export function AdminReportsPage() {
   return (
     <>
       <PageHeader
-        title="Báo cáo và xuất dữ liệu"
-        description="Xuất dữ liệu theo bộ lọc và tải lại các file đã tạo."
+        title="Reports and Data Export"
+        description="Export filtered data and download previously generated files."
       />
 
       <Space direction="vertical" size="large" style={{ display: 'flex' }}>
-        <Card title="Xuất danh sách sinh viên">
+        <Card title="Export Student List">
           <Typography.Paragraph type="secondary">
-            Để trống bộ lọc để xuất toàn bộ sinh viên trong phạm vi Admin.
+            Leave the filters blank to export all students in the Admin scope.
           </Typography.Paragraph>
           <Form<StudentsExportFormValues>
             form={studentsForm}
@@ -77,19 +77,19 @@ export function AdminReportsPage() {
             onFinish={exportStudents}
           >
             <div style={filterGridStyle}>
-              <Form.Item name="search" label="Tìm kiếm">
-                <Input allowClear placeholder="Họ tên, email hoặc mã sinh viên" />
+              <Form.Item name="search" label="Search">
+                <Input allowClear placeholder="Full name, email, or student code" />
               </Form.Item>
-              <Form.Item name="className" label="Lớp">
+              <Form.Item name="className" label="Class">
                 <Input allowClear />
               </Form.Item>
-              <Form.Item name="major" label="Ngành">
+              <Form.Item name="major" label="Major">
                 <Input allowClear />
               </Form.Item>
-              <Form.Item name="academicYear" label="Niên khóa">
+              <Form.Item name="academicYear" label="Academic Year">
                 <Input allowClear />
               </Form.Item>
-              <Form.Item name="status" label="Trạng thái">
+              <Form.Item name="status" label="Status">
                 <Select<UserStatus>
                   allowClear
                   options={[
@@ -108,22 +108,22 @@ export function AdminReportsPage() {
                 disabled={studentsExport.isPending}
               >
                 {studentsExport.isPending
-                  ? 'Đang xuất...'
-                  : 'Xuất Excel danh sách sinh viên'}
+                  ? 'Exporting...'
+                  : 'Export Student List to Excel'}
               </Button>
               <Button
                 disabled={studentsExport.isPending}
                 onClick={() => studentsForm.resetFields()}
               >
-                Đặt lại bộ lọc
+                Reset Filters
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <Card title="Xuất báo cáo năng lực">
+        <Card title="Export Competency Report">
           <Typography.Paragraph type="secondary">
-            Có thể giới hạn báo cáo theo sinh viên và thời gian phân tích.
+            Limit the report by student and analysis period.
           </Typography.Paragraph>
           <Form<CompetencyExportFormValues>
             form={competencyForm}
@@ -132,9 +132,9 @@ export function AdminReportsPage() {
           >
             <div style={filterGridStyle}>
               <Form.Item name="studentId" label="Student ID">
-                <Input allowClear placeholder="Để trống để xuất theo phạm vi Admin" />
+                <Input allowClear placeholder="Leave blank to export the full Admin scope" />
               </Form.Item>
-              <Form.Item name="analyzedAt" label="Thời gian phân tích">
+              <Form.Item name="analyzedAt" label="Analysis Period">
                 <RangePicker style={{ width: '100%' }} />
               </Form.Item>
             </div>
@@ -147,20 +147,20 @@ export function AdminReportsPage() {
                 disabled={competencyExport.isPending}
               >
                 {competencyExport.isPending
-                  ? 'Đang xuất...'
-                  : 'Xuất Excel báo cáo năng lực'}
+                  ? 'Exporting...'
+                  : 'Export Competency Report to Excel'}
               </Button>
               <Button
                 disabled={competencyExport.isPending}
                 onClick={() => competencyForm.resetFields()}
               >
-                Đặt lại bộ lọc
+                Reset Filters
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <ExportHistoryTable title="Lịch sử export" initialPageSize={20} />
+        <ExportHistoryTable title="Export History" initialPageSize={20} />
       </Space>
     </>
   );

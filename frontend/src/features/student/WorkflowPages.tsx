@@ -6,19 +6,25 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Descriptions,
   Grid,
   Input,
   List,
+  Modal,
   Select,
   Space,
   Table,
   Tag,
-  Tabs,
   theme,
   Typography,
 } from 'antd';
-import { CheckOutlined, ClockCircleOutlined, UndoOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  ClockCircleOutlined,
+  ReloadOutlined,
+  UndoOutlined,
+} from '@ant-design/icons';
 import {
   useMutation,
   useQuery,
@@ -43,11 +49,11 @@ import type {
   EvidenceStatus,
   NotificationItem,
   Paginated,
-  Recommendation,
-  RecommendationResource,
   ResourceProgressStatus,
+  RoadmapItem,
+  RoadmapItemResource,
+  RoadmapItemStatus,
   Specialization,
-  StudentRecommendationStatus,
 } from '@/types/domain';
 import { ANALYSIS_CURRENT_STATUS } from '@/types/domain';
 import {
@@ -60,11 +66,11 @@ import { analysisService } from './analysis.service';
 import { evidenceService } from './evidence.service';
 import { learningResourceService } from './learning-resource.service';
 import { recommendationService } from './recommendation.service';
-import { RecommendationTree } from './RecommendationTree';
+import { roadmapService } from './roadmap.service';
 import { SelectedRoadmap } from './SelectedRoadmap';
+import { SuggestedActions } from './SuggestedActions';
 
 type AnalysisSkill = CompetencyAnalysis['skills'][number];
-type RecommendationFilter = 'active' | 'done' | 'dismissed';
 type NotificationTypePresentation = {
   color: string;
   label: string;
@@ -81,19 +87,6 @@ const NOTIFICATION_TYPE_PRESENTATION: Record<
   ADVISOR_REVIEW: { color: 'purple', label: 'Advisor review' },
   WEAK_PROFILE_ALERT: { color: 'volcano', label: 'Profile alert' },
   SYSTEM: { color: 'cyan', label: 'System' },
-};
-
-const RECOMMENDATION_FILTER_LABEL: Record<RecommendationFilter, string> = {
-  active: 'Active',
-  done: 'Done',
-  dismissed: 'Dismissed',
-};
-
-const RECOMMENDATION_FILTER_STATUS: Partial<
-  Record<RecommendationFilter, StudentRecommendationStatus>
-> = {
-  done: 'DONE',
-  dismissed: 'DISMISSED',
 };
 
 export function StudentEvidencesView() {
@@ -237,108 +230,58 @@ export function LecturerEvidenceReviewView() {
   );
 }
 
-export function RecommendationsView() {
-  const { message } = App.useApp();
-  const queryClient = useQueryClient();
-  const context = useCurrentProfileContext();
-  const [filter, setFilter] = useState<RecommendationFilter>('active');
-  const query = useQuery({
-    queryKey: studentQueryKeys.recommendationsMe(context.scopeKey, filter),
-    queryFn: () =>
-      recommendationService.listMine({
-        status: RECOMMENDATION_FILTER_STATUS[filter],
-        limit: 100,
-      }),
-    enabled: context.isContextReady,
-  });
-  const update = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: StudentRecommendationStatus }) =>
-      recommendationService.updateStatus(id, status),
-    onSuccess: () => {
-      invalidateStudentCurrentContextQueries(queryClient);
-    },
-    onError: (error) => message.error(getApiErrorMessage(error)),
-  });
-  const recommendations = (query.data?.data ?? []).filter((item) =>
-    filter === 'active'
-      ? isActionableRecommendation(item.status)
-      : item.status === RECOMMENDATION_FILTER_STATUS[filter],
-  );
-
-  return (
-    <QueryState
-      loading={context.loading || (context.isContextReady && query.isLoading)}
-      error={context.error ?? query.error}
-    >
-      <PageHeader title="Recommendations" />
-      <CareerScopeSummary
-        careerGoal={context.profile?.careerGoal}
-        specialization={context.profile?.specialization}
-        style={{ marginBottom: 16 }}
-      />
-      {!context.isContextReady ? (
-        <Alert
-          showIcon
-          type="warning"
-          style={{ marginBottom: 16 }}
-          message="Please select a career goal before viewing recommendations."
-        />
-      ) : null}
-      <Tabs
-        activeKey={filter}
-        onChange={(key) => setFilter(key as RecommendationFilter)}
-        items={(Object.keys(RECOMMENDATION_FILTER_LABEL) as RecommendationFilter[]).map(
-          (key) => ({
-            key,
-            label: RECOMMENDATION_FILTER_LABEL[key],
-          }),
-        )}
-      />
-      <RecommendationTree
-        recommendations={recommendations}
-        emptyDescription={
-          filter === 'active'
-            ? 'Chưa có gợi ý học tập. Hãy hoàn thành phân tích năng lực trước.'
-            : `No ${RECOMMENDATION_FILTER_LABEL[filter].toLowerCase()} recommendations.`
-        }
-        showAnalysisAction={filter === 'active'}
-        updating={update.isPending}
-        onAddToRoadmap={(recommendation) =>
-          update.mutate(
-            { id: recommendation.id, status: 'SAVED' },
-            { onSuccess: () => message.success('Added to Roadmap.') },
-          )
-        }
-        onDismiss={(recommendation) =>
-          update.mutate(
-            { id: recommendation.id, status: 'DISMISSED' },
-            { onSuccess: () => message.success('Recommendation dismissed.') },
-          )
-        }
-      />
-    </QueryState>
-  );
-}
-
 export function RoadmapView() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const context = useCurrentProfileContext();
-  const selectedRecommendations = useQuery({
-    queryKey: [...studentQueryKeys.recommendationsMe(context.scopeKey, 'roadmap-selected')],
-    queryFn: async () =>
-      recommendationService
-        .listMine({ limit: 100 })
-        .then((page) =>
-          page.data.filter((item) =>
-            ['SAVED', 'IN_PROGRESS', 'DONE'].includes(item.status),
-          ),
-        ),
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [selectedRecommendationIds, setSelectedRecommendationIds] = useState<
+    string[]
+  >([]);
+  const activeRoadmap = useQuery({
+    queryKey: studentQueryKeys.roadmapsActive(context.scopeKey),
+    queryFn: () => roadmapService.getMyActiveRoadmap(),
     enabled: context.isContextReady,
   });
-  const updateRecommendation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: StudentRecommendationStatus }) =>
-      recommendationService.updateStatus(id, status),
+  const roadmapHistory = useQuery({
+    queryKey: studentQueryKeys.roadmapsHistory,
+    queryFn: () => roadmapService.listMyHistory(),
+    enabled: context.isContextReady,
+  });
+  const roadmapSuggestions = useQuery({
+    queryKey: studentQueryKeys.recommendationsMe(
+      context.scopeKey,
+      'roadmap-candidates',
+    ),
+    queryFn: () => recommendationService.listMine({ limit: 100 }),
+    enabled: context.isContextReady,
+  });
+  const suggestions = (roadmapSuggestions.data?.data ?? []).filter((item) =>
+    isActionableRecommendation(item.status),
+  );
+  const generateRoadmap = useMutation({
+    mutationFn: (excludedRecommendationIds: string[]) =>
+      roadmapService.generateMine({
+        archiveCurrentActiveRoadmap: true,
+        excludedRecommendationIds,
+      }),
+    onSuccess: () => {
+      message.success('Roadmap generated');
+      setReviewOpen(false);
+      invalidateStudentCurrentContextQueries(queryClient);
+    },
+    onError: (error) => message.error(getApiErrorMessage(error)),
+  });
+  const updateRoadmapItem = useMutation({
+    mutationFn: ({
+      item,
+      status,
+      note,
+    }: {
+      item: RoadmapItem;
+      status: RoadmapItemStatus;
+      note?: string;
+    }) => roadmapService.updateItemStatus(item.id, { status, note }),
     onSuccess: () => {
       invalidateStudentCurrentContextQueries(queryClient);
     },
@@ -350,34 +293,81 @@ export function RoadmapView() {
       recommendationId,
       status,
     }: {
-      resource: RecommendationResource;
-      recommendationId: string;
+      resource: RoadmapItemResource;
+      recommendationId?: string | null;
       status: ResourceProgressStatus;
     }) =>
-      learningResourceService.updateProgress(resource.resourceId, {
+      learningResourceService.updateProgress(resource.id, {
         status,
-        recommendationId,
+        recommendationId: recommendationId ?? undefined,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: studentQueryKeys.learningResourceProgress(context.scopeKey),
-      });
       invalidateStudentCurrentContextQueries(queryClient);
     },
     onError: (error) => message.error(getApiErrorMessage(error)),
   });
+  const handleGenerateRoadmap = () => {
+    setSelectedRecommendationIds(
+      suggestions.map((recommendation) => recommendation.id),
+    );
+    setReviewOpen(true);
+  };
+  const handleGenerateReviewedRoadmap = () => {
+    if (!selectedRecommendationIds.length) {
+      message.error('Select at least one suggestion.');
+      return;
+    }
+
+    const selectedIdSet = new Set(selectedRecommendationIds);
+    return generateRoadmap
+      .mutateAsync(
+        suggestions
+          .filter((recommendation) => !selectedIdSet.has(recommendation.id))
+          .map((recommendation) => recommendation.id),
+      )
+      .then(() => undefined);
+  };
 
   return (
     <QueryState
       loading={
-        context.loading || (context.isContextReady && selectedRecommendations.isLoading)
+        context.loading ||
+        (context.isContextReady &&
+          (activeRoadmap.isLoading ||
+            roadmapHistory.isLoading ||
+            roadmapSuggestions.isLoading))
       }
-      error={context.error ?? selectedRecommendations.error}
+      error={
+        context.error ??
+        activeRoadmap.error ??
+        roadmapHistory.error ??
+        roadmapSuggestions.error
+      }
     >
-      <PageHeader
-        title="Roadmap"
-        description="A focused timeline containing only recommendations you selected."
-      />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <PageHeader
+          title="Roadmap"
+          description="Your generated learning plan based on the latest competency analysis."
+        />
+        <Button
+          type="primary"
+          icon={<ReloadOutlined />}
+          aria-label="Generate roadmap from toolbar"
+          loading={generateRoadmap.isPending}
+          disabled={!context.isContextReady || generateRoadmap.isPending}
+          onClick={handleGenerateRoadmap}
+        >
+          Generate roadmap
+        </Button>
+      </div>
       <CareerScopeSummary
         careerGoal={context.profile?.careerGoal}
         specialization={context.profile?.specialization}
@@ -389,17 +379,86 @@ export function RoadmapView() {
         </Card>
       ) : (
         <SelectedRoadmap
-          recommendations={selectedRecommendations.data ?? []}
-          updatingStatus={updateRecommendation.isPending}
+          roadmap={activeRoadmap.data ?? null}
+          history={roadmapHistory.data ?? []}
+          updatingStatus={updateRoadmapItem.isPending}
           updatingResource={updateResourceProgress.isPending}
-          onStatusChange={(recommendation, status) =>
-            updateRecommendation.mutate({ id: recommendation.id, status })
-          }
-          onResourceProgressChange={(resource, recommendationId, status) =>
-            updateResourceProgress.mutate({ resource, recommendationId, status })
-          }
+          onStatusChange={async (item, status, note) => {
+            await updateRoadmapItem.mutateAsync({ item, status, note });
+          }}
+          onResourceProgressChange={async (
+            resource,
+            recommendationId,
+            status,
+          ) => {
+            await updateResourceProgress.mutateAsync({
+              resource,
+              recommendationId,
+              status,
+            });
+          }}
         />
       )}
+      <Modal
+        title="Review suggestions"
+        open={reviewOpen}
+        okText="Generate roadmap"
+        width={680}
+        confirmLoading={generateRoadmap.isPending}
+        okButtonProps={{ disabled: selectedRecommendationIds.length === 0 }}
+        cancelButtonProps={{ disabled: generateRoadmap.isPending }}
+        maskClosable={!generateRoadmap.isPending}
+        closable={!generateRoadmap.isPending}
+        onCancel={() => setReviewOpen(false)}
+        onOk={handleGenerateReviewedRoadmap}
+      >
+        {activeRoadmap.data ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="The current active roadmap will be archived when the new version is generated."
+            style={{ marginBottom: 16 }}
+          />
+        ) : null}
+        <div
+          style={{
+            alignItems: 'center',
+            display: 'flex',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            marginBottom: 4,
+          }}
+        >
+          <Typography.Text strong>
+            {selectedRecommendationIds.length} of {suggestions.length} included
+          </Typography.Text>
+          <Checkbox
+            checked={
+              suggestions.length > 0 &&
+              selectedRecommendationIds.length === suggestions.length
+            }
+            indeterminate={
+              selectedRecommendationIds.length > 0 &&
+              selectedRecommendationIds.length < suggestions.length
+            }
+            onChange={(event) =>
+              setSelectedRecommendationIds(
+                event.target.checked
+                  ? suggestions.map((recommendation) => recommendation.id)
+                  : [],
+              )
+            }
+          >
+            Include all
+          </Checkbox>
+        </div>
+        <SuggestedActions
+          recommendations={suggestions}
+          selectedIds={selectedRecommendationIds}
+          onSelectedIdsChange={setSelectedRecommendationIds}
+        />
+      </Modal>
     </QueryState>
   );
 }
@@ -538,6 +597,17 @@ export function AnalysisView() {
     },
     enabled: context.isContextReady && Boolean(currentAnalysis),
   });
+  const suggestedActions = useQuery({
+    queryKey: studentQueryKeys.recommendationsMe(
+      context.scopeKey,
+      'roadmap-candidates',
+    ),
+    queryFn: () => recommendationService.listMine({ limit: 100 }),
+    enabled: context.isContextReady,
+  });
+  const actionableSuggestions = (suggestedActions.data?.data ?? []).filter(
+    (item) => isActionableRecommendation(item.status),
+  );
   const analyze = useMutation({
     mutationFn: () => analysisService.analyzeMine(),
     onSuccess: () => {
@@ -556,9 +626,17 @@ export function AnalysisView() {
     <QueryState
       loading={
         context.loading ||
-        (context.isContextReady && (history.isLoading || currentDetail.isLoading))
+        (context.isContextReady &&
+          (history.isLoading ||
+            currentDetail.isLoading ||
+            suggestedActions.isLoading))
       }
-      error={context.error ?? history.error ?? currentDetail.error}
+      error={
+        context.error ??
+        history.error ??
+        currentDetail.error ??
+        suggestedActions.error
+      }
     >
       <PageHeader title="Competency Analysis" />
       <Card>
@@ -609,6 +687,20 @@ export function AnalysisView() {
           <AssessmentRequiredEmpty />
         )}
       </Card>
+      {context.isContextReady && (currentAnalysis || analyze.data) ? (
+        <section style={{ marginTop: 24 }}>
+          <Typography.Title level={4} style={{ marginBottom: 4 }}>
+            Suggested actions
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            Based on your current competency gaps.
+          </Typography.Text>
+          <SuggestedActions
+            recommendations={actionableSuggestions}
+            loading={suggestedActions.isFetching}
+          />
+        </section>
+      ) : null}
       {context.isContextReady ? (
         <Card title="Analysis History" style={{ marginTop: 16 }}>
           <Table<AnalysisHistoryItem>
@@ -721,30 +813,6 @@ function AnalysisResultDetailView({ analysis }: { analysis: AnalysisResultDetail
           { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
         ]}
       />
-      <Typography.Title level={5} style={{ margin: 0 }}>
-        Recommendations
-      </Typography.Title>
-      <div>
-        <List<Recommendation>
-          dataSource={analysis.recommendations}
-          locale={{ emptyText: 'No recommendations for this analysis.' }}
-          renderItem={(item) => (
-            <List.Item>
-              <List.Item.Meta
-                title={
-                  <Space wrap>
-                    {item.title}
-                    <StatusBadge status={item.status} />
-                  </Space>
-                }
-                description={`${item.skill?.name ?? item.skillId ?? ''} · Priority ${
-                  item.priorityScore
-                }`}
-              />
-            </List.Item>
-          )}
-        />
-      </div>
     </Space>
   );
 }
@@ -766,9 +834,9 @@ function CurrentAnalysisSummary({ analysis }: { analysis: AnalysisHistoryItem })
 
 function AssessmentRequiredEmpty() {
   return (
-    <EmptyState description="Bạn cần hoàn thành assessment để xem phân tích năng lực.">
+    <EmptyState description="Complete an assessment to view your competency analysis.">
       <Button type="primary" href="/student/assessment">
-        Làm assessment
+        Take Assessment
       </Button>
     </EmptyState>
   );

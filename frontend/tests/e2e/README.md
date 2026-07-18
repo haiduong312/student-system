@@ -158,7 +158,7 @@ The suite currently covers:
 - Lecturer/Advisor flow: dashboard, assigned student scope, ACTIVE assignment visibility, inactive-assignment boundary, student detail/profile/resources/analysis metrics, evidence approval, AdvisorReview creation and detail view, forbidden API boundaries.
 - Assessment: start, context check, IN_PROGRESS state, validation when answers are missing, submit/grading, result table, duplicate submit prevention, missing active-question error path.
 - Competency analysis: metrics, skill gap status, history lifecycle with CURRENT/OBSOLETE.
-- Recommendations: generated recommendation list and status transitions.
+- Suggested actions: compact Analysis summary, Roadmap review selection, and atomic exclusion during generation.
 - Roadmap: generation, roadmap item order/status/phase, progress updates, completion history.
 - Page-object route sanity checks for primary Admin/Student/Lecturer pages.
 

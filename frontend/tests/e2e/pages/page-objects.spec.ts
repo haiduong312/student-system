@@ -4,7 +4,6 @@ import {
   CatalogManagementPage,
   EvidencePage,
   QuestionBankPage,
-  RecommendationPage,
   RoadmapPage,
   StudentProfilePage,
 } from '.';
@@ -26,7 +25,6 @@ test('student page objects load their real routes', async ({ studentPage }) => {
     new StudentProfilePage(studentPage),
     new AssessmentPage(studentPage),
     new EvidencePage(studentPage, 'student'),
-    new RecommendationPage(studentPage),
     new RoadmapPage(studentPage),
   ];
 

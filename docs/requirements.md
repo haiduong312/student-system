@@ -365,6 +365,10 @@ Student có thể cập nhật trạng thái recommendation:
 
 Recommendation list chỉ trả recommendation thuộc context career goal/specialization hiện tại, analysis `CURRENT` hoặc template active phù hợp.
 
+Recommendation là dữ liệu trung gian, không có module điều hướng riêng trên giao
+diện student. Màn Analysis hiển thị danh sách gọn `Suggested actions` gồm skill,
+lý do và số tài nguyên. Student không cần thêm recommendation thủ công vào roadmap.
+
 ### 4.13. Lộ trình phát triển cá nhân
 
 Roadmap được sinh từ latest `CURRENT` analysis result theo career goal/specialization hiện tại và recommendations thuộc analysis đó.
@@ -381,8 +385,15 @@ Khi sinh roadmap:
 - Tính version kế tiếp theo student.
 - Archive active roadmap hiện tại nếu `archiveCurrentActiveRoadmap = true`.
 - Nếu không archive mà đã có active roadmap, trả lỗi.
+- Trong bước `Review suggestions`, các recommendation bỏ chọn được truyền bằng
+  `excludedRecommendationIds` và chuyển sang `DISMISSED`.
 - Tạo `DevelopmentRoadmap`.
 - Tạo `RoadmapItem` từ best recommendation theo skill.
+
+Việc exclude, archive roadmap active và tạo roadmap version mới được thực hiện
+trong cùng transaction. Roadmap là snapshot theo version nên các version đã sinh
+không bị sửa item khi recommendation thay đổi. Khi roadmap item hoàn thành,
+recommendation liên kết được đồng bộ sang `DONE`.
 
 Sắp xếp item:
 
@@ -710,9 +721,10 @@ GET /dashboard/admin
 - `/student/experiences`.
 - `/student/evidences`.
 - `/student/assessment`.
-- `/student/analysis`.
-- `/student/recommendations`.
-- `/student/roadmap`.
+- `/student/analysis`: kết quả phân tích và `Suggested actions`.
+- `/student/recommendations`: route tương thích cũ, redirect sang `/student/analysis`
+  và không xuất hiện trong menu.
+- `/student/roadmap`: review suggestions, generate và theo dõi roadmap.
 - `/student/notifications`.
 - `/student/portfolio`: placeholder UI.
 

@@ -42,23 +42,23 @@ function useExportAndDownload<TPayload>(exportRequest: ExportRequest<TPayload>) 
 
       return result;
     },
-    onSuccess: () => message.success('Xuất file thành công.'),
+    onSuccess: () => message.success('File exported successfully.'),
     onError: (error) => message.error(getExportErrorMessage(error)),
   });
 }
 
 function getExportErrorMessage(error: unknown) {
   if (error instanceof ExportDownloadError) {
-    return 'Tạo file thành công nhưng tải file thất bại.';
+    return 'The file was created, but the download failed.';
   }
   if (getResponseStatus(error) === 403) {
-    return 'Bạn không có quyền thực hiện export này.';
+    return 'You do not have permission to perform this export.';
   }
   if (getResponseStatus(error) === 401) {
-    return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+    return 'Your session has expired. Please sign in again.';
   }
 
-  return 'Xuất file thất bại, vui lòng thử lại.';
+  return 'Export failed. Please try again.';
 }
 
 function getResponseStatus(error: unknown) {

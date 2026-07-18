@@ -9,7 +9,6 @@ export { LecturerDashboardPage } from './LecturerDashboardPage';
 export { LecturerStudentsPage } from './LecturerStudentsPage';
 export { LoginPage } from './LoginPage';
 export { QuestionBankPage } from './QuestionBankPage';
-export { RecommendationPage } from './RecommendationPage';
 export { RoadmapPage } from './RoadmapPage';
 export { StudentDashboardPage } from './StudentDashboardPage';
 export { StudentProfilePage } from './StudentProfilePage';
@@ -30,6 +29,5 @@ export type {
   QuestionOption,
   QuestionType,
 } from './QuestionBankPage';
-export type { RecommendationTab } from './RecommendationPage';
 export type { StudentProfileForm } from './StudentProfilePage';
 export type { StudentResourceKind } from './StudentResourcePage';

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   AnalysisResultStatus,
   RecommendationType,
@@ -186,7 +186,50 @@ describe('RoadmapsService analysis lifecycle scope', () => {
     );
   });
 
-  it('archives an existing ACTIVE roadmap before creating a new ACTIVE roadmap for the student', async () => {
+  it('rejects excluded recommendation ids outside the latest actionable analysis', async () => {
+    let transactionCalled = false;
+    const service = new RoadmapsService(
+      {
+        $transaction: async () => {
+          transactionCalled = true;
+        },
+      } as any,
+      {} as any,
+      {} as any,
+    );
+    (service as any).getStudentProfile = async () => ({
+      studentId: 'student-1',
+      careerGoalId: 'goal-1',
+      specializationId: null,
+    });
+    (service as any).getLatestAnalysisResult = async () => ({
+      id: 'analysis-current',
+      careerGoalId: 'goal-1',
+      specializationId: null,
+    });
+    (service as any).getMissingAnalysisDetails = async () => [
+      { skillId: 'skill-1' },
+    ];
+    (service as any).getRecommendationsForAnalysis = async () => [
+      { id: 'recommendation-owned' },
+    ];
+
+    await assert.rejects(
+      () =>
+        (service as any).generateRoadmapForStudent(
+          'student-1',
+          true,
+          'actor-1',
+          ['recommendation-outside-analysis'],
+        ),
+      BadRequestException,
+    );
+    assert.equal(transactionCalled, false);
+  });
+
+  it('excludes reviewed recommendations and archives the active roadmap in the generation transaction', async () => {
+    let excludedRecommendationWhere: any;
+    let includedRecommendationIds: string[] = [];
     const roadmaps = [
       {
         id: 'roadmap-old',
@@ -201,6 +244,12 @@ describe('RoadmapsService analysis lifecycle scope', () => {
       {
         $transaction: async (callback: any) =>
           callback({
+            studentRecommendation: {
+              updateMany: async ({ where }: any) => {
+                excludedRecommendationWhere = where;
+                return { count: where.id.in.length };
+              },
+            },
             developmentRoadmap: {
               findFirst: async () =>
                 roadmaps
@@ -261,26 +310,35 @@ describe('RoadmapsService analysis lifecycle scope', () => {
     ];
     (service as any).getRecommendationsForAnalysis = async () => [
       { id: 'recommendation-1' },
+      { id: 'recommendation-2' },
     ];
     (service as any).getRequiredSkillContextMap = async () => new Map();
-    (service as any).buildRoadmapItems = () => [
-      {
-        skillId: 'skill-1',
-        recommendationId: 'recommendation-1',
-        title: 'Improve NestJS',
-        description: null,
-        itemType: RoadmapItemType.PRACTICE,
-        roadmapPhase: RoadmapPhase.CAREER_TRACK,
-        orderIndex: 1,
-        weight: 1,
-        deadline: null,
-        status: RoadmapItemStatus.TODO,
-        learningOrder: 1,
-        priorityScore: 1,
-        recommendationPriority: 0,
-        skillName: 'NestJS',
-      },
-    ];
+    (service as any).buildRoadmapItems = (
+      _details: unknown,
+      recommendations: Array<{ id: string }>,
+    ) => {
+      includedRecommendationIds = recommendations.map(
+        (recommendation) => recommendation.id,
+      );
+      return [
+        {
+          skillId: 'skill-1',
+          recommendationId: 'recommendation-1',
+          title: 'Improve NestJS',
+          description: null,
+          itemType: RoadmapItemType.PRACTICE,
+          roadmapPhase: RoadmapPhase.CAREER_TRACK,
+          orderIndex: 1,
+          weight: 1,
+          deadline: null,
+          status: RoadmapItemStatus.TODO,
+          learningOrder: 1,
+          priorityScore: 1,
+          recommendationPriority: 0,
+          skillName: 'NestJS',
+        },
+      ];
+    };
     (service as any).toRoadmapResponse = async (roadmap: any) => ({
       roadmapId: roadmap.id,
       version: roadmap.version,
@@ -292,9 +350,18 @@ describe('RoadmapsService analysis lifecycle scope', () => {
       'student-1',
       true,
       'actor-1',
+      ['recommendation-2'],
     );
 
     assert.equal(result.roadmapId, 'roadmap-new');
+    assert.deepEqual(includedRecommendationIds, ['recommendation-1']);
+    assert.deepEqual(excludedRecommendationWhere.id.in, ['recommendation-2']);
+    assert.equal(
+      excludedRecommendationWhere.status.in.includes(
+        StudentRecommendationStatus.NEW,
+      ),
+      true,
+    );
     assert.equal(roadmaps[0].status, RoadmapStatus.ARCHIVED);
     assert.equal(roadmaps[1].status, RoadmapStatus.ACTIVE);
     assert.equal(

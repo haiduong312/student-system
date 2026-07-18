@@ -149,7 +149,9 @@ test.describe('Student assessment flow', () => {
       await assessment.expectLoaded();
       await assessment.expectContext(context.careerGoal.name);
       await assessment.startButton.click();
-      await assessment.expectStartError(/missing active questions for level\(s\): 2/i);
+      await assessment.expectStartError(
+        /fewer than 2 eligible ACTIVE questions for level\(s\): 1, 2/i,
+      );
     } finally {
       await restoreProfile(studentApi, originalProfile);
       await deactivateAssessmentContext(adminApi, context);

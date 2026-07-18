@@ -169,12 +169,13 @@ export class RoadmapsService {
     private readonly activityLogs: ActivityLogsService,
   ) {}
 
-  async generateMyRoadmap(userId: string, _dto: GenerateRoadmapDto = {}) {
+  async generateMyRoadmap(userId: string, dto: GenerateRoadmapDto = {}) {
     const studentId = await this.getStudentIdByUserId(userId);
     return this.generateRoadmapForStudent(
       studentId,
-      _dto.archiveCurrentActiveRoadmap ?? true,
+      dto.archiveCurrentActiveRoadmap ?? true,
       userId,
+      dto.excludedRecommendationIds ?? [],
     );
   }
 
@@ -399,6 +400,7 @@ export class RoadmapsService {
     studentId: string,
     archiveCurrentActiveRoadmap = true,
     actorUserId?: string,
+    excludedRecommendationIds: string[] = [],
   ) {
     const profile = await this.getStudentProfile(studentId);
     const careerGoalId = profile.careerGoalId;
@@ -429,6 +431,26 @@ export class RoadmapsService {
         'No recommendations found for latest analysis. Please analyze competency again.',
       );
     }
+    const excludedRecommendationIdSet = new Set(excludedRecommendationIds);
+    const actionableRecommendationIds = new Set(
+      recommendations.map((recommendation) => recommendation.id),
+    );
+    const invalidExcludedRecommendationIds = excludedRecommendationIds.filter(
+      (id) => !actionableRecommendationIds.has(id),
+    );
+    if (invalidExcludedRecommendationIds.length) {
+      throw new BadRequestException(
+        'One or more excluded recommendations are not available for the latest analysis.',
+      );
+    }
+    const includedRecommendations = recommendations.filter(
+      (recommendation) => !excludedRecommendationIdSet.has(recommendation.id),
+    );
+    if (!includedRecommendations.length) {
+      throw new BadRequestException(
+        'Select at least one suggestion before generating a roadmap.',
+      );
+    }
 
     const requiredSkillMap = await this.getRequiredSkillContextMap(
       latestAnalysis.careerGoalId,
@@ -437,7 +459,7 @@ export class RoadmapsService {
     );
     const itemDrafts = this.buildRoadmapItems(
       missingDetails,
-      recommendations,
+      includedRecommendations,
       requiredSkillMap,
     );
 
@@ -446,6 +468,23 @@ export class RoadmapsService {
     }
 
     const roadmap = await this.prisma.$transaction(async (tx) => {
+      if (excludedRecommendationIdSet.size > 0) {
+        const excluded = await tx.studentRecommendation.updateMany({
+          where: {
+            id: { in: Array.from(excludedRecommendationIdSet) },
+            studentId,
+            analysisResultId: latestAnalysis.id,
+            status: { in: ROADMAP_ACTIONABLE_RECOMMENDATION_STATUSES },
+          },
+          data: { status: StudentRecommendationStatus.DISMISSED },
+        });
+        if (excluded.count !== excludedRecommendationIdSet.size) {
+          throw new BadRequestException(
+            'Recommendations changed while reviewing. Please review them again.',
+          );
+        }
+      }
+
       const version = await this.getNextRoadmapVersion(tx, studentId);
       if (archiveCurrentActiveRoadmap) {
         await this.archiveCurrentActiveRoadmap(tx, studentId);
@@ -509,6 +548,7 @@ export class RoadmapsService {
           (sum, phase) => sum + phase.items.length,
           0,
         ),
+        excludedRecommendationCount: excludedRecommendationIdSet.size,
       },
     });
 

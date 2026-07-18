@@ -42,6 +42,27 @@ export class AnalysisPage extends PageObject {
     await expect(row.getByText(status, { exact: true })).toBeVisible();
   }
 
+  async expectSuggestedAction(
+    title: string,
+    values: {
+      skill: string;
+      reason: string | RegExp;
+      resourceCount: number;
+    },
+  ) {
+    const suggestion = this.page
+      .getByTestId('suggested-action')
+      .filter({ hasText: title });
+    await expect(suggestion).toBeVisible();
+    await expect(suggestion).toContainText(values.skill);
+    await expect(suggestion).toContainText(values.reason);
+    await expect(suggestion).toContainText(
+      `${values.resourceCount} learning ${
+        values.resourceCount === 1 ? 'resource' : 'resources'
+      }`,
+    );
+  }
+
   async expectHistoryLifecycle(careerGoal: string) {
     const history = this.page.getByRole('table').last();
     const rows = history.getByRole('row').filter({ hasText: careerGoal });

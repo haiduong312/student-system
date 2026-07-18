@@ -12,20 +12,20 @@ export function StudentPortfolioPage() {
   return (
     <>
       <PageHeader
-        title="Portfolio của tôi"
-        description="Tạo bản PDF từ dữ liệu hồ sơ năng lực hiện tại của bạn."
+        title="My Portfolio"
+        description="Generate a PDF from your current competency profile."
       />
 
       <Space direction="vertical" size="large" style={{ display: 'flex' }}>
-        <Card title="Xuất Portfolio PDF">
+        <Card title="Export Portfolio PDF">
           <Typography.Paragraph>
-            Portfolio tổng hợp hồ sơ cá nhân, kỹ năng và minh chứng; đồng thời bao gồm kết
-            quả phân tích năng lực, khuyến nghị và lộ trình phát triển khi các dữ liệu này
-            đã có trong hệ thống.
+            The portfolio combines your profile, skills, and evidence. It also includes
+            competency analysis results, suggested actions, and your development roadmap
+            when available.
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary">
-            File được tạo từ dữ liệu hiện tại tại thời điểm xuất và chỉ dành cho tài khoản
-            sinh viên đang đăng nhập.
+            The file is generated from your current data and is available only to the
+            signed-in student account.
           </Typography.Paragraph>
           <Button
             type="primary"
@@ -34,12 +34,12 @@ export function StudentPortfolioPage() {
             disabled={portfolioExport.isPending}
             onClick={() => portfolioExport.mutate({})}
           >
-            {portfolioExport.isPending ? 'Đang xuất...' : 'Xuất Portfolio PDF'}
+            {portfolioExport.isPending ? 'Exporting...' : 'Export Portfolio PDF'}
           </Button>
         </Card>
 
         <ExportHistoryTable
-          title="Lịch sử export Portfolio"
+          title="Portfolio Export History"
           initialPageSize={10}
           initialExportType="STUDENT_PORTFOLIO_PDF"
         />

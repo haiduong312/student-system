@@ -1,4 +1,4 @@
-import { getPage, patchData } from '@/lib/request';
+import { getPage } from '@/lib/request';
 import type { Recommendation, StudentRecommendationStatus } from '@/types/domain';
 
 export interface RecommendationListParams {
@@ -12,11 +12,5 @@ export const recommendationService = {
       limit: params.limit ?? 50,
       ...(params.status ? { status: params.status } : {}),
     });
-  },
-  updateStatus(id: string, status: StudentRecommendationStatus) {
-    return patchData<Recommendation, { status: StudentRecommendationStatus }>(
-      `/recommendations/${id}/status`,
-      { status },
-    );
   },
 };

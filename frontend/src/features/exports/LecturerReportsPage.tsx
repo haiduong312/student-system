@@ -63,14 +63,14 @@ export function LecturerReportsPage() {
   return (
     <>
       <PageHeader
-        title="Báo cáo và xuất dữ liệu"
-        description="Xuất báo cáo trong phạm vi sinh viên được phân công cho bạn."
+        title="Reports and Data Export"
+        description="Export reports for students assigned to you."
       />
 
       <Space direction="vertical" size="large" style={{ display: 'flex' }}>
-        <Card title="Xuất danh sách sinh viên được phân công">
+        <Card title="Export Assigned Student List">
           <Typography.Paragraph type="secondary">
-            Backend tự xác định giảng viên hiện tại; báo cáo chỉ gồm phân công đang hiệu lực.
+            The report includes only your active student assignments.
           </Typography.Paragraph>
           <Form<LecturerStudentsExportFormValues>
             form={lecturerStudentsForm}
@@ -79,16 +79,16 @@ export function LecturerReportsPage() {
             onFinish={exportLecturerStudents}
           >
             <div style={filterGridStyle}>
-              <Form.Item name="search" label="Tìm kiếm">
-                <Input allowClear placeholder="Sinh viên, mã sinh viên hoặc email" />
+              <Form.Item name="search" label="Search">
+                <Input allowClear placeholder="Student name, student code, or email" />
               </Form.Item>
-              <Form.Item name="status" label="Trạng thái phân công">
+              <Form.Item name="status" label="Assignment Status">
                 <Select<AssignmentStatus>
                   options={[{ value: 'ACTIVE', label: 'ACTIVE' }]}
                 />
               </Form.Item>
             </div>
-            <Form.Item label="Sinh viên được phân công">
+            <Form.Item label="Assigned Student">
               <AssignedStudentSelect
                 student={assignmentStudent}
                 onChange={setAssignmentStudent}
@@ -103,8 +103,8 @@ export function LecturerReportsPage() {
                 disabled={lecturerStudentsExport.isPending}
               >
                 {lecturerStudentsExport.isPending
-                  ? 'Đang xuất...'
-                  : 'Xuất Excel sinh viên được phân công'}
+                  ? 'Exporting...'
+                  : 'Export Assigned Students to Excel'}
               </Button>
               <Button
                 disabled={lecturerStudentsExport.isPending}
@@ -113,29 +113,29 @@ export function LecturerReportsPage() {
                   setAssignmentStudent(null);
                 }}
               >
-                Đặt lại bộ lọc
+                Reset Filters
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <Card title="Xuất báo cáo năng lực">
+        <Card title="Export Competency Report">
           <Typography.Paragraph type="secondary">
-            Để trống sinh viên để xuất dữ liệu năng lực trong toàn bộ phạm vi được phân công.
+            Leave the student blank to export competency data for all active assignments.
           </Typography.Paragraph>
           <Form<CompetencyExportFormValues>
             form={competencyForm}
             layout="vertical"
             onFinish={exportCompetency}
           >
-            <Form.Item label="Sinh viên được phân công">
+            <Form.Item label="Assigned Student">
               <AssignedStudentSelect
                 student={competencyStudent}
                 onChange={setCompetencyStudent}
               />
             </Form.Item>
             <div style={filterGridStyle}>
-              <Form.Item name="status" label="Trạng thái kết quả">
+              <Form.Item name="status" label="Result Status">
                 <Select<AnalysisResultStatus>
                   allowClear
                   options={[
@@ -144,7 +144,7 @@ export function LecturerReportsPage() {
                   ]}
                 />
               </Form.Item>
-              <Form.Item name="analyzedAt" label="Thời gian phân tích">
+              <Form.Item name="analyzedAt" label="Analysis Period">
                 <RangePicker style={{ width: '100%' }} />
               </Form.Item>
             </div>
@@ -157,8 +157,8 @@ export function LecturerReportsPage() {
                 disabled={competencyExport.isPending}
               >
                 {competencyExport.isPending
-                  ? 'Đang xuất...'
-                  : 'Xuất Excel báo cáo năng lực'}
+                  ? 'Exporting...'
+                  : 'Export Competency Report to Excel'}
               </Button>
               <Button
                 disabled={competencyExport.isPending}
@@ -167,13 +167,13 @@ export function LecturerReportsPage() {
                   setCompetencyStudent(null);
                 }}
               >
-                Đặt lại bộ lọc
+                Reset Filters
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <ExportHistoryTable title="Lịch sử export" initialPageSize={20} />
+        <ExportHistoryTable title="Export History" initialPageSize={20} />
       </Space>
     </>
   );

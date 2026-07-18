@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class GenerateRoadmapDto {
   @ApiPropertyOptional({
@@ -10,4 +17,17 @@ export class GenerateRoadmapDto {
   @IsOptional()
   @IsBoolean()
   archiveCurrentActiveRoadmap?: boolean = true;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 100,
+    description:
+      'Actionable recommendations to exclude atomically before generating the new roadmap version.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  excludedRecommendationIds?: string[];
 }

@@ -945,7 +945,7 @@ function notifyCatalogInvalidation(notification: NotificationApi, result: unknow
     description:
       summary.length > 0
         ? summary.join(' · ')
-        : 'Thay đổi này có thể làm mới analysis/recommendation/roadmap liên quan.',
+        : 'This change may refresh related analyses, suggestions, and roadmaps.',
     duration: 6,
   });
 }

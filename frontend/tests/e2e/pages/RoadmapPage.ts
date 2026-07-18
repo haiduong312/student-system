@@ -25,18 +25,23 @@ export class RoadmapPage extends PageObject {
     await expect(this.generateButton).toBeVisible();
   }
 
-  async generate() {
+  async generate(excludedSuggestionTitles: string[] = []) {
     await this.generateButton.click();
 
-    const confirmation = this.dialog('Generate a new roadmap?');
-    try {
-      await confirmation.waitFor({ state: 'visible', timeout: 1_000 });
-      await confirmation.getByRole('button', { name: 'Generate' }).click();
-    } catch {
-      // No confirmation is shown when there is no active roadmap to archive.
+    const review = this.dialog('Review suggestions');
+    await expect(review).toBeVisible();
+    for (const title of excludedSuggestionTitles) {
+      await review
+        .getByRole('checkbox', {
+          name: `Include suggestion ${title}`,
+        })
+        .uncheck();
     }
-
+    await review
+      .getByRole('button', { name: 'Generate roadmap', exact: true })
+      .click();
     await this.expectMessage('Roadmap generated');
+    await expect(review).toBeHidden();
   }
 
   async updateItemStatus(itemTitle: string, status: string, note?: string) {

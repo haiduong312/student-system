@@ -241,7 +241,7 @@ function StartAssessmentView({
                                 data-testid="assessment-start-button"
                                 onClick={onStart}
                             >
-                                Bắt đầu đánh giá
+                                Start Assessment
                             </Button>
                         </Space>
                     </Card>
@@ -524,9 +524,9 @@ function AssessmentResultView({
             <PageHeader title="Assessment Result" />
             <Space style={{ marginBottom: 16 }}>
                 <Button type="primary" onClick={onViewAnalysis}>
-                    Xem Competency Analysis
+                    View Competency Analysis
                 </Button>
-                <Button onClick={onViewRoadmap}>Xem Roadmap</Button>
+                <Button onClick={onViewRoadmap}>View Roadmap</Button>
                 <Button onClick={onRestart}>Start Another Assessment</Button>
             </Space>
             <Table<AssessmentSkillResult>

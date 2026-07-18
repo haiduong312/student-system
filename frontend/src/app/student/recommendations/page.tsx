@@ -1,5 +1,5 @@
-import { RecommendationsView } from '@/features/student/WorkflowPages';
+import { redirect } from 'next/navigation';
 
 export default function StudentRecommendationsPage() {
-  return <RecommendationsView />;
+  redirect('/student/analysis');
 }

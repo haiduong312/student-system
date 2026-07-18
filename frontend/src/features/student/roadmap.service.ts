@@ -3,6 +3,7 @@ import type { Roadmap, RoadmapHistoryItem, RoadmapItemStatus } from '@/types/dom
 
 export interface GenerateRoadmapPayload {
   archiveCurrentActiveRoadmap: boolean;
+  excludedRecommendationIds?: string[];
 }
 
 export interface UpdateRoadmapItemStatusPayload {

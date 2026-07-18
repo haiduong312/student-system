@@ -56,8 +56,8 @@ export function ExportHistoryTable({
 
   const download = useMutation({
     mutationFn: (item: ExportHistoryItem) => downloadPrivateFile(item.fileUrl!),
-    onSuccess: () => message.success('Tải file thành công.'),
-    onError: () => message.error('Tạo file thành công nhưng tải file thất bại.'),
+    onSuccess: () => message.success('File downloaded successfully.'),
+    onError: () => message.error('The file was created, but the download failed.'),
   });
 
   const showUserId = currentUser?.role === 'ADMIN';
@@ -94,7 +94,7 @@ export function ExportHistoryTable({
           return <Typography.Text type="secondary">Unavailable</Typography.Text>;
         }
         if (showUserId && item.userId !== currentUser?.id) {
-          return <Typography.Text type="secondary">Chỉ chủ file</Typography.Text>;
+          return <Typography.Text type="secondary">File owner only</Typography.Text>;
         }
 
         const isDownloading = download.isPending && download.variables?.id === item.id;
@@ -106,7 +106,7 @@ export function ExportHistoryTable({
             disabled={download.isPending && !isDownloading}
             onClick={() => download.mutate(item)}
           >
-            {isDownloading ? 'Đang tải...' : 'Tải file'}
+            {isDownloading ? 'Downloading...' : 'Download File'}
           </Button>
         );
       },
@@ -159,7 +159,7 @@ export function ExportHistoryTable({
           loading={history.isFetching}
           scroll={{ x: 760 }}
           locale={{
-            emptyText: <EmptyState description="Chưa có lịch sử export." />,
+            emptyText: <EmptyState description="No export history yet." />,
           }}
           pagination={{
             current: page,
