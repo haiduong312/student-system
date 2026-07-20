@@ -70,12 +70,12 @@ test.describe('Student competency profile', () => {
       await skills.expectLoaded();
       await skills.add({
         selects: { Skill: skillName },
-        fields: { Description: 'E2E initial skill description' },
+        fields: { 'Experience note': 'E2E initial skill description' },
       });
       await skills.expectResource(skillName);
 
       await skills.edit(skillName, {
-        Description: 'E2E updated skill description',
+        'Experience note': 'E2E updated skill description',
       });
       const updated = await studentApi.findResource('skills', skillName);
       expect(updated?.description).toBe('E2E updated skill description');

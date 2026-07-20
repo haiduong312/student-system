@@ -108,7 +108,7 @@ export class CatalogManagementPage extends PageObject {
   }
 
   async save(dialog: Locator) {
-    await dialog.getByRole('button', { name: 'OK' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 
@@ -125,7 +125,7 @@ export class CatalogManagementPage extends PageObject {
   }
 
   async expectRequiredFieldValidation(dialog: Locator, field = 'Name') {
-    await dialog.getByRole('button', { name: 'OK' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(
       dialog.getByText(
         new RegExp(`(?:Please (?:enter|select)\\s+${field})|(?:${field}.*required)`, 'i'),
@@ -181,7 +181,7 @@ export class CatalogManagementPage extends PageObject {
       .click();
     const modal = this.dialog('Create Specialization');
     await this.fillSpecializationForm(modal, values);
-    await modal.getByRole('button', { name: 'OK' }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 
@@ -199,7 +199,7 @@ export class CatalogManagementPage extends PageObject {
       .click();
     const modal = this.dialog('Edit Specialization');
     await this.fillSpecializationForm(modal, values);
-    await modal.getByRole('button', { name: 'OK' }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 
@@ -242,7 +242,7 @@ export class CatalogManagementPage extends PageObject {
     await drawer.getByRole('button', { name: 'Add Skill' }).click();
     const modal = this.dialog('Add Required Skill');
     await this.fillRequiredSkillForm(modal, values);
-    await modal.getByRole('button', { name: 'OK' }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 
@@ -260,7 +260,7 @@ export class CatalogManagementPage extends PageObject {
       .click();
     const modal = this.dialog('Edit Required Skill');
     await this.fillRequiredSkillForm(modal, { skill: skillName, ...values });
-    await modal.getByRole('button', { name: 'OK' }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 

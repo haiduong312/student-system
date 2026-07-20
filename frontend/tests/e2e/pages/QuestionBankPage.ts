@@ -133,7 +133,7 @@ export class QuestionBankPage extends PageObject {
   }
 
   async save(dialog: Locator) {
-    await dialog.getByRole('button', { name: 'OK' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await this.expectMessage('Saved');
   }
 
@@ -150,7 +150,7 @@ export class QuestionBankPage extends PageObject {
   }
 
   async expectRequiredValidation(dialog: Locator) {
-    await dialog.getByRole('button', { name: 'OK' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog.getByText(/Please (?:enter|select)|required/i).first()).toBeVisible();
   }
 
