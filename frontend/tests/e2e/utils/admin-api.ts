@@ -40,6 +40,19 @@ export interface ApiAssessmentQuestion {
   options: ApiAssessmentOption[];
 }
 
+export interface ApiLearningResourceSkill {
+  id: string;
+  skillId: string;
+  targetLevel?: 'ZERO' | 'BASIC' | 'INTERMEDIATE' | 'GOOD' | null;
+}
+
+export interface ApiLearningResource {
+  id: string;
+  title: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  skills?: ApiLearningResourceSkill[];
+}
+
 export interface ApiCareerRequiredSkill {
   id: string;
   careerGoalId: string;
@@ -320,6 +333,26 @@ export class AdminApiClient {
 
   async listQuestions(params: Record<string, string | number> = {}) {
     return this.getPage<ApiAssessmentQuestion>('/assessment-questions', params);
+  }
+
+  async listLearningResources(params: Record<string, string | number> = {}) {
+    return this.getPage<ApiLearningResource>('/learning-resources', {
+      limit: 100,
+      ...params,
+    });
+  }
+
+  async findLearningResource(title: string) {
+    const resources = await this.listLearningResources({ search: title });
+    return resources.find((resource) => resource.title === title);
+  }
+
+  async deactivateLearningResource(id: string) {
+    await this.delete(`/learning-resources/${id}`);
+  }
+
+  async unlinkLearningResourceSkill(resourceId: string, skillId: string) {
+    await this.delete(`/learning-resources/${resourceId}/skills/${skillId}`);
   }
 
   async findCatalogByName(path: string, name: string) {

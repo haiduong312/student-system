@@ -1,4 +1,5 @@
 export { AdminDashboardPage } from './AdminDashboardPage';
+export { AdminStudentsPage } from './AdminStudentsPage';
 export { AdvisorReviewsPage } from './AdvisorReviewsPage';
 export { AnalysisPage } from './AnalysisPage';
 export { AppShellPage } from './AppShellPage';
@@ -7,6 +8,7 @@ export { CatalogManagementPage } from './CatalogManagementPage';
 export { EvidencePage } from './EvidencePage';
 export { LecturerDashboardPage } from './LecturerDashboardPage';
 export { LecturerStudentsPage } from './LecturerStudentsPage';
+export { LearningResourcePage } from './LearningResourcePage';
 export { LoginPage } from './LoginPage';
 export { QuestionBankPage } from './QuestionBankPage';
 export { RoadmapPage } from './RoadmapPage';
@@ -31,3 +33,7 @@ export type {
 } from './QuestionBankPage';
 export type { StudentProfileForm } from './StudentProfilePage';
 export type { StudentResourceKind } from './StudentResourcePage';
+export type {
+  LearningResourceForm,
+  LearningResourceSkillForm,
+} from './LearningResourcePage';

@@ -1,8 +1,10 @@
 import { test } from '../fixtures';
 import {
+  AdminStudentsPage,
   AssessmentPage,
   CatalogManagementPage,
   EvidencePage,
+  LearningResourcePage,
   QuestionBankPage,
   RoadmapPage,
   StudentProfilePage,
@@ -18,6 +20,14 @@ test('admin page objects load their real routes', async ({ adminPage }) => {
   const questionBank = new QuestionBankPage(adminPage);
   await questionBank.goto();
   await questionBank.expectLoaded();
+
+  const learningResources = new LearningResourcePage(adminPage);
+  await learningResources.goto();
+  await learningResources.expectLoaded();
+
+  const students = new AdminStudentsPage(adminPage);
+  await students.goto();
+  await students.expectLoaded();
 });
 
 test('student page objects load their real routes', async ({ studentPage }) => {
