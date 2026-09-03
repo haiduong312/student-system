@@ -280,16 +280,16 @@ export class CompetencyAnalysisService {
 
     async findForExport(
         user: AuthenticatedUser,
-        query: CompetencyAnalysisExportQueryDto =
-            new CompetencyAnalysisExportQueryDto(),
+        query: CompetencyAnalysisExportQueryDto = new CompetencyAnalysisExportQueryDto(),
     ): Promise<CompetencyAnalysisExportRecord[]> {
         const analyzedAt = this.buildExportDateFilter(query);
-        const scopeWhere = await this.buildExportScopeWhere(user, query.studentId);
+        const scopeWhere = await this.buildExportScopeWhere(
+            user,
+            query.studentId,
+        );
         const where: Prisma.CompetencyAnalysisResultWhereInput = {
             ...scopeWhere,
-            ...(query.careerGoalId
-                ? { careerGoalId: query.careerGoalId }
-                : {}),
+            ...(query.careerGoalId ? { careerGoalId: query.careerGoalId } : {}),
             ...(query.specializationId
                 ? { specializationId: query.specializationId }
                 : {}),
@@ -374,7 +374,9 @@ export class CompetencyAnalysisService {
             student.profile.specialization &&
             student.profile.specialization.status !== CatalogStatus.ACTIVE
         ) {
-            throw new BadRequestException("Selected specialization is not active");
+            throw new BadRequestException(
+                "Selected specialization is not active",
+            );
         }
 
         return {
@@ -570,7 +572,10 @@ export class CompetencyAnalysisService {
             throw new NotFoundException("Student not found");
         }
 
-        return this.analyzeCompetencyForStudentUser(student.userId, student.userId);
+        return this.analyzeCompetencyForStudentUser(
+            student.userId,
+            student.userId,
+        );
     }
 
     private async saveAnalysisWithRecommendations(input: {
@@ -594,7 +599,6 @@ export class CompetencyAnalysisService {
                 },
                 data: { status: AnalysisResultStatus.OBSOLETE },
             });
-
             const analysisResult = await tx.competencyAnalysisResult.create({
                 data: {
                     studentId: input.profile.studentId,
@@ -755,8 +759,8 @@ export class CompetencyAnalysisService {
             return;
         }
 
-        const templateResources = await tx.recommendationTemplateResource.findMany(
-            {
+        const templateResources =
+            await tx.recommendationTemplateResource.findMany({
                 where: {
                     templateId: input.templateId,
                     resource: { status: CatalogStatus.ACTIVE },
@@ -767,8 +771,7 @@ export class CompetencyAnalysisService {
                     { createdAt: "asc" },
                 ],
                 include: { resource: true },
-            },
-        );
+            });
         if (!templateResources.length) {
             return;
         }
@@ -1078,5 +1081,4 @@ export class CompetencyAnalysisService {
 
         return date;
     }
-
 }

@@ -3,6 +3,8 @@ import {
   AssignmentStatus,
   CatalogStatus,
   DifficultyLevel,
+  EvidenceEntityType,
+  EvidenceStatus,
   LearningResourceType,
   NotificationChannel,
   NotificationLogStatus,
@@ -795,6 +797,13 @@ const studentSkillSeeds: SeedStudentSkill[] = [
   { email: 'student.general@example.com', skillName: 'Communication', currentLevel: 1, description: 'Can summarize progress and blockers in class projects.' },
 ];
 
+const seedEvidenceUrls = {
+  frontendReact: 'https://github.com/example/responsive-portfolio',
+  backendProject: 'https://github.com/example/student-profile-api',
+  generalActivity:
+    'https://example.com/student-it-club/software-engineering-study-group',
+} as const;
+
 const learningResourceTrackSeeds: SeedLearningResourceTrack[] = [
   {
     skillNames: ['HTML', 'CSS'],
@@ -1552,6 +1561,164 @@ async function seedStudentPortfolioSamples(
   });
 }
 
+async function seedStudentEvidences(
+  students: Map<string, Awaited<ReturnType<typeof prisma.student.create>>>,
+  skills: Map<string, Awaited<ReturnType<typeof prisma.skill.create>>>,
+) {
+  const frontendStudent = mustGet(
+    students,
+    'student.frontend@example.com',
+    'student',
+  );
+  const backendStudent = mustGet(
+    students,
+    'student.backend@example.com',
+    'student',
+  );
+  const generalStudent = mustGet(
+    students,
+    'student.general@example.com',
+    'student',
+  );
+  const reactSkill = mustGet(skills, 'React', 'skill');
+
+  const frontendReact = await prisma.studentSkill.findUnique({
+    where: {
+      studentId_skillId: {
+        studentId: frontendStudent.id,
+        skillId: reactSkill.id,
+      },
+    },
+  });
+  const backendProject = await prisma.studentProject.findFirst({
+    where: {
+      studentId: backendStudent.id,
+      title: 'Student Profile API',
+    },
+  });
+  const generalActivity = await prisma.studentActivity.findFirst({
+    where: {
+      studentId: generalStudent.id,
+      title: 'Software Engineering Study Group',
+    },
+  });
+
+  if (!frontendReact || !backendProject || !generalActivity) {
+    throw new Error('Missing student resource required for evidence seed data');
+  }
+
+  const evidenceSeeds = [
+    {
+      studentId: frontendStudent.id,
+      relatedEntityType: EvidenceEntityType.SKILL,
+      relatedEntityId: frontendReact.id,
+      evidenceUrl: seedEvidenceUrls.frontendReact,
+      note: 'React portfolio source code and component implementation.',
+    },
+    {
+      studentId: backendStudent.id,
+      relatedEntityType: EvidenceEntityType.PROJECT,
+      relatedEntityId: backendProject.id,
+      evidenceUrl: seedEvidenceUrls.backendProject,
+      note: 'Source code for the NestJS student profile API project.',
+    },
+    {
+      studentId: generalStudent.id,
+      relatedEntityType: EvidenceEntityType.ACTIVITY,
+      relatedEntityId: generalActivity.id,
+      evidenceUrl: seedEvidenceUrls.generalActivity,
+      note: 'Participation record for the software engineering study group.',
+    },
+  ];
+
+  for (const seed of evidenceSeeds) {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.evidence.findFirst({
+        where: {
+          studentId: seed.studentId,
+          evidenceUrl: seed.evidenceUrl,
+        },
+      });
+      const data = {
+        relatedEntityType: seed.relatedEntityType,
+        relatedEntityId: seed.relatedEntityId,
+        evidenceUrl: seed.evidenceUrl,
+        fileUrl: null,
+        note: seed.note,
+        status: EvidenceStatus.PENDING,
+        reviewedById: null,
+        reviewedAt: null,
+        reviewerNote: null,
+      };
+
+      if (existing) {
+        await tx.evidence.update({
+          where: { id: existing.id },
+          data,
+        });
+      } else {
+        await tx.evidence.create({
+          data: {
+            studentId: seed.studentId,
+            ...data,
+          },
+        });
+      }
+
+      await setSeedResourceEvidencePending(
+        tx,
+        seed.relatedEntityType,
+        seed.relatedEntityId,
+      );
+    });
+  }
+}
+
+async function setSeedResourceEvidencePending(
+  tx: Prisma.TransactionClient,
+  entityType: EvidenceEntityType,
+  entityId: string,
+) {
+  switch (entityType) {
+    case EvidenceEntityType.SKILL:
+      await tx.studentSkill.update({
+        where: { id: entityId },
+        data: {
+          evidenceStatus: VerificationStatus.PENDING,
+          verifiedById: null,
+          verifiedAt: null,
+        },
+      });
+      return;
+    case EvidenceEntityType.PROJECT:
+      await tx.studentProject.update({
+        where: { id: entityId },
+        data: { verificationStatus: VerificationStatus.PENDING },
+      });
+      return;
+    case EvidenceEntityType.CERTIFICATE:
+      await tx.studentCertificate.update({
+        where: { id: entityId },
+        data: { verificationStatus: VerificationStatus.PENDING },
+      });
+      return;
+    case EvidenceEntityType.ACTIVITY:
+      await tx.studentActivity.update({
+        where: { id: entityId },
+        data: { verificationStatus: VerificationStatus.PENDING },
+      });
+      return;
+    case EvidenceEntityType.EXPERIENCE:
+      await tx.studentExperience.update({
+        where: { id: entityId },
+        data: { verificationStatus: VerificationStatus.PENDING },
+      });
+      return;
+    case EvidenceEntityType.ROADMAP_ITEM:
+      return;
+  }
+}
+
 async function upsertProject(
   studentId: string,
   data: Omit<Prisma.StudentProjectUncheckedCreateInput, 'studentId'>,
@@ -2139,6 +2306,14 @@ async function assertSeedHealth() {
     prisma.learningResourceSkill.count(),
     prisma.recommendationTemplateResource.count(),
     prisma.assessmentQuestion.count(),
+    prisma.evidence.count({
+      where: {
+        evidenceUrl: {
+          in: Object.values(seedEvidenceUrls),
+        },
+        status: EvidenceStatus.PENDING,
+      },
+    }),
   ]);
 
   const [
@@ -2154,7 +2329,13 @@ async function assertSeedHealth() {
     learningResourceSkills,
     templateResources,
     questions,
+    pendingSeedEvidences,
   ] = counts;
+  if (pendingSeedEvidences !== Object.keys(seedEvidenceUrls).length) {
+    throw new Error(
+      `Expected ${Object.keys(seedEvidenceUrls).length} pending seed evidences, found ${pendingSeedEvidences}`,
+    );
+  }
   console.log(
     [
       `Seed complete: ${users} users`,
@@ -2169,6 +2350,7 @@ async function assertSeedHealth() {
       `${learningResourceSkills} resource skill links`,
       `${templateResources} template resource links`,
       `${questions} assessment questions`,
+      `${pendingSeedEvidences} pending sample evidences`,
     ].join(', '),
   );
 
@@ -2200,6 +2382,7 @@ async function main() {
   await seedStudentProfiles(students, careerGoals, specializations);
   await seedStudentSkills(students, skills);
   await seedStudentPortfolioSamples(students);
+  await seedStudentEvidences(students, skills);
   await seedAdvisorAssignments(lecturer, students, users);
   await seedRecommendationTemplates(skills);
   await seedLearningResources(skills);
